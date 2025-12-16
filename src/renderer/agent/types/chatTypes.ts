@@ -6,6 +6,7 @@
 // ===== 工具消息类型 =====
 
 export type ToolMessageType =
+  | 'pending'          // 流式接收中，等待参数完成
   | 'invalid_params'   // 参数验证失败
   | 'tool_request'     // 等待用户审批
   | 'running_now'      // 正在执行
@@ -44,31 +45,80 @@ export interface CheckpointEntry {
   }
 }
 
-// ===== 文件选择类型 =====
+// ===== 上下文引用类型 (统一的上下文系统) =====
 
-export type StagingSelectionType = 'File' | 'CodeSelection' | 'Folder'
+export type ContextItemType = 
+  | 'File'           // 文件
+  | 'CodeSelection'  // 代码片段
+  | 'Folder'         // 文件夹
+  | 'Codebase'       // @codebase 语义搜索
+  | 'Git'            // @git 版本控制上下文
+  | 'Terminal'       // @terminal 终端输出
+  | 'Symbols'        // @symbols 当前文件符号
+  | 'Web'            // @web 网页搜索 (预留)
 
-export interface StagingSelectionBase {
-  uri: string  // 文件路径
-  language?: string
+// 基础接口
+export interface ContextItemBase {
+  type: ContextItemType
 }
 
-export interface FileSelection extends StagingSelectionBase {
+// 文件引用
+export interface FileSelection extends ContextItemBase {
   type: 'File'
+  uri: string
+  language?: string
   state: { wasAddedAsCurrentFile: boolean }
 }
 
-export interface CodeSelection extends StagingSelectionBase {
+// 代码片段引用
+export interface CodeSelection extends ContextItemBase {
   type: 'CodeSelection'
+  uri: string
   range: [number, number]  // [startLine, endLine]
+  language?: string
   state: { wasAddedAsCurrentFile: boolean }
 }
 
-export interface FolderSelection extends StagingSelectionBase {
+// 文件夹引用
+export interface FolderSelection extends ContextItemBase {
   type: 'Folder'
+  uri: string
 }
 
-export type StagingSelectionItem = FileSelection | CodeSelection | FolderSelection
+// 代码库语义搜索
+export interface CodebaseContext extends ContextItemBase {
+  type: 'Codebase'
+  query?: string  // 可选的搜索查询（默认使用用户消息）
+}
+
+// Git 上下文
+export interface GitContext extends ContextItemBase {
+  type: 'Git'
+}
+
+// 终端输出上下文
+export interface TerminalContext extends ContextItemBase {
+  type: 'Terminal'
+}
+
+// 符号上下文
+export interface SymbolsContext extends ContextItemBase {
+  type: 'Symbols'
+}
+
+// 统一的上下文项类型
+export type ContextItem = 
+  | FileSelection 
+  | CodeSelection 
+  | FolderSelection
+  | CodebaseContext
+  | GitContext
+  | TerminalContext
+  | SymbolsContext
+
+// 兼容旧代码的别名
+export type StagingSelectionType = ContextItemType
+export type StagingSelectionItem = ContextItem
 
 // ===== 用户消息类型 =====
 

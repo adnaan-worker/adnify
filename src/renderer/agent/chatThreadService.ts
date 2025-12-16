@@ -302,12 +302,24 @@ class ChatThreadService {
       if (!assistantMsg.toolCalls) {
         assistantMsg.toolCalls = []
       }
-      assistantMsg.toolCalls.push({
-        id: toolCall.id,
-        name: toolCall.name,
-        status: toolCall.status,
-        rawParams: toolCall.rawParams,
-      })
+      // 检查是否已存在，避免重复添加
+      const existing = assistantMsg.toolCalls.find((tc) => tc.id === toolCall.id)
+      if (existing) {
+        // 更新已存在的工具调用
+        Object.assign(existing, {
+          name: toolCall.name,
+          status: toolCall.status,
+          rawParams: toolCall.rawParams,
+        })
+      } else {
+        // 添加新的工具调用
+        assistantMsg.toolCalls.push({
+          id: toolCall.id,
+          name: toolCall.name,
+          status: toolCall.status,
+          rawParams: toolCall.rawParams,
+        })
+      }
       this.emitThreadChange()
     }
   }
@@ -315,7 +327,7 @@ class ChatThreadService {
   updateInlineToolCall(
     messageId: string,
     toolCallId: string,
-    updates: Partial<{ status: ToolMessageType; result: string; error: string }>
+    updates: Partial<{ status: ToolMessageType; result: string; error: string; rawParams: Record<string, unknown> }>
   ): void {
     const thread = this.getCurrentThread()
     const msg = thread.messages.find((m) => m.id === messageId)

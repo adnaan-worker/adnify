@@ -150,7 +150,7 @@ export function useChatThreads() {
     (
       messageId: string,
       toolCallId: string,
-      updates: Partial<{ status: ToolMessageType; result: string; error: string }>
+      updates: Partial<{ status: ToolMessageType; result: string; error: string; rawParams: Record<string, unknown> }>
     ) => {
       chatThreadService.updateInlineToolCall(messageId, toolCallId, updates)
     },

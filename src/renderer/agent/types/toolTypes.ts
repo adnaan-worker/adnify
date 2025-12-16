@@ -216,11 +216,13 @@ export interface ToolDefinition {
 
 // ===== 工具调用 =====
 
+export type ToolCallStatus = 'pending' | 'running' | 'success' | 'error' | 'rejected' | 'tool_request'
+
 export interface ToolCall {
   id: string
   name: ToolName
   arguments: Record<string, unknown>
-  status?: 'pending' | 'running' | 'success' | 'error' | 'rejected'
+  status?: ToolCallStatus
   result?: string
   error?: string
   approvalType?: ToolApprovalType

@@ -131,10 +131,11 @@ export function useAgent() {
           approvalType === 'dangerous') &&
         !autoApprove[approvalType as keyof typeof autoApprove]
 
-      // 添加内嵌工具调用到当前 assistant 消息
+      // 更新内嵌工具调用状态（流式时可能已添加 pending 状态）
       const initialStatus: ToolMessageType = needsApproval ? 'tool_request' : 'running_now'
       
       if (currentAssistantMsgIdRef.current) {
+        // 先尝试添加（如果流式没有触发），再更新状态
         addInlineToolCall(currentAssistantMsgIdRef.current, {
           id,
           name,
@@ -343,7 +344,7 @@ export function useAgent() {
         addCheckpoint('user_message', checkpoint.description, snapshots)
       }
 
-      // 收集上下文（包括 staging selections）
+      // 收集上下文（统一处理所有上下文类型）
       const {
         files: contextFiles,
         semanticResults,
@@ -352,15 +353,16 @@ export function useAgent() {
         symbolsContext,
         gitContext,
         terminalContext,
-        stagingFilesContext,
+        attachedFilesContext,
       } = await contextService.collectContext(textContent, {
         includeActiveFile: true,
         includeOpenFiles: false,
         includeProjectStructure: true,
-        stagingSelections: stagingSelections.map(s => ({
+        contextItems: stagingSelections.map(s => ({
           type: s.type,
-          uri: s.uri,
-          range: s.type === 'CodeSelection' ? s.range : undefined,
+          uri: 'uri' in s ? s.uri : undefined,
+          range: s.type === 'CodeSelection' ? (s as { range: [number, number] }).range : undefined,
+          query: s.type === 'Codebase' ? (s as { query?: string }).query : undefined,
         })),
       })
 
@@ -374,7 +376,7 @@ export function useAgent() {
         symbolsContext ||
         gitContext ||
         terminalContext ||
-        stagingFilesContext
+        attachedFilesContext
       ) {
         messageWithContext +=
           '\n\n' +
@@ -385,7 +387,7 @@ export function useAgent() {
             symbolsContext,
             gitContext,
             terminalContext,
-            stagingFilesContext
+            attachedFilesContext
           )
       }
       
@@ -490,7 +492,7 @@ export function useAgent() {
             
             // 处理流式工具调用
             if (chunk.type === 'tool_call_start' && chunk.toolCallDelta) {
-              // 工具调用开始
+              // 工具调用开始 - 立即在 UI 中显示 pending 状态
               currentToolCallSoFar = {
                 id: chunk.toolCallDelta.id || '',
                 name: chunk.toolCallDelta.name || '',
@@ -498,20 +500,16 @@ export function useAgent() {
                 argsString: '',
                 isDone: false,
               }
-              // 更新 streamState 显示工具调用中
-              setStreamRunning('LLM', {
-                llmInfo: {
-                  displayContentSoFar: '',
-                  reasoningSoFar: '',
-                  toolCallSoFar: {
-                    name: currentToolCallSoFar.name,
-                    rawParams: {},
-                    doneParams: [],
-                    id: currentToolCallSoFar.id,
-                    isDone: false,
-                  },
-                },
-              })
+              
+              // 立即添加到 assistant 消息中显示 loading
+              if (currentAssistantMsgIdRef.current && currentToolCallSoFar.id) {
+                addInlineToolCall(currentAssistantMsgIdRef.current, {
+                  id: currentToolCallSoFar.id,
+                  name: currentToolCallSoFar.name,
+                  status: 'pending',
+                  rawParams: {},
+                })
+              }
             }
             
             if (chunk.type === 'tool_call_delta' && chunk.toolCallDelta && currentToolCallSoFar) {
@@ -521,37 +519,28 @@ export function useAgent() {
                 // 尝试解析参数
                 try {
                   currentToolCallSoFar.rawParams = JSON.parse(currentToolCallSoFar.argsString)
+                  // 更新 UI 中的参数
+                  if (currentAssistantMsgIdRef.current && currentToolCallSoFar.id) {
+                    updateInlineToolCall(currentAssistantMsgIdRef.current, currentToolCallSoFar.id, {
+                      rawParams: currentToolCallSoFar.rawParams,
+                    })
+                  }
                 } catch {
                   // 参数还不完整，继续累积
                 }
-                // 更新 streamState
-                setStreamRunning('LLM', {
-                  llmInfo: {
-                    displayContentSoFar: '',
-                    reasoningSoFar: '',
-                    toolCallSoFar: {
-                      name: currentToolCallSoFar.name,
-                      rawParams: currentToolCallSoFar.rawParams,
-                      doneParams: Object.keys(currentToolCallSoFar.rawParams),
-                      id: currentToolCallSoFar.id,
-                      isDone: false,
-                    },
-                  },
-                })
               }
             }
             
             if (chunk.type === 'tool_call_end' && currentToolCallSoFar) {
-              // 工具调用完成
+              // 工具调用流式完成，更新参数
               currentToolCallSoFar.isDone = true
               if (chunk.toolCall) {
                 currentToolCallSoFar.rawParams = chunk.toolCall.arguments
               }
             }
           },
-          onToolCall: (toolCall) => {
+          onToolCall: () => {
             // 工具调用完成时的回调
-            console.log('[Agent] Tool call received:', toolCall.name)
           },
         })
 

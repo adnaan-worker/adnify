@@ -351,7 +351,8 @@ export const validateParams: ValidateParams = {
 
 export function parseSearchReplaceBlocks(blocksStr: string): SearchReplaceBlock[] {
   const blocks: SearchReplaceBlock[] = []
-  const regex = /<<<SEARCH\n([\s\S]*?)\n===(?:[ \t]*\n)?([\s\S]*?)\n>>>/g
+  // 严格格式: <<<SEARCH\n...\n===\n...\n>>>
+  const regex = /<<<SEARCH\n([\s\S]*?)\n===\n([\s\S]*?)\n>>>/g
   let match
 
   while ((match = regex.exec(blocksStr)) !== null) {

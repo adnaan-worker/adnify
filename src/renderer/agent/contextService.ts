@@ -187,17 +187,17 @@ export function buildContextString(
 	symbolsContext?: string,
 	gitContext?: string,
 	terminalContext?: string,
-	stagingFilesContext?: string  // 新增
+	attachedFilesContext?: string  // 附加的文件上下文
 ): string {
-    let context = '---\n**Context:**\n\n'
-    
-    if (projectStructure) {
-        context += projectStructure + '\n\n'
-    }
-    
-	// Staging files（拖放的文件）
-	if (stagingFilesContext) {
-		context += stagingFilesContext + '\n\n'
+	let context = '---\n**Context:**\n\n'
+	
+	if (projectStructure) {
+		context += projectStructure + '\n\n'
+	}
+	
+	// 附加的文件（通过 @ 引用或拖放添加）
+	if (attachedFilesContext) {
+		context += attachedFilesContext + '\n\n'
 	}
 	
 	// 语义搜索结果
@@ -385,33 +385,35 @@ export function getTerminalContext(): string {
 	return `**Terminal Output:**\n\`\`\`\n${output}\n\`\`\``
 }
 
-// Staging Selection 类型（从 chatTypes 导入会造成循环依赖，这里简化定义）
-interface StagingSelection {
-	type: 'File' | 'CodeSelection' | 'Folder'
-	uri: string
+// 上下文项类型（统一的上下文系统）
+interface ContextItemForService {
+	type: 'File' | 'CodeSelection' | 'Folder' | 'Codebase' | 'Git' | 'Terminal' | 'Symbols'
+	uri?: string
 	range?: [number, number]
+	query?: string  // for Codebase
 }
 
 /**
  * 智能收集上下文
+ * 统一处理所有上下文类型（文件、代码片段、@codebase、@git、@terminal、@symbols）
  */
 export async function collectContext(
 	message: string,
 	options?: {
 		includeActiveFile?: boolean
 		includeOpenFiles?: boolean
-        includeProjectStructure?: boolean
+		includeProjectStructure?: boolean
 		maxChars?: number
-		stagingSelections?: StagingSelection[]  // 添加 staging selections 支持
+		contextItems?: ContextItemForService[]  // 统一的上下文项列表
 	}
 ): Promise<{
 	files: FileContext[]
 	semanticResults: FileContext[]
-    projectStructure?: string
+	projectStructure?: string
 	symbolsContext?: string
 	gitContext?: string
 	terminalContext?: string
-	stagingFilesContext?: string  // 新增：staging files 上下文
+	attachedFilesContext?: string  // 附加的文件上下文
 	cleanedMessage: string
 	totalChars: number
 	stats: ContextStats
@@ -420,45 +422,47 @@ export async function collectContext(
 	const {
 		includeActiveFile = true,
 		includeOpenFiles = false,
-        includeProjectStructure = true,
+		includeProjectStructure = true,
 		maxChars = limits.maxContextChars,
+		contextItems = [],
 	} = options || {}
 	
 	const state = useStore.getState()
 	const files: FileContext[] = []
 	let semanticResults: FileContext[] = []
 	let totalChars = 0
-    let projectStructure = ''
+	let projectStructure = ''
 	let symbolsContext = ''
 	let gitContext = ''
 	let terminalContext = ''
 	let terminalChars = 0
 
-    // 0. 获取项目结构
-    if (includeProjectStructure && state.workspacePath) {
-        projectStructure = await formatProjectStructure(state.workspacePath)
-        totalChars += projectStructure.length
-    }
+	// 0. 获取项目结构
+	if (includeProjectStructure && state.workspacePath) {
+		projectStructure = await formatProjectStructure(state.workspacePath)
+		totalChars += projectStructure.length
+	}
 	
-	// 1. 解析 @file 引用和特殊上下文
-	const refs = parseFileReferences(message)
-	const useCodebase = hasCodebaseReference(message)
-	const useSymbols = hasSymbolsReference(message)
-	const useGit = hasGitReference(message)
-	const useTerminal = hasTerminalReference(message)
-	const cleanedMessage = cleanFileReferences(message)
+	// 1. 从 contextItems 中提取各类上下文
+	const fileItems = contextItems.filter(item => item.type === 'File' || item.type === 'CodeSelection')
+	const hasCodebase = contextItems.some(item => item.type === 'Codebase')
+	const hasSymbols = contextItems.some(item => item.type === 'Symbols')
+	const hasGit = contextItems.some(item => item.type === 'Git')
+	const hasTerminal = contextItems.some(item => item.type === 'Terminal')
+	
+	// 消息不需要清理（@ 引用已经通过 contextItems 处理）
+	const cleanedMessage = message
 	
 	// 2. 如果使用 @codebase，执行语义搜索
-	if (useCodebase && cleanedMessage.trim()) {
+	if (hasCodebase && cleanedMessage.trim()) {
 		semanticResults = await searchCodebase(cleanedMessage)
-		// 计算语义结果的字符数
 		for (const result of semanticResults) {
-			totalChars += result.content.length + 100 // 额外的格式化开销
+			totalChars += result.content.length + 100
 		}
 	}
 	
 	// 3. 如果使用 @symbols，提取当前文件符号
-	if (useSymbols && state.activeFilePath) {
+	if (hasSymbols && state.activeFilePath) {
 		const activeFile = state.openFiles.find(f => f.path === state.activeFilePath)
 		if (activeFile) {
 			const lang = getLanguageFromPath(activeFile.path)
@@ -468,52 +472,64 @@ export async function collectContext(
 	}
 	
 	// 4. 如果使用 @git，获取 Git 上下文
-	if (useGit && state.workspacePath) {
+	if (hasGit && state.workspacePath) {
 		gitContext = await getGitContext(state.workspacePath)
 		totalChars += gitContext.length
 	}
 	
 	// 5. 如果使用 @terminal，获取终端输出
-	if (useTerminal) {
+	if (hasTerminal) {
 		terminalContext = getTerminalContext()
 		terminalChars = terminalContext.length
 		totalChars += terminalChars
 	}
 	
-	// 6. 加载引用的文件
-	for (const ref of refs) {
-		if (files.length >= limits.maxFiles) break
+	// 6. 处理文件和代码片段上下文
+	const attachedParts: string[] = []
+	for (const item of fileItems) {
+		if (!item.uri) continue
 		
-		// 尝试在工作区中查找文件
-		let fullPath = ref
-		if (state.workspacePath && !ref.startsWith('/') && !ref.includes(':')) {
-			fullPath = `${state.workspacePath}/${ref}`
-		}
-		
-		const content = await window.electronAPI.readFile(fullPath)
-		if (content && totalChars + content.length <= maxChars) {
-			files.push({
-				path: ref,
-				content,
-				type: 'referenced',
-				relevance: 1.0,
-			})
-			totalChars += content.length
+		try {
+			const content = await window.electronAPI.readFile(item.uri)
+			if (content !== null) {
+				if (item.type === 'CodeSelection' && item.range) {
+					const lines = content.split('\n')
+					const selectedLines = lines.slice(item.range[0] - 1, item.range[1])
+					attachedParts.push(
+						`<file path="${item.uri}" lines="${item.range[0]}-${item.range[1]}">\n${selectedLines.join('\n')}\n</file>`
+					)
+					totalChars += selectedLines.join('\n').length + 100
+				} else {
+					attachedParts.push(
+						`<file path="${item.uri}">\n${content}\n</file>`
+					)
+					totalChars += content.length + 100
+				}
+			}
+		} catch (e) {
+			console.warn(`[Context] Failed to read file: ${item.uri}`, e)
 		}
 	}
 	
-	// 7. 添加当前活动文件
+	const attachedFilesContext = attachedParts.length > 0 
+		? '<attached_files>\n' + attachedParts.join('\n\n') + '\n</attached_files>'
+		: ''
+	
+	// 7. 添加当前活动文件（如果没有在 contextItems 中）
 	if (includeActiveFile && state.activeFilePath) {
-		const activeFile = state.openFiles.find(f => f.path === state.activeFilePath)
-		if (activeFile && !files.some(f => f.path === activeFile.path)) {
-			if (totalChars + activeFile.content.length <= maxChars) {
-				files.push({
-					path: activeFile.path,
-					content: activeFile.content,
-					type: 'active',
-					relevance: 0.9,
-				})
-				totalChars += activeFile.content.length
+		const alreadyIncluded = fileItems.some(item => item.uri === state.activeFilePath)
+		if (!alreadyIncluded) {
+			const activeFile = state.openFiles.find(f => f.path === state.activeFilePath)
+			if (activeFile && !files.some(f => f.path === activeFile.path)) {
+				if (totalChars + activeFile.content.length <= maxChars) {
+					files.push({
+						path: activeFile.path,
+						content: activeFile.content,
+						type: 'active',
+						relevance: 0.9,
+					})
+					totalChars += activeFile.content.length
+				}
 			}
 		}
 	}
@@ -538,44 +554,11 @@ export async function collectContext(
 	// 按相关性排序
 	files.sort((a, b) => b.relevance - a.relevance)
 	
-	// 9. 处理 staging selections（拖放的文件）
-	let stagingFilesContext = ''
-	const stagingSelections = options?.stagingSelections || []
-	if (stagingSelections.length > 0) {
-		const stagingParts: string[] = []
-		for (const selection of stagingSelections) {
-			try {
-				const content = await window.electronAPI.readFile(selection.uri)
-				if (content !== null) {
-					if (selection.type === 'CodeSelection' && selection.range) {
-						// 只取选中的行
-						const lines = content.split('\n')
-						const selectedLines = lines.slice(selection.range[0] - 1, selection.range[1])
-						stagingParts.push(
-							`<file path="${selection.uri}" lines="${selection.range[0]}-${selection.range[1]}">\n${selectedLines.join('\n')}\n</file>`
-						)
-						totalChars += selectedLines.join('\n').length + 100
-					} else {
-						stagingParts.push(
-							`<file path="${selection.uri}">\n${content}\n</file>`
-						)
-						totalChars += content.length + 100
-					}
-				}
-			} catch (e) {
-				console.warn(`[Context] Failed to read staging selection: ${selection.uri}`, e)
-			}
-		}
-		if (stagingParts.length > 0) {
-			stagingFilesContext = '<attached_files>\n' + stagingParts.join('\n\n') + '\n</attached_files>'
-		}
-	}
-	
 	// 构建统计信息
 	const stats: ContextStats = {
 		totalChars,
 		maxChars: limits.maxContextChars,
-		fileCount: files.length + stagingSelections.length,
+		fileCount: files.length + fileItems.length,
 		maxFiles: limits.maxFiles,
 		messageCount: 0, // 由 useAgent 填充
 		maxMessages: getEditorConfig().ai.maxHistoryMessages,
@@ -583,7 +566,7 @@ export async function collectContext(
 		terminalChars,
 	}
 	
-	return { files, semanticResults, projectStructure, symbolsContext, gitContext, terminalContext, stagingFilesContext, cleanedMessage, totalChars, stats }
+	return { files, semanticResults, projectStructure, symbolsContext, gitContext, terminalContext, attachedFilesContext, cleanedMessage, totalChars, stats }
 }
 
 /**

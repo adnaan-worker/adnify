@@ -37,7 +37,7 @@ export class LLMService {
 					this.providers.set(key, new AnthropicProvider(config.apiKey, config.baseUrl, config.timeout))
 					break
 				case 'gemini':
-					this.providers.set(key, new GeminiProvider(config.apiKey, config.timeout))
+					this.providers.set(key, new GeminiProvider(config.apiKey, config.baseUrl, config.timeout))
 					break
 				default:
 					throw new LLMError(

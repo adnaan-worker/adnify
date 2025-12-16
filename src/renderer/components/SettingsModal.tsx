@@ -382,22 +382,27 @@ function ProviderSettings({
         </p>
       </div>
 
-      {/* Custom Endpoint */}
-      {(localConfig.provider === 'custom' || BUILTIN_PROVIDERS[localConfig.provider as BuiltinProviderName]?.supportsCustomEndpoint) && (
-        <div>
-          <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '自定义端点 (可选)' : 'Custom Endpoint (Optional)'}</h3>
-          <input
-            type="text"
-            value={localConfig.baseUrl || ''}
-            onChange={(e) => setLocalConfig({ ...localConfig, baseUrl: e.target.value || undefined })}
-            placeholder={localConfig.provider === 'ollama' ? 'http://localhost:11434' : 'https://api.example.com/v1'}
-            className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
-          />
-          <p className="text-xs text-text-muted mt-2">
-            {language === 'zh' ? '用于 OpenAI 兼容的 API 或本地模型' : 'For OpenAI-compatible APIs or local models'}
-          </p>
-        </div>
-      )}
+      {/* Custom Endpoint - 对所有 provider 都显示 */}
+      <div>
+        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '自定义端点 (可选)' : 'Custom Endpoint (Optional)'}</h3>
+        <input
+          type="text"
+          value={localConfig.baseUrl || ''}
+          onChange={(e) => setLocalConfig({ ...localConfig, baseUrl: e.target.value || undefined })}
+          placeholder={
+            localConfig.provider === 'openai' ? 'https://api.openai.com/v1' :
+            localConfig.provider === 'anthropic' ? 'https://api.anthropic.com' :
+            localConfig.provider === 'gemini' ? 'https://generativelanguage.googleapis.com' :
+            'https://api.example.com/v1'
+          }
+          className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
+        />
+        <p className="text-xs text-text-muted mt-2">
+          {language === 'zh' 
+            ? '留空使用官方 API，或填写代理/兼容 API 地址' 
+            : 'Leave empty for official API, or enter proxy/compatible API URL'}
+        </p>
+      </div>
 
       {/* Request Timeout */}
       <div>

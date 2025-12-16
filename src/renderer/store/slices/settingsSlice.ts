@@ -29,6 +29,7 @@ export interface SettingsSlice {
   showSettings: boolean
   language: Language
   autoApprove: AutoApproveSettings
+  promptTemplateId: string  // 提示词模板 ID
 
   // Actions
   setLLMConfig: (config: Partial<LLMConfig>) => void
@@ -38,6 +39,7 @@ export interface SettingsSlice {
   setShowSettings: (show: boolean) => void
   setLanguage: (lang: Language) => void
   setAutoApprove: (settings: Partial<AutoApproveSettings>) => void
+  setPromptTemplateId: (id: string) => void
 }
 
 export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSlice> = (set) => ({
@@ -56,6 +58,7 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
     terminal: false,
     dangerous: false,
   },
+  promptTemplateId: 'default',
 
   // Actions
   setLLMConfig: (config) =>
@@ -109,4 +112,5 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
     set((state) => ({
       autoApprove: { ...state.autoApprove, ...settings },
     })),
+  setPromptTemplateId: (id) => set({ promptTemplateId: id }),
 })

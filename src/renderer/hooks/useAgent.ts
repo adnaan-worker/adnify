@@ -28,7 +28,7 @@ const TOOL_ERROR_MESSAGES = {
 }
 
 export function useAgent() {
-  const { llmConfig, workspacePath, autoApprove } = useStore()
+  const { llmConfig, workspacePath, autoApprove, promptTemplateId } = useStore()
 
   const {
     messages,
@@ -468,7 +468,18 @@ export function useAgent() {
         const systemPrompt = await buildSystemPrompt(chatMode, workspacePath, {
           openFiles: openFilePaths,
           activeFile: activeFilePath,
+          promptTemplateId,
         })
+
+        // Token 估算日志（1 token ≈ 4 字符）
+        const estimateTokens = (text: string) => Math.ceil(text.length / 4)
+        const systemTokens = estimateTokens(systemPrompt)
+        const messagesTokens = conversationMessages.reduce((sum, m) => {
+          const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+          return sum + estimateTokens(content)
+        }, 0)
+        const totalEstimate = systemTokens + messagesTokens
+        console.log(`[Token估算] 系统提示: ${systemTokens}, 消息历史: ${messagesTokens}, 总计: ~${totalEstimate} tokens`)
 
         // 用于跟踪当前流式工具调用
         let currentToolCallSoFar: {

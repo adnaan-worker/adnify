@@ -109,16 +109,16 @@ export default function ChatInput({
   )
 
   return (
-    <div ref={inputContainerRef} className="p-4 pt-2 bg-background z-20">
+    <div ref={inputContainerRef} className="p-4 pt-2 bg-background z-20 border-t border-white/5">
       <div
         className={`
-            relative group rounded-[1.5rem] border transition-all duration-300 ease-out
+            relative group rounded-2xl border transition-all duration-300 ease-out
             ${
               isStreaming
                 ? 'border-accent/30 bg-accent/5 shadow-[0_0_20px_rgba(var(--color-accent),0.1)]'
                 : isFocused 
-                  ? 'border-accent/40 bg-surface shadow-[0_0_25px_-5px_rgba(var(--color-accent),0.15)] ring-1 ring-accent/10'
-                  : 'border-border-subtle bg-surface/50 hover:bg-surface hover:border-border-highlight'
+                  ? 'border-accent/40 bg-surface shadow-[0_0_30px_-10px_rgba(var(--color-accent),0.1)]'
+                  : 'border-white/10 bg-surface/30 hover:bg-surface/50 hover:border-white/20'
             }
         `}
       >
@@ -144,27 +144,27 @@ export default function ChatInput({
 
         {/* Context Chips */}
         {(fileRefs.length > 0 || hasCodebaseRef || hasSymbolsRef || hasGitRef || hasTerminalRef) && (
-          <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
+          <div className="flex flex-wrap gap-1.5 px-3 pt-2.5 pb-0.5">
             {hasCodebaseRef && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-500/10 text-purple-400 text-[11px] font-medium rounded-full border border-purple-500/20 animate-fade-in select-none">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/10 text-purple-400 text-[10px] font-medium rounded-md border border-purple-500/20 animate-fade-in select-none">
                 <Database className="w-3 h-3" />
                 Codebase
               </span>
             )}
             {hasSymbolsRef && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-500/10 text-blue-400 text-[11px] font-medium rounded-full border border-blue-500/20 animate-fade-in select-none">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 text-blue-400 text-[10px] font-medium rounded-md border border-blue-500/20 animate-fade-in select-none">
                 <Code className="w-3 h-3" />
                 Symbols
               </span>
             )}
             {hasGitRef && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-500/10 text-orange-400 text-[11px] font-medium rounded-full border border-orange-500/20 animate-fade-in select-none">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-500/10 text-orange-400 text-[10px] font-medium rounded-md border border-orange-500/20 animate-fade-in select-none">
                 <GitBranch className="w-3 h-3" />
                 Git
               </span>
             )}
             {hasTerminalRef && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-500/10 text-green-400 text-[11px] font-medium rounded-full border border-green-500/20 animate-fade-in select-none">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/10 text-green-400 text-[10px] font-medium rounded-md border border-green-500/20 animate-fade-in select-none">
                 <Terminal className="w-3 h-3" />
                 Terminal
               </span>
@@ -172,7 +172,7 @@ export default function ChatInput({
             {fileRefs.map((ref, i) => (
               <span
                 key={i}
-                className="inline-flex items-center gap-1 px-2.5 py-1 bg-accent/10 text-accent text-[11px] font-medium rounded-full border border-accent/20 animate-fade-in select-none"
+                className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent/10 text-accent text-[10px] font-medium rounded-md border border-accent/20 animate-fade-in select-none"
               >
                 <FileText className="w-3 h-3" />
                 {ref}
@@ -181,7 +181,7 @@ export default function ChatInput({
           </div>
         )}
 
-        <div className="flex items-end gap-2 pl-4 pr-2 py-2">
+        <div className="flex items-end gap-2 pl-3 pr-2 py-2">
            <textarea
             ref={textareaRef}
             value={input}

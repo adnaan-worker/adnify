@@ -137,14 +137,9 @@ export default function ChatMessage({
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-xs font-semibold text-text-primary/90">
-              {isUser ? 'You' : 'Adnify'}
-            </span>
-            <span className="text-[10px] text-text-muted opacity-0 group-hover:opacity-60 transition-opacity">
-              {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
+        <div className="flex-1 min-w-0 overflow-hidden relative pt-1">
+          <div className="absolute right-0 top-0 text-[10px] text-text-muted opacity-0 group-hover:opacity-50 transition-opacity">
+            {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </div>
 
           {/* Images */}

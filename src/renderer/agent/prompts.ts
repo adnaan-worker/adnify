@@ -11,12 +11,12 @@ export const ORIGINAL = '<<<SEARCH'
 export const DIVIDER = '==='
 export const FINAL = '>>>'
 
-// 限制常量
-export const MAX_FILE_CHARS = 100000
-export const MAX_DIR_ITEMS = 200
-export const MAX_SEARCH_RESULTS = 50
-export const MAX_TERMINAL_OUTPUT = 10000
-export const MAX_CONTEXT_CHARS = 50000
+// 限制常量（与 editorConfig.ts 保持一致）
+export const MAX_FILE_CHARS = 60000
+export const MAX_DIR_ITEMS = 150
+export const MAX_SEARCH_RESULTS = 30
+export const MAX_TERMINAL_OUTPUT = 3000
+export const MAX_CONTEXT_CHARS = 30000
 
 // Search/Replace 块模板
 const searchReplaceBlockTemplate = `\
@@ -147,67 +147,42 @@ export async function buildSystemPrompt(
 		openFiles?: string[]
 		activeFile?: string
 		customInstructions?: string
+		promptTemplateId?: string
 	}
 ): Promise<string> {
-	const { openFiles = [], activeFile, customInstructions } = options || {}
+	const { openFiles = [], activeFile, customInstructions, promptTemplateId } = options || {}
 
 	// 加载项目规则
 	const projectRules = await rulesService.getRules()
 
-	// 基础身份
-	const identity = mode === 'agent'
-		? `You are an expert AI coding agent integrated into a code editor. Your role is to help developers write, understand, debug, and improve their code by directly interacting with their codebase.`
-		: `You are an expert AI coding assistant. Your role is to help developers understand code, answer questions, and provide guidance.`
+	// 获取提示词模板
+	const { getPromptTemplateById, getDefaultPromptTemplate } = await import('./promptTemplates')
+	const template = promptTemplateId 
+		? getPromptTemplateById(promptTemplateId) || getDefaultPromptTemplate()
+		: getDefaultPromptTemplate()
+
+	// 使用模板的人格提示词（包含身份、沟通风格、代码规范）
+	const personalityPrompt = template.systemPrompt
 
 	// 系统信息
-	const systemInfo = `## System Information
-
-- Operating System: ${typeof navigator !== 'undefined' ? ((navigator as any).userAgentData?.platform || navigator.platform || 'Unknown') : 'Unknown'}
+	const systemInfo = `## Environment
+- OS: ${typeof navigator !== 'undefined' ? ((navigator as any).userAgentData?.platform || navigator.platform || 'Unknown') : 'Unknown'}
 - Workspace: ${workspacePath || 'No workspace open'}
 - Active File: ${activeFile || 'None'}
 - Open Files: ${openFiles.length > 0 ? openFiles.join(', ') : 'None'}
 - Date: ${new Date().toLocaleDateString()}`
 
-	// 工具定义
+	// 工具定义（仅 agent 模式）
 	const toolDefs = buildToolDefinitions(mode)
 
-	// 核心指导原则
-	const coreGuidelines = `## Core Guidelines
-
-### Communication Style
-- Be concise and direct. Avoid unnecessary explanations.
-- Use markdown formatting for code blocks, lists, and emphasis.
-- When showing code, always include the file path as the first line of the code block.
-- Explain your reasoning briefly before taking actions.
-
-### Code Quality
-- Write clean, idiomatic code following best practices.
-- Maintain consistent style with the existing codebase.
-- Add meaningful comments only when necessary.
-- Consider edge cases and error handling.
-
-### Problem Solving
-- Break down complex tasks into smaller steps.
-- Gather sufficient context before making changes.
-- Verify your understanding before implementing solutions.
-- If uncertain, ask clarifying questions.
-
-### Safety
-- Never modify files outside the workspace without explicit permission.
-- Be cautious with destructive operations (delete, overwrite).
-- Preserve existing functionality when making changes.
-- Test changes when possible.`
-
-	// Agent 特定指导
+	// Agent 模式特定指导
 	const agentGuidelines = mode === 'agent' ? `
-### Agent Mode Specific
-
-1. **Take Action**: You have full access to the file system and terminal. Use tools to implement changes directly.
-2. **Be Thorough**: Complete the task fully. Don't stop halfway or leave TODOs.
-3. **Verify Changes**: After editing, consider checking for lint errors or running tests.
-4. **Context First**: Read relevant files before making changes to understand the codebase.
-5. **One Tool at a Time**: Execute one tool call, wait for the result, then proceed.
-6. **Explain Actions**: Briefly describe what you're doing and why before each tool call.` : ''
+## Agent Mode Guidelines
+1. **Take Action**: Use tools to implement changes directly.
+2. **Be Thorough**: Complete tasks fully without leaving TODOs.
+3. **Verify Changes**: Check for lint errors after editing.
+4. **Context First**: Read relevant files before making changes.
+5. **Safety**: Never modify files outside workspace. Be cautious with destructive operations.` : ''
 
 	// 自定义指令
 	const customSection = customInstructions
@@ -216,19 +191,14 @@ export async function buildSystemPrompt(
 
 	// 项目规则
 	const rulesSection = projectRules?.content
-		? `\n## Project Rules (from ${projectRules.source})
-
-The user has defined the following project-specific rules and guidelines. Follow them strictly:
-
-${projectRules.content}`
+		? `\n## Project Rules (from ${projectRules.source})\n\n${projectRules.content}`
 		: ''
 
 	// 组装完整提示词
 	const sections = [
-		identity,
+		personalityPrompt,
 		systemInfo,
 		toolDefs,
-		coreGuidelines,
 		agentGuidelines,
 		rulesSection,
 		customSection,

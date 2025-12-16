@@ -393,48 +393,47 @@ export default function ChatPanel() {
       onDrop={handleDrop}
     >
       {/* Header - Redesigned */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle bg-surface/30 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          {/* Mode Toggle (Clean) */}
-           <div className="flex items-center bg-surface-active rounded-lg p-0.5 border border-border-subtle">
-            <button
-              onClick={() => setChatMode('chat')}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${chatMode === 'chat' 
-                  ? 'bg-surface shadow-sm text-text-primary' 
-                  : 'text-text-muted hover:text-text-secondary'
-              }`}
-            >
-              Chat
-            </button>
-            <button
-              onClick={() => setChatMode('agent')}
-              className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${chatMode === 'agent' 
-                  ? 'bg-accent/10 text-accent shadow-sm' 
-                  : 'text-text-muted hover:text-text-secondary'
-              }`}
-            >
-              <Sparkles className="w-3 h-3" />
-              Agent
-            </button>
-          </div>
+      <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-3 bg-background/80 backdrop-blur-md border-b border-white/5 transition-all">
+        <div className="flex items-center gap-1 bg-surface/50 rounded-lg p-0.5 border border-white/5">
+          <button
+            onClick={() => setChatMode('chat')}
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+              chatMode === 'chat' 
+                ? 'bg-white/10 text-white shadow-sm' 
+                : 'text-text-muted hover:text-text-secondary hover:bg-white/5'
+            }`}
+          >
+            Chat
+          </button>
+          <button
+            onClick={() => setChatMode('agent')}
+            className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-all ${
+              chatMode === 'agent' 
+                ? 'bg-accent/20 text-accent shadow-sm' 
+                : 'text-text-muted hover:text-text-secondary hover:bg-white/5'
+            }`}
+          >
+            <Sparkles className="w-3 h-3" />
+            Agent
+          </button>
         </div>
 
         <div className="flex items-center gap-1">
           <button
             onClick={() => setShowThreads(!showThreads)}
-            className="p-2 rounded-lg hover:bg-surface-active text-text-muted hover:text-text-primary transition-colors"
+            className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-colors"
             title="Chat history"
           >
             <History className="w-4 h-4" />
           </button>
           <button
             onClick={() => openNewThread()}
-            className="p-2 rounded-lg hover:bg-surface-active text-text-muted hover:text-text-primary transition-colors"
+            className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-colors"
             title="New chat"
           >
             <Plus className="w-4 h-4" />
           </button>
-          <div className="w-px h-4 bg-border-subtle mx-1" />
+          <div className="w-px h-4 bg-white/10 mx-1" />
           <button
             onClick={clearMessages}
             className="p-2 rounded-lg hover:bg-red-500/10 text-text-muted hover:text-red-500 transition-colors"
@@ -516,7 +515,7 @@ export default function ChatPanel() {
       )}
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar bg-background">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar bg-background pt-14">
         {/* API Key Warning */}
         {!hasApiKey && (
           <div className="m-4 p-4 border border-warning/20 bg-warning/5 rounded-lg flex gap-3 animate-slide-in">

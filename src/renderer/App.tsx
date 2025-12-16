@@ -33,7 +33,7 @@ function ToastInitializer() {
 // 主应用内容
 function AppContent() {
   const { 
-    showSettings, setLLMConfig, setLanguage, setAutoApprove, setShowSettings, 
+    showSettings, setLLMConfig, setLanguage, setAutoApprove, setPromptTemplateId, setShowSettings, 
     setTerminalVisible, terminalVisible, setWorkspacePath, setFiles,
     activeSidePanel
   } = useStore()
@@ -92,6 +92,10 @@ function AppContent() {
         const savedAutoApprove = await window.electronAPI.getSetting('autoApprove')
         if (savedAutoApprove) {
           setAutoApprove(savedAutoApprove)
+        }
+        const savedPromptTemplateId = await window.electronAPI.getSetting('promptTemplateId')
+        if (savedPromptTemplateId) {
+          setPromptTemplateId(savedPromptTemplateId as string)
         }
         
         // Auto-restore workspace

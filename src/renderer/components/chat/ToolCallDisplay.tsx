@@ -21,6 +21,8 @@ import {
   FileText,
   FolderTree,
   Bug,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react'
 import { ToolMessage, ToolMessageType } from '../../agent/types/chatTypes'
 import { ToolCall } from '../../agent/types/toolTypes'
@@ -31,11 +33,11 @@ import { LLMToolCall } from '../../types/electron'
 import type { LucideIcon } from 'lucide-react'
 
 const TOOL_ICONS: Record<string, LucideIcon> = {
-  read_file: File,
+  read_file: FileText,
   list_directory: Folder,
   get_dir_tree: FolderTree,
   search_files: Search,
-  search_in_file: FileText,
+  search_in_file: Search,
   edit_file: Edit,
   write_file: Edit,
   create_file_or_folder: Plus,
@@ -81,14 +83,14 @@ function StatusIndicator({ status }: StatusIndicatorProps) {
     case 'pending':
       return <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />
     case 'success':
-      return <Check className="w-3.5 h-3.5 text-green-500" />
+      return <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
     case 'tool_error':
     case 'invalid_params':
-      return <AlertTriangle className="w-3.5 h-3.5 text-warning" />
+      return <XCircle className="w-3.5 h-3.5 text-red-500" />
     case 'rejected':
       return <Ban className="w-3.5 h-3.5 text-text-muted" />
     case 'tool_request':
-      return <div className="w-3.5 h-3.5 rounded-full bg-accent/20 animate-pulse border border-accent/40" />
+      return <div className="w-2.5 h-2.5 rounded-full bg-accent animate-pulse shadow-[0_0_8px_rgba(var(--color-accent),0.5)]" />
     default:
       return <div className="w-2 h-2 rounded-full bg-text-muted" />
   }
@@ -116,12 +118,12 @@ function ToolParams({ params, toolName }: ToolParamsProps) {
   if (displayParams.length === 0) return null
 
   return (
-    <div className="text-xs text-text-muted truncate font-mono opacity-80">
+    <div className="text-[10px] text-text-muted/60 truncate font-mono flex items-center gap-2">
       {displayParams.map(([key, value], i) => (
-        <span key={key}>
-          {i > 0 && ' · '}
-          <span className="text-text-secondary">{key}:</span> 
-          {typeof value === 'string' ? value.slice(0, 50) : JSON.stringify(value).slice(0, 30)}
+        <span key={key} className="flex items-center gap-1">
+          {i > 0 && <span className="text-border-subtle">|</span>}
+          <span className="opacity-70">{key}:</span> 
+          <span className="opacity-100 text-text-secondary">{typeof value === 'string' ? value.slice(0, 40) : JSON.stringify(value).slice(0, 20)}</span>
         </span>
       ))}
     </div>
@@ -138,23 +140,23 @@ interface ToolResultProps {
 function ToolResult({ content, isError }: ToolResultProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const lines = content.split('\n')
-  const shouldTruncate = lines.length > 10 || content.length > 500
+  const shouldTruncate = lines.length > 8 || content.length > 400
 
   const displayContent = useMemo(() => {
     if (!shouldTruncate || isExpanded) return content
-    return lines.slice(0, 10).join('\n') + (lines.length > 10 ? '\n...' : '')
+    return lines.slice(0, 8).join('\n') + (lines.length > 8 ? '\n...' : '')
   }, [content, lines, shouldTruncate, isExpanded])
 
   return (
-    <div className={`mt-2 text-xs ${isError ? 'text-warning' : 'text-text-secondary'}`}>
+    <div className={`mt-2 text-xs ${isError ? 'text-red-400' : 'text-text-secondary'} animate-fade-in pl-6`}>
       <div className="relative group">
-        <pre className="whitespace-pre-wrap font-mono bg-[#0a0a0b]/50 border border-border-subtle rounded-md p-3 overflow-x-auto max-h-60 overflow-y-auto text-[11px] leading-relaxed">
+        <pre className="whitespace-pre-wrap font-mono bg-black/20 rounded-md p-3 overflow-x-auto max-h-60 overflow-y-auto text-[10px] leading-relaxed border border-white/5 selection:bg-white/10">
             {displayContent}
         </pre>
         {shouldTruncate && (
             <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="absolute bottom-2 right-2 px-2 py-1 text-[10px] bg-surface border border-border-subtle rounded hover:text-accent transition-colors shadow-sm opacity-0 group-hover:opacity-100"
+            className="absolute bottom-2 right-2 px-2 py-0.5 text-[10px] bg-surface/80 backdrop-blur border border-white/10 rounded-full hover:text-accent transition-all shadow-sm opacity-0 group-hover:opacity-100"
             >
             {isExpanded ? 'Collapse' : 'Expand'}
             </button>
@@ -173,19 +175,19 @@ interface ApprovalButtonsProps {
 
 function ApprovalButtons({ onApprove, onReject }: ApprovalButtonsProps) {
   return (
-    <div className="flex items-center gap-2 mt-2 pl-7">
+    <div className="flex items-center gap-2 mt-2 pl-8 animate-fade-in">
       <button
         onClick={onApprove}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-500/10 text-green-500 border border-green-500/20 hover:bg-green-500/20 rounded-md transition-all shadow-sm"
+        className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-medium bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 rounded-full transition-all"
       >
-        <Check className="w-3.5 h-3.5" />
+        <Check className="w-3 h-3" />
         Approve
       </button>
       <button
         onClick={onReject}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 rounded-md transition-all shadow-sm"
+        className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 rounded-full transition-all"
       >
-        <X className="w-3.5 h-3.5" />
+        <X className="w-3 h-3" />
         Reject
       </button>
     </div>
@@ -258,66 +260,77 @@ export function ToolCallDisplay({
   }, [params.path, onFileClick])
 
   return (
-    <div className="group border border-border-subtle rounded-lg bg-surface/20 overflow-hidden hover:border-border-highlight hover:bg-surface/40 transition-all duration-200">
-      {/* Header */}
+    <div className={`
+      group relative rounded-lg transition-all duration-200 border border-transparent
+      ${hasResult || needsApproval ? 'hover:bg-white/5' : ''}
+      ${isExpanded ? 'bg-white/5 border-white/5 pb-2' : ''}
+    `}>
+      {/* Header - Compact Line */}
       <div
-        className={`flex items-center gap-3 px-3 py-2.5 ${hasResult ? 'cursor-pointer' : ''} transition-colors select-none`}
+        className={`flex items-center gap-3 px-2 py-1.5 ${hasResult ? 'cursor-pointer' : ''}`}
         onClick={() => hasResult && setIsExpanded(!isExpanded)}
       >
-        {/* Status */}
-        <StatusIndicator status={status} />
-
-        {/* Tool Icon & Name */}
-        <div className="flex items-center gap-2 min-w-0">
-             <Icon className="w-4 h-4 text-text-secondary" />
-             <span className="text-sm font-medium text-text-primary/90">{displayName}</span>
+        {/* Status Indicator (Left) */}
+        <div className="flex items-center justify-center w-4 h-4 shrink-0">
+           <StatusIndicator status={status} />
         </div>
 
-        {/* Primary Description */}
-        {primaryDesc && (
-          <span
-            className={`text-sm text-text-muted truncate border-l border-border-subtle pl-2 ${params.path && onFileClick ? 'hover:text-accent cursor-pointer transition-colors' : ''}`}
-            onClick={(e) => {
-              if (params.path && onFileClick) {
-                e.stopPropagation()
-                handleFileClick()
-              }
-            }}
-          >
-            {primaryDesc}
-          </span>
-        )}
+        {/* Tool Name & Desc Container */}
+        <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+             <span className={`text-[11px] font-medium transition-colors ${status === 'running_now' ? 'text-accent' : 'text-text-primary/70 group-hover:text-text-primary'}`}>
+               {displayName}
+             </span>
+             
+             {/* Primary Description (Inline) */}
+             {primaryDesc && (
+               <span 
+                 className={`text-[10px] text-text-muted/60 truncate ${params.path && onFileClick ? 'hover:text-accent cursor-pointer underline decoration-dotted underline-offset-2' : ''}`}
+                 onClick={(e) => {
+                    if (params.path && onFileClick) {
+                      e.stopPropagation()
+                      handleFileClick()
+                    }
+                 }}
+               >
+                 {primaryDesc}
+               </span>
+             )}
+             
+             {/* Params (Inline if collapsed) */}
+             {!isExpanded && !needsApproval && (
+                <div className="hidden sm:block overflow-hidden opacity-50 group-hover:opacity-100 transition-opacity">
+                   <ToolParams params={params} toolName={name} />
+                </div>
+             )}
+        </div>
 
-        {/* Error indicator */}
-        {error && (
-          <span className="ml-auto text-xs text-warning truncate max-w-[150px] bg-warning/10 px-2 py-0.5 rounded-full">{error}</span>
-        )}
-
-        {/* Expand Icon */}
-        {hasResult && (
-          <ChevronRight
-            className={`w-4 h-4 text-text-muted/50 ml-auto transition-transform duration-200 ${isExpanded ? 'rotate-90 text-text-primary' : 'group-hover:text-text-secondary'}`}
-          />
-        )}
+        {/* Right Actions */}
+        <div className="flex items-center gap-2 shrink-0">
+            {error && (
+              <span className="text-[10px] text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded-full border border-red-500/20">
+                Error
+              </span>
+            )}
+            
+            {/* Chevron */}
+            {hasResult && (
+              <ChevronRight
+                className={`w-3 h-3 text-text-muted/30 transition-transform duration-200 ${isExpanded ? 'rotate-90 text-text-primary' : 'group-hover:text-text-secondary'}`}
+              />
+            )}
+        </div>
       </div>
-
-      {/* Params (collapsed view) */}
-      {!isExpanded && !needsApproval && (
-        <div className="px-3 pb-2.5 pl-9 -mt-1">
-          <ToolParams params={params} toolName={name} />
-        </div>
-      )}
 
       {/* Approval Buttons */}
       {needsApproval && (
-        <div className="px-3 pb-3">
+        <div className="px-2 pb-2">
           <ApprovalButtons onApprove={onApprove} onReject={onReject} />
         </div>
       )}
 
       {/* Expanded Content */}
       {isExpanded && hasResult && (
-        <div className="px-3 pb-3 pl-9 border-t border-border-subtle/50 pt-2">
+        <div className="px-2 pr-2">
           <ToolResult content={content} isError={isError} />
         </div>
       )}

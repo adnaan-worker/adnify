@@ -105,13 +105,13 @@ export const defaultEditorConfig: EditorConfig = {
     maxToolLoops: 15,
     completionMaxTokens: 256,
     completionTemperature: 0.1,
-    // 上下文限制
-    maxContextChars: 50000, // 50KB
-    maxHistoryMessages: 20, // 最近 20 条消息
-    maxContextFiles: 10, // 最多 10 个文件
-    maxSemanticResults: 8, // 语义搜索最多 8 条
-    maxTerminalChars: 5000, // 终端输出最多 5000 字符
-    maxSingleFileChars: 10000, // 单文件最多 10000 字符
+    // 上下文限制（优化后的值，减少 token 消耗）
+    maxContextChars: 30000, // 30KB（从 50KB 降低）
+    maxHistoryMessages: 10, // 最近 10 条消息（从 20 降低）
+    maxContextFiles: 6, // 最多 6 个文件（从 10 降低）
+    maxSemanticResults: 5, // 语义搜索最多 5 条（从 8 降低）
+    maxTerminalChars: 3000, // 终端输出最多 3000 字符（从 5000 降低）
+    maxSingleFileChars: 6000, // 单文件最多 6000 字符（从 10000 降低）
   },
 
   // 忽略的目录

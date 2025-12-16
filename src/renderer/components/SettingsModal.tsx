@@ -14,6 +14,7 @@ import { BUILTIN_PROVIDERS, BuiltinProviderName, ProviderModelConfig } from '../
 import { getEditorConfig, saveEditorConfig, EditorConfig } from '../config/editorConfig'
 import { themeManager } from '../config/themeConfig'
 import { toast } from './Toast'
+import { getPromptTemplates, PromptTemplate } from '../agent/promptTemplates'
 
 type SettingsTab = 'provider' | 'editor' | 'agent' | 'keybindings' | 'system'
 
@@ -25,13 +26,15 @@ const LANGUAGES: { id: Language; name: string }[] = [
 export default function SettingsModal() {
   const { 
     llmConfig, setLLMConfig, setShowSettings, language, setLanguage, 
-    autoApprove, setAutoApprove, providerConfigs, setProviderConfig 
+    autoApprove, setAutoApprove, providerConfigs, setProviderConfig,
+    promptTemplateId, setPromptTemplateId
   } = useStore()
   const [activeTab, setActiveTab] = useState<SettingsTab>('provider')
   const [showApiKey, setShowApiKey] = useState(false)
   const [localConfig, setLocalConfig] = useState(llmConfig)
   const [localLanguage, setLocalLanguage] = useState(language)
   const [localAutoApprove, setLocalAutoApprove] = useState(autoApprove)
+  const [localPromptTemplateId, setLocalPromptTemplateId] = useState(promptTemplateId)
   const [saved, setSaved] = useState(false)
 
 
@@ -62,6 +65,7 @@ export default function SettingsModal() {
     setLocalConfig(llmConfig)
     setLocalLanguage(language)
     setLocalAutoApprove(autoApprove)
+    setLocalPromptTemplateId(promptTemplateId)
     // 加载设置
     window.electronAPI.getSetting('editorSettings').then(s => {
       if (s) setEditorSettings(s as typeof editorSettings)
@@ -76,15 +80,17 @@ export default function SettingsModal() {
             })
         }
     })
-  }, [llmConfig, language, autoApprove]) // 注意：这里不依赖 setProviderConfig 以避免循环，虽然它通常是稳定的
+  }, [llmConfig, language, autoApprove, promptTemplateId]) // 注意：这里不依赖 setProviderConfig 以避免循环，虽然它通常是稳定的
 
   const handleSave = async () => {
     setLLMConfig(localConfig)
     setLanguage(localLanguage)
     setAutoApprove(localAutoApprove)
+    setPromptTemplateId(localPromptTemplateId)
     await window.electronAPI.setSetting('llmConfig', localConfig)
     await window.electronAPI.setSetting('language', localLanguage)
     await window.electronAPI.setSetting('autoApprove', localAutoApprove)
+    await window.electronAPI.setSetting('promptTemplateId', localPromptTemplateId)
     await window.electronAPI.setSetting('editorSettings', editorSettings)
     await window.electronAPI.setSetting('aiInstructions', aiInstructions)
     // 保存 providerConfigs (它在 Store 中已经是新的了，因为我们直接修改了 store)
@@ -215,6 +221,8 @@ export default function SettingsModal() {
                 setAutoApprove={setLocalAutoApprove}
                 aiInstructions={aiInstructions}
                 setAiInstructions={setAiInstructions}
+                promptTemplateId={localPromptTemplateId}
+                setPromptTemplateId={setLocalPromptTemplateId}
                 language={localLanguage}
               />
             )}
@@ -840,12 +848,40 @@ interface AgentSettingsProps {
   setAutoApprove: (settings: { edits: boolean; terminal: boolean; dangerous: boolean }) => void
   aiInstructions: string
   setAiInstructions: (instructions: string) => void
+  promptTemplateId: string
+  setPromptTemplateId: (id: string) => void
   language: Language
 }
 
-function AgentSettings({ autoApprove, setAutoApprove, aiInstructions, setAiInstructions, language }: AgentSettingsProps) {
+function AgentSettings({ autoApprove, setAutoApprove, aiInstructions, setAiInstructions, promptTemplateId, setPromptTemplateId, language }: AgentSettingsProps) {
+  const templates = getPromptTemplates()
+  
   return (
     <div className="space-y-6 text-text-primary">
+      {/* 提示词模板选择 */}
+      <div>
+        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? 'AI 人格模板' : 'AI Personality Template'}</h3>
+        <p className="text-xs text-text-muted mb-3">
+          {language === 'zh' ? '选择 AI 的沟通风格和行为方式' : 'Choose AI communication style and behavior'}
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {templates.map((t: PromptTemplate) => (
+            <button
+              key={t.id}
+              onClick={() => setPromptTemplateId(t.id)}
+              className={`p-3 rounded-lg border text-left transition-all ${
+                promptTemplateId === t.id
+                  ? 'border-accent bg-accent/10 shadow-sm'
+                  : 'border-border-subtle hover:border-text-muted bg-surface'
+              }`}
+            >
+              <div className="text-sm font-medium">{language === 'zh' ? t.nameZh : t.name}</div>
+              <div className="text-xs text-text-muted mt-1">{language === 'zh' ? t.descriptionZh : t.description}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div>
         <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '自动审批' : 'Auto Approve'}</h3>
         <p className="text-xs text-text-muted mb-3">

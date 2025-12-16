@@ -779,6 +779,7 @@ ipcMain.handle('index:start', async (_, workspacePath: string) => {
 ipcMain.handle('index:status', async (_, workspacePath: string) => {
     try {
         const indexService = getIndexService(workspacePath)
+        await indexService.initialize()
         return indexService.getStatus()
     } catch (e) {
         return { isIndexing: false, totalFiles: 0, indexedFiles: 0, totalChunks: 0 }

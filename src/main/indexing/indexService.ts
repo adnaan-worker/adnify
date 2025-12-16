@@ -54,7 +54,17 @@ export class CodebaseIndexService {
    */
   async initialize(): Promise<void> {
     await this.vectorStore.initialize()
-    console.log('[IndexService] Initialized for:', this.workspacePath)
+    
+    // 从数据库读取实际的索引统计
+    const hasExistingIndex = await this.vectorStore.hasIndex()
+    if (hasExistingIndex) {
+      const stats = await this.vectorStore.getStats()
+      this.status.totalChunks = stats.chunkCount
+      this.status.totalFiles = stats.fileCount
+    }
+    
+    console.log('[IndexService] Initialized for:', this.workspacePath, 
+      hasExistingIndex ? `(${this.status.totalChunks} chunks)` : '(no index)')
   }
 
   /**

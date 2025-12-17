@@ -14,6 +14,7 @@ import { gitService, GitStatus, GitCommit } from '../agent/gitService'
 import { getEditorConfig } from '../config/editorConfig'
 import { toast } from './Toast'
 import { onDiagnostics, getDocumentSymbols } from '../services/lspService'
+import { adnifyDir } from '../services/adnifyDirService'
 
 const getFileIcon = (name: string) => {
     const ext = name.split('.').pop()?.toLowerCase()
@@ -297,9 +298,21 @@ function ExplorerView() {
     const handleOpenFolder = async () => {
         const path = await window.electronAPI.openFolder()
         if (path) {
+            // 重置服务（切换项目）
+            const { checkpointService } = await import('../agent/checkpointService')
+            checkpointService.reset()
+            adnifyDir.reset()
+            
             setWorkspacePath(path)
+            
+            // 初始化 .adnify 目录（统一管理项目数据）
+            await adnifyDir.initialize(path)
+            
             const items = await window.electronAPI.readDir(path)
             setFiles(items)
+            
+            // 初始化新项目的检查点
+            await checkpointService.init()
         }
     }
 
@@ -1481,7 +1494,7 @@ function OutlineView() {
 
     // 点击符号跳转到对应行
     const handleSymbolClick = useCallback((symbol: LspDocumentSymbol) => {
-        if (!activeFilePath) return
+        if (!activeFilePath || !symbol.range?.start) return
 
         // 发送跳转到行的事件
         window.dispatchEvent(new CustomEvent('editor:goto-line', {
@@ -1520,7 +1533,7 @@ function OutlineView() {
         if (!matchesFilter && !hasChildren) return null
 
         return (
-            <div key={`${symbol.name}-${symbol.range.start.line}`}>
+            <div key={`${symbol.name}-${symbol.range?.start?.line ?? depth}`}>
                 <div
                     onClick={() => handleSymbolClick(symbol)}
                     className="flex items-center gap-1.5 px-2 py-1 cursor-pointer hover:bg-surface-hover group transition-colors"
@@ -1539,7 +1552,7 @@ function OutlineView() {
                     {getSymbolIcon(symbol.kind)}
                     <span className="text-xs text-text-primary truncate flex-1">{symbol.name}</span>
                     <span className="text-[10px] text-text-muted opacity-0 group-hover:opacity-100 tabular-nums">
-                        {symbol.range.start.line + 1}
+                        {symbol.range?.start?.line !== undefined ? symbol.range.start.line + 1 : ''}
                     </span>
                 </div>
 

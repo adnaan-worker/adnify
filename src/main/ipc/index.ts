@@ -13,6 +13,7 @@ import { registerSearchHandlers } from './search'
 import { registerGitHandlers } from './git'
 import { registerLLMHandlers, updateLLMServiceWindow } from './llm'
 import { registerIndexingHandlers } from './indexing'
+import { registerLspHandlers } from './lsp'
 export interface IPCContext {
   getMainWindow: () => BrowserWindow | null
   mainStore: Store
@@ -50,6 +51,8 @@ export function registerAllHandlers(context: IPCContext) {
   // 索引
   registerIndexingHandlers(getMainWindow)
 
+  // LSP 语言服务
+  registerLspHandlers()
 }
 
 /**

@@ -20,6 +20,7 @@ import { initEditorConfig } from './config/editorConfig'
 import { themeManager } from './config/themeConfig'
 import { restoreWorkspaceState, initWorkspaceStateSync } from './services/workspaceStateService'
 import { ThemeManager } from './components/ThemeManager'
+import { adnifyDir } from './services/adnifyDirService'
 
   // 暴露 store 给插件系统
   ; (window as any).__ADNIFY_STORE__ = { getState: () => useStore.getState() }
@@ -105,6 +106,10 @@ function AppContent() {
         const lastWorkspace = await window.electronAPI.restoreWorkspace()
         if (lastWorkspace) {
           setWorkspacePath(lastWorkspace)
+          
+          // 初始化 .adnify 目录（统一管理项目数据）
+          await adnifyDir.initialize(lastWorkspace)
+          
           updateLoaderStatus('Loading files...')
           const items = await window.electronAPI.readDir(lastWorkspace)
           setFiles(items)
@@ -142,7 +147,6 @@ function AppContent() {
     const cleanup = initWorkspaceStateSync()
     return cleanup
   }, [])
-
   // Resize Logic
   useEffect(() => {
     if (!isResizingSidebar && !isResizingChat) return

@@ -84,17 +84,17 @@ class AgentServiceClass {
     try {
       // 1. 获取并保存上下文
       const contextItems = store.getCurrentThread()?.contextItems || []
-      
+
       // 2. 读取上下文文件内容
       const contextContent = await this.buildContextContent(contextItems)
-      
+
       // 3. 添加用户消息到 store
       const userMessageId = store.addUserMessage(userMessage, contextItems)
       store.clearContextItems()
 
       // 4. 创建消息检查点（在执行任何操作之前保存当前状态）
-      const messageText = typeof userMessage === 'string' 
-        ? userMessage.slice(0, 50) 
+      const messageText = typeof userMessage === 'string'
+        ? userMessage.slice(0, 50)
         : 'User message'
       await store.createMessageCheckpoint(userMessageId, messageText)
 
@@ -174,7 +174,7 @@ class AgentServiceClass {
     const store = useAgentStore.getState()
     let loopCount = 0
     let shouldContinue = true
-    
+
     // 用于检测重复调用
     const recentToolCalls: string[] = []
     const MAX_RECENT_CALLS = 5
@@ -208,11 +208,11 @@ class AgentServiceClass {
         .map(tc => `${tc.name}:${JSON.stringify(tc.arguments)}`)
         .sort()
         .join('|')
-      
+
       if (recentToolCalls.includes(currentCallSignature)) {
         consecutiveRepeats++
         console.warn(`[Agent] Detected repeated tool call (${consecutiveRepeats}/${MAX_CONSECUTIVE_REPEATS}):`, currentCallSignature.slice(0, 100))
-        
+
         if (consecutiveRepeats >= MAX_CONSECUTIVE_REPEATS) {
           console.error('[Agent] Too many repeated calls, stopping loop')
           store.appendToAssistant(this.currentAssistantId!, '\n\n⚠️ Detected repeated operations. Stopping to prevent infinite loop.')
@@ -221,7 +221,7 @@ class AgentServiceClass {
       } else {
         consecutiveRepeats = 0
       }
-      
+
       // 记录最近的调用
       recentToolCalls.push(currentCallSignature)
       if (recentToolCalls.length > MAX_RECENT_CALLS) {
@@ -245,15 +245,15 @@ class AgentServiceClass {
       // 执行所有工具调用
       let hasSuccessfulTool = false
       let userRejected = false
-      
+
       console.log(`[Agent] Executing ${result.toolCalls.length} tool calls`)
-      
+
       for (const toolCall of result.toolCalls) {
         if (this.abortController?.signal.aborted) break
 
         console.log(`[Agent] Executing tool: ${toolCall.name}`, toolCall.arguments)
         const toolResult = await this.executeToolCall(toolCall, workspacePath)
-        
+
         // 添加 tool 结果到历史
         const toolResultMessage = {
           role: 'tool' as const,
@@ -261,7 +261,7 @@ class AgentServiceClass {
           content: toolResult.content,
         }
         llmMessages.push(toolResultMessage)
-        
+
         console.log(`[Agent] Tool result (${toolCall.name}):`, {
           success: toolResult.success,
           contentLength: toolResult.content.length,
@@ -271,12 +271,12 @@ class AgentServiceClass {
         if (toolResult.success) {
           hasSuccessfulTool = true
         }
-        
+
         if (toolResult.rejected) {
           userRejected = true
         }
       }
-      
+
       console.log(`[Agent] After tool execution, message count: ${llmMessages.length}`)
 
       // 如果用户拒绝了工具调用，停止循环
@@ -300,7 +300,7 @@ class AgentServiceClass {
     if (loopCount >= CONFIG.maxToolLoops) {
       store.appendToAssistant(this.currentAssistantId!, '\n\n⚠️ Reached maximum tool call limit. Please continue the conversation if more work is needed.')
     }
-    
+
     console.log(`[Agent] Loop finished after ${loopCount} iterations`)
   }
 
@@ -313,39 +313,39 @@ class AgentServiceClass {
   ): Promise<{ content?: string; toolCalls?: LLMToolCall[]; error?: string }> {
     let lastError: string | undefined
     let delay = CONFIG.retryDelayMs
-    
+
     for (let attempt = 0; attempt <= CONFIG.maxRetries; attempt++) {
       if (this.abortController?.signal.aborted) {
         return { error: 'Aborted' }
       }
-      
+
       if (attempt > 0) {
         console.log(`[Agent] Retry attempt ${attempt}/${CONFIG.maxRetries} after ${delay}ms`)
         await new Promise(resolve => setTimeout(resolve, delay))
         delay *= CONFIG.retryBackoffMultiplier
       }
-      
+
       const result = await this.callLLM(config, messages)
-      
+
       // 成功或不可重试的错误
       if (!result.error) {
         return result
       }
-      
+
       // 检查是否可重试
-      const isRetryable = RETRYABLE_ERROR_CODES.has(result.error) || 
+      const isRetryable = RETRYABLE_ERROR_CODES.has(result.error) ||
         result.error.includes('timeout') ||
         result.error.includes('rate limit') ||
         result.error.includes('network')
-      
+
       if (!isRetryable || attempt === CONFIG.maxRetries) {
         return result
       }
-      
+
       lastError = result.error
       console.warn(`[Agent] Retryable error: ${result.error}`)
     }
-    
+
     return { error: lastError || 'Max retries exceeded' }
   }
 
@@ -387,9 +387,9 @@ class AgentServiceClass {
           if (chunk.type === 'tool_call_start' && chunk.toolCallDelta) {
             const toolId = chunk.toolCallDelta.id || `tool_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
             const toolName = chunk.toolCallDelta.name || 'unknown'
-            
+
             console.log('[Agent] Tool call start:', toolId, toolName)
-            
+
             currentToolCall = {
               id: toolId,
               name: toolName,
@@ -488,7 +488,7 @@ class AgentServiceClass {
       unsubscribers.push(
         window.electronAPI.onLLMDone((result) => {
           cleanup()
-          
+
           // 合并结果中的工具调用
           if (result.toolCalls) {
             for (const tc of result.toolCalls) {
@@ -497,7 +497,7 @@ class AgentServiceClass {
               }
             }
           }
-          
+
           resolve({ content: content || result.content, toolCalls })
         })
       )
@@ -576,7 +576,7 @@ class AgentServiceClass {
       if (filePath && workspacePath) {
         fullPath = filePath.startsWith(workspacePath) ? filePath : `${workspacePath}/${filePath}`
         originalContent = await window.electronAPI.readFile(fullPath)
-        
+
         // 将快照添加到当前消息检查点（用于 Restore 功能）
         store.addSnapshotToCurrentCheckpoint(fullPath, originalContent)
       }
@@ -602,7 +602,7 @@ class AgentServiceClass {
     // 如果文件修改成功，添加到 pendingChanges 和 Composer
     if (result.success && fullPath && (WRITE_TOOLS.includes(name) || name === 'delete_file_or_folder')) {
       const meta = result.meta as { linesAdded?: number; linesRemoved?: number; newContent?: string; isNewFile?: boolean } | undefined
-      
+
       // 添加到 pendingChanges (用于 UI 显示)
       store.addPendingChange({
         filePath: fullPath,
@@ -612,14 +612,14 @@ class AgentServiceClass {
         linesAdded: meta?.linesAdded || 0,
         linesRemoved: meta?.linesRemoved || 0,
       })
-      
+
       // 同时添加到 Composer (用于批量操作)
       try {
         const { composerService } = await import('../composerService')
-        const relativePath = workspacePath 
+        const relativePath = workspacePath
           ? fullPath.replace(workspacePath, '').replace(/^[\\/]/, '')
           : fullPath
-        
+
         composerService.addChange({
           filePath: fullPath,
           relativePath,
@@ -637,10 +637,10 @@ class AgentServiceClass {
     }
 
     // 添加工具结果到 store
-    const resultContent = result.success 
-      ? result.result 
+    const resultContent = result.success
+      ? result.result
       : `Error: ${result.error}`
-    
+
     // 截断过长的结果
     const truncatedContent = resultContent.length > CONFIG.maxToolResultChars
       ? resultContent.slice(0, CONFIG.maxToolResultChars) + '\n...(truncated)'
@@ -727,7 +727,7 @@ class AgentServiceClass {
             const truncated = content.length > CONFIG.maxFileContentChars
               ? content.slice(0, CONFIG.maxFileContentChars) + '\n...(file truncated)'
               : content
-            
+
             const fileBlock = `\n### File: ${filePath}\n\`\`\`\n${truncated}\n\`\`\`\n`
             parts.push(fileBlock)
             totalChars += fileBlock.length
@@ -785,34 +785,30 @@ class AgentServiceClass {
     const pathMatch = argsString.match(/"path"\s*:\s*"([^"]*)"?/)
     if (pathMatch) result.path = pathMatch[1]
 
+    // 提取通用代码参数
+    const extractCodeParam = (paramName: string) => {
+      const match = argsString.match(new RegExp(`"${paramName}"\\s*:\\s*"([\\s\\S]*?)(?:"|$)`))
+      if (match) {
+        try {
+          // 尝试处理转义字符
+          return match[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"')
+        } catch {
+          return match[1]
+        }
+      }
+      return null
+    }
+
     // 对于写入工具，提取 content
     if (WRITE_TOOLS.includes(toolName)) {
-      const contentMatch = argsString.match(/"content"\s*:\s*"([\s\S]*?)(?:"|$)/)
-      if (contentMatch) {
-        try {
-          result.content = JSON.parse(`"${contentMatch[1]}"`)
-        } catch {
-          result.content = contentMatch[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t')
-        }
-      }
+      const content = extractCodeParam('content')
+      if (content) result.content = content
 
-      const oldMatch = argsString.match(/"old_string"\s*:\s*"([\s\S]*?)(?:"|$)/)
-      if (oldMatch) {
-        try {
-          result.old_string = JSON.parse(`"${oldMatch[1]}"`)
-        } catch {
-          result.old_string = oldMatch[1].replace(/\\n/g, '\n')
-        }
-      }
+      const searchReplace = extractCodeParam('search_replace_blocks')
+      if (searchReplace) result.search_replace_blocks = searchReplace
 
-      const newMatch = argsString.match(/"new_string"\s*:\s*"([\s\S]*?)(?:"|$)/)
-      if (newMatch) {
-        try {
-          result.new_string = JSON.parse(`"${newMatch[1]}"`)
-        } catch {
-          result.new_string = newMatch[1].replace(/\\n/g, '\n')
-        }
-      }
+      const code = extractCodeParam('code')
+      if (code) result.code = code
     }
 
     return result
@@ -844,11 +840,11 @@ class AgentServiceClass {
    */
   private cleanup(): void {
     const store = useAgentStore.getState()
-    
+
     if (this.currentAssistantId) {
       store.finalizeAssistant(this.currentAssistantId)
     }
-    
+
     store.setStreamPhase('idle')
     this.currentAssistantId = null
     this.abortController = null

@@ -417,8 +417,8 @@ export default function ChatPanel() {
           <button
             onClick={() => setChatMode('chat')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${chatMode === 'chat'
-                ? 'bg-white/10 text-white shadow-sm'
-                : 'text-text-muted hover:text-text-secondary hover:bg-white/5'
+              ? 'bg-white/10 text-white shadow-sm'
+              : 'text-text-muted hover:text-text-secondary hover:bg-white/5'
               }`}
           >
             <MessageSquare className="w-3.5 h-3.5" />
@@ -427,8 +427,8 @@ export default function ChatPanel() {
           <button
             onClick={() => setChatMode('agent')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${chatMode === 'agent'
-                ? 'bg-accent/20 text-accent shadow-sm shadow-accent/10'
-                : 'text-text-muted hover:text-text-secondary hover:bg-white/5'
+              ? 'bg-accent/20 text-accent shadow-sm shadow-accent/10'
+              : 'text-text-muted hover:text-text-secondary hover:bg-white/5'
               }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -480,8 +480,8 @@ export default function ChatPanel() {
                 <div
                   key={thread.id}
                   className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-colors border ${currentThreadId === thread.id
-                      ? 'bg-accent/10 border-accent/20 text-accent'
-                      : 'bg-surface/30 border-white/5 hover:border-white/10 text-text-secondary'
+                    ? 'bg-accent/10 border-accent/20 text-accent'
+                    : 'bg-surface/30 border-white/5 hover:border-white/10 text-text-secondary'
                     }`}
                   onClick={() => { switchThread(thread.id); setShowThreads(false) }}
                 >
@@ -504,12 +504,17 @@ export default function ChatPanel() {
         </div>
       )}
 
-      {/* Drag Overlay */}
+      {/* Drag Overlay - Subtle & Glassmorphic */}
       {isDragging && (
-        <div className="absolute inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center pointer-events-none animate-fade-in">
-          <div className="flex flex-col items-center gap-4 p-12 rounded-2xl border-2 border-dashed border-accent bg-accent/5">
-            <Upload className="w-12 h-12 text-accent animate-bounce" />
-            <p className="text-lg font-semibold text-text-primary">Drop files here</p>
+        <div className="absolute inset-0 z-50 bg-background/60 backdrop-blur-[2px] flex items-center justify-center pointer-events-none animate-fade-in transition-all duration-300">
+          <div className="flex flex-col items-center gap-3 p-8 rounded-2xl border border-accent/30 bg-surface/80 shadow-2xl shadow-accent/10 transform scale-100 animate-scale-in">
+            <div className="p-4 rounded-full bg-accent/10 border border-accent/20">
+              <Upload className="w-8 h-8 text-accent animate-bounce" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-text-primary">{language === 'zh' ? '拖放文件以添加上下文' : 'Drop files to add context'}</p>
+              <p className="text-xs text-text-muted mt-1">{language === 'zh' ? '支持代码文件和图片' : 'Support code files and images'}</p>
+            </div>
           </div>
         </div>
       )}

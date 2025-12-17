@@ -338,7 +338,7 @@ function ProviderSettings({
             <div className="space-y-2 mt-2">
               <p className="text-xs text-text-muted">{language === 'zh' ? '自定义模型列表:' : 'Custom Models:'}</p>
               <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
-                {providerConfigs[localConfig.provider]?.customModels.map(model => (
+                {providerConfigs[localConfig.provider]?.customModels.map((model: string) => (
                   <div key={model} className="flex items-center justify-between px-3 py-2 bg-surface/50 rounded-lg border border-border-subtle/50 text-xs">
                     <span className="font-mono text-text-secondary">{model}</span>
                     <button
@@ -984,6 +984,28 @@ function SystemSettings({ language }: { language: Language }) {
   const [dataPath, setDataPath] = useState<string>('')
   const [loading, setLoading] = useState(false)
 
+  // 代理设置
+  const [proxyConfig, setProxyConfig] = useState<{
+    enabled: boolean
+    http: string
+    https: string
+  }>({
+    enabled: false,
+    http: '',
+    https: ''
+  })
+
+  // 检查点保留策略
+  const [checkpointConfig, setCheckpointConfig] = useState<{
+    maxCount: number
+    maxAgeDays: number
+    maxFileSizeKB: number
+  }>({
+    maxCount: 50,
+    maxAgeDays: 7,
+    maxFileSizeKB: 100
+  })
+
   // Embedding 配置状态
   const [embeddingProviders, setEmbeddingProviders] = useState<{ id: string; name: string; description: string; free: boolean }[]>([])
   const [embeddingConfig, setEmbeddingConfig] = useState<{
@@ -1008,6 +1030,14 @@ function SystemSettings({ language }: { language: Language }) {
     // 加载保存的 Embedding 配置
     window.electronAPI.getSetting('embeddingConfig').then(config => {
       if (config) setEmbeddingConfig(config as typeof embeddingConfig)
+    })
+    // 加载代理配置
+    window.electronAPI.getSetting('proxyConfig').then(config => {
+      if (config) setProxyConfig(config as typeof proxyConfig)
+    })
+    // 加载检查点配置
+    window.electronAPI.getSetting('checkpointConfig').then(config => {
+      if (config) setCheckpointConfig(config as typeof checkpointConfig)
     })
   }, [])
 
@@ -1084,10 +1114,127 @@ function SystemSettings({ language }: { language: Language }) {
 
   const selectedProviderInfo = embeddingProviders.find(p => p.id === embeddingConfig.provider)
 
+  // 保存代理配置
+  const handleSaveProxyConfig = async () => {
+    await window.electronAPI.setSetting('proxyConfig', proxyConfig)
+    toast.success(language === 'zh' ? '代理设置已保存' : 'Proxy settings saved')
+  }
+
+  // 保存检查点配置
+  const handleSaveCheckpointConfig = async () => {
+    await window.electronAPI.setSetting('checkpointConfig', checkpointConfig)
+    toast.success(language === 'zh' ? '检查点设置已保存' : 'Checkpoint settings saved')
+  }
+
   return (
     <div className="space-y-6 text-text-primary">
-      {/* 数据存储 */}
+      {/* 代理设置 */}
       <div>
+        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '网络代理' : 'Network Proxy'}</h3>
+        <p className="text-xs text-text-muted mb-3">
+          {language === 'zh'
+            ? '配置 HTTP/HTTPS 代理用于 API 请求。'
+            : 'Configure HTTP/HTTPS proxy for API requests.'}
+        </p>
+
+        <label className="flex items-center gap-3 p-3 rounded-lg border border-border-subtle hover:border-text-muted cursor-pointer bg-surface/50 transition-colors mb-3">
+          <input
+            type="checkbox"
+            checked={proxyConfig.enabled}
+            onChange={(e) => setProxyConfig({ ...proxyConfig, enabled: e.target.checked })}
+            className="w-4 h-4 rounded border-border-subtle text-accent focus:ring-accent"
+          />
+          <span className="text-sm">{language === 'zh' ? '启用代理' : 'Enable Proxy'}</span>
+        </label>
+
+        {proxyConfig.enabled && (
+          <div className="space-y-3 pl-4 border-l-2 border-accent/30">
+            <div>
+              <label className="text-xs text-text-muted mb-1 block">HTTP Proxy</label>
+              <input
+                type="text"
+                value={proxyConfig.http}
+                onChange={(e) => setProxyConfig({ ...proxyConfig, http: e.target.value })}
+                placeholder="http://127.0.0.1:7890"
+                className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-text-muted mb-1 block">HTTPS Proxy</label>
+              <input
+                type="text"
+                value={proxyConfig.https}
+                onChange={(e) => setProxyConfig({ ...proxyConfig, https: e.target.value })}
+                placeholder="http://127.0.0.1:7890"
+                className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+              />
+            </div>
+            <button
+              onClick={handleSaveProxyConfig}
+              className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              {language === 'zh' ? '保存代理设置' : 'Save Proxy Settings'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* 检查点保留策略 */}
+      <div className="pt-4 border-t border-border-subtle">
+        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '检查点保留策略' : 'Checkpoint Retention'}</h3>
+        <p className="text-xs text-text-muted mb-3">
+          {language === 'zh'
+            ? '配置 Agent 文件回退检查点的保留规则。检查点存储在项目 .adnify 目录下。'
+            : 'Configure retention rules for Agent file rollback checkpoints. Stored in project .adnify directory.'}
+        </p>
+
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="text-xs text-text-muted mb-1 block">{language === 'zh' ? '最大数量' : 'Max Count'}</label>
+            <input
+              type="number"
+              value={checkpointConfig.maxCount}
+              onChange={(e) => setCheckpointConfig({ ...checkpointConfig, maxCount: parseInt(e.target.value) || 50 })}
+              min={10} max={200}
+              className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-text-muted mb-1 block">{language === 'zh' ? '保留天数' : 'Max Age (days)'}</label>
+            <input
+              type="number"
+              value={checkpointConfig.maxAgeDays}
+              onChange={(e) => setCheckpointConfig({ ...checkpointConfig, maxAgeDays: parseInt(e.target.value) || 7 })}
+              min={1} max={30}
+              className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-text-muted mb-1 block">{language === 'zh' ? '单文件上限 (KB)' : 'Max File Size (KB)'}</label>
+            <input
+              type="number"
+              value={checkpointConfig.maxFileSizeKB}
+              onChange={(e) => setCheckpointConfig({ ...checkpointConfig, maxFileSizeKB: parseInt(e.target.value) || 100 })}
+              min={10} max={500}
+              className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-text-muted mt-2">
+          {language === 'zh'
+            ? '超过大小限制的文件不会被快照，无法回退。'
+            : 'Files exceeding size limit will not be snapshotted and cannot be rolled back.'}
+        </p>
+        <button
+          onClick={handleSaveCheckpointConfig}
+          className="mt-3 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors"
+        >
+          {language === 'zh' ? '保存检查点设置' : 'Save Checkpoint Settings'}
+        </button>
+      </div>
+
+      {/* 数据存储 */}
+      <div className="pt-4 border-t border-border-subtle">
         <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '数据存储' : 'Data Storage'}</h3>
         <p className="text-xs text-text-muted mb-3">
           {language === 'zh'

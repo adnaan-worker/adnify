@@ -45,6 +45,7 @@
     "react-syntax-highlighter": "^15.6.1",
     "sharp": "^0.34.5",
     "typescript-language-server": "^5.1.3",
+    "vscode-langservers-extracted": "^4.10.0",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
@@ -73,6 +74,13 @@
     "directories": {
       "output": "release"
     },
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/node-pty/**",
+      "node_modules/@vscode/ripgrep/**",
+      "node_modules/dugite/**",
+      "node_modules/@lancedb/**"
+    ],
     "files": [
       "dist/**/*",
       "public/**/*",
@@ -88,9 +96,18 @@
     "win": {
       "icon": "resources/icon.ico",
       "target": [
-        "nsis",
-        "portable",
-        "dir"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {
@@ -98,15 +115,33 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Adnify"
+      "shortcutName": "Adnify",
+      "installerIcon": "resources/icon.ico",
+      "uninstallerIcon": "resources/icon.ico",
+      "installerHeaderIcon": "resources/icon.ico"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-Portable.${ext}"
     },
     "mac": {
       "icon": "resources/icon.icns",
-      "target": "dmg"
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "linux": {
       "icon": "resources/icon.png",
-      "target": "AppImage"
-    }
+      "target": [
+        "AppImage",
+        "tar.gz"
+      ]
+    },
+    "extraResources": [
+      {
+        "from": "resources/icon.png",
+        "to": "icon.png"
+      }
+    ]
   }
 }

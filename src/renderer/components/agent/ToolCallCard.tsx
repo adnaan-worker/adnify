@@ -5,11 +5,11 @@
 
 import { useStore } from '../../store'
 import { t } from '../../i18n'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Check, X, ChevronDown, ChevronRight, Loader2,
   Terminal, Search, FolderOpen, FileText, Edit3,
-  Trash2, Eye, Copy
+  Trash2, Eye, Copy, ArrowRight, AlertTriangle
 } from 'lucide-react'
 import { ToolCall } from '../../agent/core/types'
 
@@ -72,6 +72,19 @@ export default function ToolCallCard({
   const isError = toolCall.status === 'error'
   const isRejected = toolCall.status === 'rejected'
 
+  // 自动展开 logic: 当工具正在运行或刚成功，且是编辑类操作时，自动展开
+  useEffect(() => {
+    if ((isRunning || isSuccess) && (toolCall.name === 'edit_file' || toolCall.name === 'write_file' || toolCall.name === 'create_file')) {
+      setIsExpanded(true)
+    }
+  }, [isRunning, isSuccess, toolCall.name])
+
+  // 获取主要的代码内容参数
+  const codeContent = useMemo(() => {
+    if (!args) return null
+    return (args.code || args.content || args.search_replace_blocks || args.replacement || args.source) as string
+  }, [args])
+
   // 获取简短描述
   const description = useMemo(() => {
     const name = toolCall.name
@@ -106,14 +119,19 @@ export default function ToolCallCard({
   const StatusIndicator = () => {
     if (isStreaming) {
       return (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-accent/10 rounded-full border border-accent/20">
           <div className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
-          <span className="text-[10px] text-accent">{t('toolStreaming', language)}</span>
+          <span className="text-[9px] font-medium text-accent uppercase tracking-wider">{t('toolStreaming', language)}</span>
         </div>
       )
     }
     if (isRunning) {
-      return <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />
+      return (
+        <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-accent/10 rounded-full border border-accent/20">
+          <Loader2 className="w-2.5 h-2.5 text-accent animate-spin" />
+          <span className="text-[9px] font-medium text-accent uppercase tracking-wider">Running</span>
+        </div>
+      )
     }
     if (isSuccess) {
       return <Check className="w-3.5 h-3.5 text-green-400" />
@@ -136,22 +154,25 @@ export default function ToolCallCard({
       }`}>
       {/* 头部 */}
       <div
-        className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer select-none"
+        className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer select-none group"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className={`p-1 rounded bg-white/5 border border-white/5 ${TOOL_COLORS[toolCall.name] || 'text-text-muted'}`}>
+        <div className={`p-1 rounded bg-white/5 border border-white/5 ${TOOL_COLORS[toolCall.name] || 'text-text-muted'} group-hover:bg-white/10 transition-colors`}>
           {TOOL_ICONS[toolCall.name] || <span className="text-[10px]">⚡</span>}
         </div>
 
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          <span className="text-[11px] font-medium text-text-secondary">
+          <span className="text-[11px] font-medium text-text-secondary group-hover:text-text-primary transition-colors">
             {TOOL_LABELS[toolCall.name] || toolCall.name}
           </span>
 
           {description && (
-            <span className="text-[10px] text-text-muted truncate font-mono opacity-60">
-              {description}
-            </span>
+            <div className="flex items-center gap-1 min-w-0">
+              <ArrowRight className="w-3 h-3 text-text-muted/50" />
+              <span className="text-[10px] text-text-muted truncate font-mono opacity-70 group-hover:opacity-100 transition-opacity">
+                {description}
+              </span>
+            </div>
           )}
         </div>
 
@@ -169,14 +190,38 @@ export default function ToolCallCard({
 
       {/* 展开的详情 */}
       {isExpanded && (
-        <div className="border-t border-white/5 bg-black/5">
-          {/* 参数预览 */}
-          {Object.keys(args).filter(k => !k.startsWith('_')).length > 0 && (
+        <div className="border-t border-white/5 bg-black/5 animate-slide-down">
+
+          {/* 代码预览 (Streaming Args) */}
+          {codeContent && (
+            <div className="border-b border-white/5">
+              <div className="flex items-center justify-between px-2.5 py-1 bg-white/[0.02]">
+                <span className="text-[9px] text-text-muted uppercase tracking-wider opacity-70 flex items-center gap-1">
+                  <Edit3 className="w-2.5 h-2.5" />
+                  {isStreaming || isRunning ? 'Generating Code...' : 'Code Change'}
+                </span>
+              </div>
+              <div className="max-h-60 overflow-auto custom-scrollbar px-2.5 py-2">
+                <pre className="text-[10px] font-mono text-text-secondary whitespace-pre-wrap break-all pl-2 border-l-2 border-accent/30">
+                  {codeContent}
+                  {(isStreaming || isRunning) && (
+                    <span className="inline-block w-1.5 h-3 bg-accent ml-1 animate-pulse align-middle" />
+                  )}
+                </pre>
+              </div>
+            </div>
+          )}
+
+          {/* 其他参数预览 */}
+          {Object.keys(args).filter(k => !k.startsWith('_') && k !== 'code' && k !== 'content' && k !== 'replacement' && k !== 'source').length > 0 && (
             <div className="px-2.5 py-1.5">
-              <div className="text-[9px] text-text-muted uppercase tracking-wider mb-1.5 opacity-70">{t('toolArguments', language)}</div>
+              <div className="text-[9px] text-text-muted uppercase tracking-wider mb-1.5 opacity-70 flex items-center gap-1">
+                <Terminal className="w-2.5 h-2.5" />
+                {t('toolArguments', language)}
+              </div>
               <div className="space-y-1 pl-2 border-l border-white/10">
                 {Object.entries(args)
-                  .filter(([key]) => !key.startsWith('_'))
+                  .filter(([key]) => !key.startsWith('_') && key !== 'code' && key !== 'content' && key !== 'replacement' && key !== 'source')
                   .map(([key, value]) => (
                     <div key={key} className="flex gap-2 text-[11px]">
                       <span className="text-text-muted shrink-0 w-16 text-right opacity-60">{key}:</span>
@@ -196,8 +241,11 @@ export default function ToolCallCard({
           {/* 结果 */}
           {toolCall.result && (
             <div className="border-t border-white/5">
-              <div className="flex items-center justify-between px-2.5 py-1">
-                <span className="text-[9px] text-text-muted uppercase tracking-wider opacity-70">{t('toolResult', language)}</span>
+              <div className="flex items-center justify-between px-2.5 py-1 bg-white/[0.02]">
+                <span className="text-[9px] text-text-muted uppercase tracking-wider opacity-70 flex items-center gap-1">
+                  <FileText className="w-2.5 h-2.5" />
+                  {t('toolResult', language)}
+                </span>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleCopyResult() }}
                   className="p-0.5 hover:bg-white/10 rounded text-text-muted hover:text-text-primary transition-colors"
@@ -206,7 +254,7 @@ export default function ToolCallCard({
                   <Copy className="w-2.5 h-2.5" />
                 </button>
               </div>
-              <div className="max-h-40 overflow-auto custom-scrollbar px-2.5 pb-1.5">
+              <div className="max-h-40 overflow-auto custom-scrollbar px-2.5 pb-1.5 pt-1">
                 <pre className="text-[10px] font-mono text-text-muted whitespace-pre-wrap break-all pl-2 border-l border-white/10">
                   {toolCall.result.slice(0, 500)}
                   {toolCall.result.length > 500 && '\n... (truncated)'}
@@ -218,7 +266,10 @@ export default function ToolCallCard({
           {/* 错误信息 */}
           {toolCall.error && (
             <div className="px-2.5 py-1.5 bg-red-500/5 border-t border-red-500/10">
-              <div className="text-[9px] text-red-400 uppercase tracking-wider mb-0.5">{t('toolError', language)}</div>
+              <div className="text-[9px] text-red-400 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                <AlertTriangle className="w-2.5 h-2.5" />
+                {t('toolError', language)}
+              </div>
               <p className="text-[10px] text-red-300 font-mono pl-2 border-l border-red-500/20">{toolCall.error}</p>
             </div>
           )}

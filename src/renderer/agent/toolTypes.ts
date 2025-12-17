@@ -64,6 +64,8 @@ export interface Checkpoint {
   timestamp: number
   snapshots: Record<string, FileSnapshot>
   description: string
+  /** 关联的消息 ID，用于消息回退 */
+  messageId?: string
 }
 
 // ===== 工具状态类型 =====

@@ -30,6 +30,7 @@ import { getFileInfo, getLargeFileEditorOptions, getLargeFileWarning } from '../
 import { monaco } from '../monacoWorker'
 // 导入编辑器配置
 import { getEditorConfig } from '../config/editorConfig'
+import type { ThemeName } from '../store/slices/themeSlice'
 
 // 配置 Monaco 使用本地安装的版本（支持国际化）
 // monaco-editor-nls 插件会在构建时注入语言包
@@ -143,7 +144,7 @@ export default function Editor() {
   const activeFileInfo = activeFile ? getFileInfo(activeFile.path, activeFile.content) : null
 
   // 监听主题变化并更新 Monaco 主题
-  const { currentTheme } = useStore()
+  const currentTheme = useStore((state) => state.currentTheme) as ThemeName
 
   useEffect(() => {
     if (monacoRef.current && currentTheme) {
@@ -196,13 +197,52 @@ export default function Editor() {
     // 注册所有 LSP 提供者（hover、completion、signature help 等）
     registerLspProviders(monaco)
 
-    // 初始设置主题
-    // 触发上面的 useEffect
+    // 初始设置主题 - 直接在挂载时应用
+    const { currentTheme: initialTheme } = useStore.getState() as { currentTheme: ThemeName }
+    import('./ThemeManager').then(({ themes }) => {
+      const themeVars = themes[initialTheme]
+      if (!themeVars) return
 
+      const rgbToHex = (rgbStr: string) => {
+        const [r, g, b] = rgbStr.split(' ').map(Number)
+        return '#' + [r, g, b].map(x => {
+          const hex = x.toString(16)
+          return hex.length === 1 ? '0' + hex : hex
+        }).join('')
+      }
+
+      const bg = rgbToHex(themeVars['--color-background'])
+      const surface = rgbToHex(themeVars['--color-surface'])
+      const text = rgbToHex(themeVars['--color-text-primary'])
+      const border = rgbToHex(themeVars['--color-border'])
+      const selection = rgbToHex(themeVars['--color-accent']) + '40'
+
+      monaco.editor.defineTheme('adnify-dynamic', {
+        base: initialTheme === 'dawn' ? 'vs' : 'vs-dark',
+        inherit: true,
+        rules: [],
+        colors: {
+          'editor.background': bg,
+          'editor.foreground': text,
+          'editor.lineHighlightBackground': surface,
+          'editorCursor.foreground': text,
+          'editorWhitespace.foreground': border,
+          'editorIndentGuide.background': border,
+          'editor.selectionBackground': selection,
+          'editorLineNumber.foreground': rgbToHex(themeVars['--color-text-muted']),
+        }
+      })
+      monaco.editor.setTheme('adnify-dynamic')
+    })
 
     // 启动 LSP 服务器（异步）
     const { workspacePath } = useStore.getState()
     if (workspacePath) {
+      // 设置工作区路径供 LSP 服务使用
+      import('../services/lspService').then(({ setWorkspacePath }) => {
+        setWorkspacePath(workspacePath)
+      })
+      
       startLspServer(workspacePath).then((success) => {
         if (success) {
           console.log('[Editor] LSP server started')

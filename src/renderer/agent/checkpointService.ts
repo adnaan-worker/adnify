@@ -1,310 +1,357 @@
 /**
  * 检查点服务 - 支持文件状态回滚
- * 参考 void 编辑器的检查点系统
  * 
- * 支持 localStorage 持久化，刷新后可恢复检查点
+ * 数据存储在项目目录 .adnify/checkpoints.json
+ * 支持配置保留策略（数量、时间、文件大小限制）
  */
 
 import { Checkpoint, FileSnapshot } from './toolTypes'
-
-const MAX_CHECKPOINTS = 50
-const MAX_SNAPSHOTS_PER_CHECKPOINT = 20
-const STORAGE_KEY = 'adnify-checkpoints'
+import { 
+  loadCheckpoints, 
+  saveCheckpoints, 
+  loadProjectSettings,
+  CheckpointData,
+  DEFAULT_PROJECT_SETTINGS 
+} from '../services/projectStorageService'
+import { useStore } from '../store'
 
 class CheckpointService {
-	private checkpoints: Checkpoint[] = []
-	private currentIdx: number = -1
-	private autoSaveEnabled: boolean = true
+  private checkpoints: Checkpoint[] = []
+  private currentIdx: number = -1
+  private autoSaveEnabled: boolean = true
+  private isLoaded: boolean = false
+  
+  // 保留策略配置
+  private maxCheckpoints: number = DEFAULT_PROJECT_SETTINGS.checkpointRetention.maxCount
+  private maxAgeDays: number = DEFAULT_PROJECT_SETTINGS.checkpointRetention.maxAgeDays
+  private maxFileSizeKB: number = DEFAULT_PROJECT_SETTINGS.checkpointRetention.maxFileSizeKB
 
-	constructor() {
-		// 从 localStorage 恢复检查点
-		this.loadFromStorage()
-	}
+  constructor() {
+    // 延迟加载，等待 workspacePath 设置
+  }
 
-	/**
-	 * 从 localStorage 加载检查点
-	 */
-	private loadFromStorage(): void {
-		try {
-			const saved = localStorage.getItem(STORAGE_KEY)
-			if (saved) {
-				const parsed = JSON.parse(saved)
-				if (Array.isArray(parsed.checkpoints)) {
-					this.checkpoints = parsed.checkpoints
-					this.currentIdx = parsed.currentIdx ?? this.checkpoints.length - 1
-					console.log(`[Checkpoint] Loaded ${this.checkpoints.length} checkpoints from storage`)
-				}
-			}
-		} catch (e) {
-			console.warn('[Checkpoint] Failed to load from storage:', e)
-		}
-	}
+  /**
+   * 初始化 - 从项目目录加载检查点
+   */
+  async init(): Promise<void> {
+    if (this.isLoaded) return
+    
+    const { workspacePath } = useStore.getState()
+    if (!workspacePath) return
+    
+    // 加载保留策略配置
+    const settings = await loadProjectSettings()
+    this.maxCheckpoints = settings.checkpointRetention.maxCount
+    this.maxAgeDays = settings.checkpointRetention.maxAgeDays
+    this.maxFileSizeKB = settings.checkpointRetention.maxFileSizeKB
+    
+    // 加载检查点数据
+    const data = await loadCheckpoints()
+    if (data) {
+      this.checkpoints = data.checkpoints
+      this.currentIdx = data.currentIdx ?? this.checkpoints.length - 1
+      
+      // 清理过期检查点
+      this.cleanupOldCheckpoints()
+      
+      console.log(`[Checkpoint] Loaded ${this.checkpoints.length} checkpoints from project`)
+    }
+    
+    this.isLoaded = true
+  }
 
-	/**
-	 * 保存检查点到 localStorage
-	 */
-	private saveToStorage(): void {
-		if (!this.autoSaveEnabled) return
-		try {
-			const data = JSON.stringify({
-				checkpoints: this.checkpoints,
-				currentIdx: this.currentIdx,
-			})
-			localStorage.setItem(STORAGE_KEY, data)
-		} catch (e) {
-			console.warn('[Checkpoint] Failed to save to storage:', e)
-		}
-	}
+  /**
+   * 清理过期检查点
+   */
+  private cleanupOldCheckpoints(): void {
+    const now = Date.now()
+    const maxAge = this.maxAgeDays * 24 * 60 * 60 * 1000
+    
+    const before = this.checkpoints.length
+    this.checkpoints = this.checkpoints.filter(cp => {
+      return (now - cp.timestamp) < maxAge
+    })
+    
+    if (this.checkpoints.length < before) {
+      console.log(`[Checkpoint] Cleaned up ${before - this.checkpoints.length} old checkpoints`)
+      this.currentIdx = Math.min(this.currentIdx, this.checkpoints.length - 1)
+      this.saveToStorage()
+    }
+  }
 
-	/**
-	 * 启用/禁用自动保存
-	 */
-	setAutoSave(enabled: boolean): void {
-		this.autoSaveEnabled = enabled
-	}
+  /**
+   * 保存检查点到项目目录
+   */
+  private async saveToStorage(): Promise<void> {
+    if (!this.autoSaveEnabled) return
+    
+    const { workspacePath } = useStore.getState()
+    if (!workspacePath) return
+    
+    const data: CheckpointData = {
+      checkpoints: this.checkpoints,
+      currentIdx: this.currentIdx,
+    }
+    
+    const success = await saveCheckpoints(data)
+    if (!success) {
+      console.warn('[Checkpoint] Failed to save to project storage')
+    }
+  }
 
-	/**
-	 * 创建检查点前获取文件快照
-	 */
-	async createSnapshot(filePath: string): Promise<FileSnapshot | null> {
-		try {
-			const content = await window.electronAPI.readFile(filePath)
-			if (content === null) return null
+  /**
+   * 启用/禁用自动保存
+   */
+  setAutoSave(enabled: boolean): void {
+    this.autoSaveEnabled = enabled
+  }
 
-			return {
-				path: filePath,
-				content,
-				timestamp: Date.now(),
-			}
-		} catch {
-			return null
-		}
-	}
+  /**
+   * 创建检查点前获取文件快照
+   */
+  async createSnapshot(filePath: string): Promise<FileSnapshot | null> {
+    try {
+      const content = await window.electronAPI.readFile(filePath)
+      
+      // 检查文件大小限制（如果文件存在）
+      if (content !== null) {
+        const sizeKB = content.length / 1024
+        if (sizeKB > this.maxFileSizeKB) {
+          console.warn(`[Checkpoint] File too large (${sizeKB.toFixed(1)}KB), skipping: ${filePath}`)
+          return null
+        }
+      }
 
-	/**
-	 * 创建新检查点
-	 */
-	async createCheckpoint(
-		type: 'user_message' | 'tool_edit',
-		description: string,
-		filePaths: string[]
-	): Promise<Checkpoint> {
-		const snapshots: Record<string, FileSnapshot> = {}
+      return {
+        path: filePath,
+        fsPath: filePath,
+        content,
+        timestamp: Date.now(),
+      }
+    } catch {
+      return null
+    }
+  }
 
-		// 只保存前 N 个文件的快照
-		const pathsToSnapshot = filePaths.slice(0, MAX_SNAPSHOTS_PER_CHECKPOINT)
+  /**
+   * 创建新检查点
+   */
+  async createCheckpoint(
+    type: 'user_message' | 'tool_edit',
+    description: string,
+    filePaths: string[],
+    messageId?: string
+  ): Promise<Checkpoint> {
+    // 确保已初始化
+    await this.init()
+    
+    const snapshots: Record<string, FileSnapshot> = {}
+    const maxSnapshots = 20
 
-		for (const path of pathsToSnapshot) {
-			const snapshot = await this.createSnapshot(path)
-			if (snapshot) {
-				snapshots[path] = snapshot
-			}
-		}
+    // 只保存前 N 个文件的快照
+    const pathsToSnapshot = filePaths.slice(0, maxSnapshots)
 
-		const checkpoint: Checkpoint = {
-			id: crypto.randomUUID(),
-			type,
-			timestamp: Date.now(),
-			snapshots,
-			description,
-		}
+    for (const path of pathsToSnapshot) {
+      const snapshot = await this.createSnapshot(path)
+      if (snapshot) {
+        snapshots[path] = snapshot
+      }
+    }
 
-		// 如果当前不在最新位置，删除后面的检查点
-		if (this.currentIdx < this.checkpoints.length - 1) {
-			this.checkpoints = this.checkpoints.slice(0, this.currentIdx + 1)
-		}
+    const checkpoint: Checkpoint = {
+      id: crypto.randomUUID(),
+      type,
+      timestamp: Date.now(),
+      snapshots,
+      description,
+      messageId,
+    }
 
-		this.checkpoints.push(checkpoint)
-		this.currentIdx = this.checkpoints.length - 1
+    // 如果当前不在最新位置，删除后面的检查点
+    if (this.currentIdx < this.checkpoints.length - 1) {
+      this.checkpoints = this.checkpoints.slice(0, this.currentIdx + 1)
+    }
 
-		// 限制检查点数量
-		if (this.checkpoints.length > MAX_CHECKPOINTS) {
-			this.checkpoints = this.checkpoints.slice(-MAX_CHECKPOINTS)
-			this.currentIdx = this.checkpoints.length - 1
-		}
+    this.checkpoints.push(checkpoint)
+    this.currentIdx = this.checkpoints.length - 1
 
-		// 自动保存到 localStorage
-		this.saveToStorage()
+    // 限制检查点数量
+    if (this.checkpoints.length > this.maxCheckpoints) {
+      this.checkpoints = this.checkpoints.slice(-this.maxCheckpoints)
+      this.currentIdx = this.checkpoints.length - 1
+    }
 
-		return checkpoint
-	}
+    // 保存到项目目录
+    await this.saveToStorage()
 
-	/**
-	 * 获取所有检查点
-	 */
-	getCheckpoints(): Checkpoint[] {
-		return [...this.checkpoints]
-	}
+    return checkpoint
+  }
 
-	/**
-	 * 获取当前检查点索引
-	 */
-	getCurrentIndex(): number {
-		return this.currentIdx
-	}
+  /**
+   * 获取所有检查点
+   */
+  getCheckpoints(): Checkpoint[] {
+    return [...this.checkpoints]
+  }
 
-	/**
-	 * 回滚到指定检查点
-	 */
-	async rollbackTo(checkpointId: string): Promise<{
-		success: boolean
-		restoredFiles: string[]
-		errors: string[]
-	}> {
-		const idx = this.checkpoints.findIndex(c => c.id === checkpointId)
-		if (idx === -1) {
-			return { success: false, restoredFiles: [], errors: ['Checkpoint not found'] }
-		}
+  /**
+   * 获取当前检查点索引
+   */
+  getCurrentIndex(): number {
+    return this.currentIdx
+  }
 
-		const checkpoint = this.checkpoints[idx]
-		const restoredFiles: string[] = []
-		const errors: string[] = []
+  /**
+   * 根据消息 ID 获取检查点
+   */
+  getCheckpointByMessageId(messageId: string): Checkpoint | undefined {
+    return this.checkpoints.find(cp => cp.messageId === messageId)
+  }
 
-		for (const [path, snapshot] of Object.entries(checkpoint.snapshots)) {
-			try {
-				if (snapshot.content === null) {
-					// 文件原本不存在，删除它
-					const deleted = await window.electronAPI.deleteFile(path)
-					if (deleted) {
-						restoredFiles.push(path)
-					} else {
-						errors.push(`Failed to delete: ${path}`)
-					}
-				} else {
-					const success = await window.electronAPI.writeFile(path, snapshot.content)
-					if (success) {
-						restoredFiles.push(path)
-					} else {
-						errors.push(`Failed to restore: ${path}`)
-					}
-				}
-			} catch (e: unknown) {
-				const err = e as { message?: string }
-				errors.push(`Error restoring ${path}: ${err.message}`)
-			}
-		}
+  /**
+   * 回滚到指定检查点
+   */
+  async rollbackTo(checkpointId: string): Promise<{
+    success: boolean
+    restoredFiles: string[]
+    errors: string[]
+  }> {
+    const idx = this.checkpoints.findIndex(c => c.id === checkpointId)
+    if (idx === -1) {
+      return { success: false, restoredFiles: [], errors: ['Checkpoint not found'] }
+    }
 
-		this.currentIdx = idx
+    const checkpoint = this.checkpoints[idx]
+    const restoredFiles: string[] = []
+    const errors: string[] = []
 
-		// 保存状态
-		this.saveToStorage()
+    for (const [path, snapshot] of Object.entries(checkpoint.snapshots)) {
+      try {
+        if (snapshot.content === null) {
+          // 文件原本不存在，删除它
+          const deleted = await window.electronAPI.deleteFile(path)
+          if (deleted) {
+            restoredFiles.push(path)
+          } else {
+            errors.push(`Failed to delete: ${path}`)
+          }
+        } else {
+          const success = await window.electronAPI.writeFile(path, snapshot.content)
+          if (success) {
+            restoredFiles.push(path)
+          } else {
+            errors.push(`Failed to restore: ${path}`)
+          }
+        }
+      } catch (e: unknown) {
+        const err = e as { message?: string }
+        errors.push(`Error restoring ${path}: ${err.message}`)
+      }
+    }
 
-		return {
-			success: errors.length === 0,
-			restoredFiles,
-			errors,
-		}
-	}
+    this.currentIdx = idx
 
-	/**
-	 * 回滚到上一个检查点
-	 */
-	async rollbackToPrevious(): Promise<{
-		success: boolean
-		checkpoint: Checkpoint | null
-		restoredFiles: string[]
-		errors: string[]
-	}> {
-		if (this.currentIdx <= 0) {
-			return {
-				success: false,
-				checkpoint: null,
-				restoredFiles: [],
-				errors: ['No previous checkpoint available'],
-			}
-		}
+    // 保存状态
+    await this.saveToStorage()
 
-		const prevCheckpoint = this.checkpoints[this.currentIdx - 1]
-		const result = await this.rollbackTo(prevCheckpoint.id)
+    return {
+      success: errors.length === 0,
+      restoredFiles,
+      errors,
+    }
+  }
 
-		return {
-			...result,
-			checkpoint: prevCheckpoint,
-		}
-	}
+  /**
+   * 回滚到上一个检查点
+   */
+  async rollbackToPrevious(): Promise<{
+    success: boolean
+    checkpoint: Checkpoint | null
+    restoredFiles: string[]
+    errors: string[]
+  }> {
+    if (this.currentIdx <= 0) {
+      return {
+        success: false,
+        checkpoint: null,
+        restoredFiles: [],
+        errors: ['No previous checkpoint available'],
+      }
+    }
 
-	/**
-	 * 获取文件在指定检查点的内容
-	 */
-	getFileAtCheckpoint(checkpointId: string, filePath: string): string | null {
-		const checkpoint = this.checkpoints.find(c => c.id === checkpointId)
-		if (!checkpoint) return null
+    const prevCheckpoint = this.checkpoints[this.currentIdx - 1]
+    const result = await this.rollbackTo(prevCheckpoint.id)
 
-		return checkpoint.snapshots[filePath]?.content ?? null
-	}
+    return {
+      ...result,
+      checkpoint: prevCheckpoint,
+    }
+  }
 
-	/**
-	 * 获取两个检查点之间的文件变化
-	 */
-	getChangesBetween(
-		fromCheckpointId: string,
-		toCheckpointId: string
-	): { path: string; type: 'added' | 'modified' | 'deleted' }[] {
-		const fromIdx = this.checkpoints.findIndex(c => c.id === fromCheckpointId)
-		const toIdx = this.checkpoints.findIndex(c => c.id === toCheckpointId)
+  /**
+   * 获取文件在指定检查点的内容
+   */
+  getFileAtCheckpoint(checkpointId: string, filePath: string): string | null {
+    const checkpoint = this.checkpoints.find(c => c.id === checkpointId)
+    if (!checkpoint) return null
 
-		if (fromIdx === -1 || toIdx === -1) return []
+    return checkpoint.snapshots[filePath]?.content ?? null
+  }
 
-		const fromCheckpoint = this.checkpoints[fromIdx]
-		const toCheckpoint = this.checkpoints[toIdx]
+  /**
+   * 获取两个检查点之间的文件变化
+   */
+  getChangesBetween(
+    fromCheckpointId: string,
+    toCheckpointId: string
+  ): { path: string; type: 'added' | 'modified' | 'deleted' }[] {
+    const fromIdx = this.checkpoints.findIndex(c => c.id === fromCheckpointId)
+    const toIdx = this.checkpoints.findIndex(c => c.id === toCheckpointId)
 
-		const changes: { path: string; type: 'added' | 'modified' | 'deleted' }[] = []
-		const allPaths = new Set([
-			...Object.keys(fromCheckpoint.snapshots),
-			...Object.keys(toCheckpoint.snapshots),
-		])
+    if (fromIdx === -1 || toIdx === -1) return []
 
-		for (const path of allPaths) {
-			const fromSnapshot = fromCheckpoint.snapshots[path]
-			const toSnapshot = toCheckpoint.snapshots[path]
+    const fromCheckpoint = this.checkpoints[fromIdx]
+    const toCheckpoint = this.checkpoints[toIdx]
 
-			if (!fromSnapshot && toSnapshot) {
-				changes.push({ path, type: 'added' })
-			} else if (fromSnapshot && !toSnapshot) {
-				changes.push({ path, type: 'deleted' })
-			} else if (fromSnapshot && toSnapshot && fromSnapshot.content !== toSnapshot.content) {
-				changes.push({ path, type: 'modified' })
-			}
-		}
+    const changes: { path: string; type: 'added' | 'modified' | 'deleted' }[] = []
+    const allPaths = new Set([
+      ...Object.keys(fromCheckpoint.snapshots),
+      ...Object.keys(toCheckpoint.snapshots),
+    ])
 
-		return changes
-	}
+    for (const path of allPaths) {
+      const fromSnapshot = fromCheckpoint.snapshots[path]
+      const toSnapshot = toCheckpoint.snapshots[path]
 
-	/**
-	 * 清除所有检查点
-	 */
-	clear(): void {
-		this.checkpoints = []
-		this.currentIdx = -1
-		this.saveToStorage()
-	}
+      if (!fromSnapshot && toSnapshot) {
+        changes.push({ path, type: 'added' })
+      } else if (fromSnapshot && !toSnapshot) {
+        changes.push({ path, type: 'deleted' })
+      } else if (fromSnapshot && toSnapshot && fromSnapshot.content !== toSnapshot.content) {
+        changes.push({ path, type: 'modified' })
+      }
+    }
 
-	/**
-	 * 导出检查点（用于持久化）
-	 */
-	export(): string {
-		return JSON.stringify({
-			checkpoints: this.checkpoints,
-			currentIdx: this.currentIdx,
-		})
-	}
+    return changes
+  }
 
-	/**
-	 * 导入检查点
-	 */
-	import(data: string): boolean {
-		try {
-			const parsed = JSON.parse(data)
-			if (Array.isArray(parsed.checkpoints)) {
-				this.checkpoints = parsed.checkpoints
-				this.currentIdx = parsed.currentIdx ?? this.checkpoints.length - 1
-				return true
-			}
-		} catch {
-			// ignore
-		}
-		return false
-	}
+  /**
+   * 清除所有检查点
+   */
+  async clear(): Promise<void> {
+    this.checkpoints = []
+    this.currentIdx = -1
+    await this.saveToStorage()
+  }
+
+  /**
+   * 重置（切换项目时调用）
+   */
+  reset(): void {
+    this.checkpoints = []
+    this.currentIdx = -1
+    this.isLoaded = false
+  }
 }
 
 // 单例导出

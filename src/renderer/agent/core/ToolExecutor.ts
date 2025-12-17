@@ -7,6 +7,40 @@ import { ToolDefinition, ToolApprovalType } from './types'
 import { validatePath, isSensitivePath } from '@/renderer/utils/pathUtils'
 import { pathToLspUri, lspUriToPath } from '@/renderer/services/lspService'
 
+/**
+ * 计算两个文本之间的行数变化
+ * 使用简单的 LCS 算法计算实际增加和删除的行数
+ */
+function calculateLineChanges(oldContent: string, newContent: string): { added: number; removed: number } {
+  if (!oldContent && !newContent) return { added: 0, removed: 0 }
+  if (!oldContent) return { added: newContent.split('\n').length, removed: 0 }
+  if (!newContent) return { added: 0, removed: oldContent.split('\n').length }
+
+  const oldLines = oldContent.split('\n')
+  const newLines = newContent.split('\n')
+
+  // 使用简单的 LCS 长度计算
+  const m = oldLines.length
+  const n = newLines.length
+  const dp: number[][] = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0))
+
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (oldLines[i - 1] === newLines[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1])
+      }
+    }
+  }
+
+  const lcsLength = dp[m][n]
+  return {
+    added: n - lcsLength,    // 新增的行 = 新文件行数 - 公共行数
+    removed: m - lcsLength,  // 删除的行 = 旧文件行数 - 公共行数
+  }
+}
+
 // ===== 工具定义 =====
 
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
@@ -582,8 +616,8 @@ export async function executeTool(
         }
 
         // 计算行数变化
-        const oldLines = content.split('\n').length
-        const newLines = newContent.split('\n').length
+        // 计算实际的行数变化
+        const lineChanges = calculateLineChanges(content, newContent)
 
         return {
           success: true,
@@ -592,8 +626,8 @@ export async function executeTool(
             filePath: path,
             oldContent: content,
             newContent,
-            linesAdded: Math.max(0, newLines - oldLines),
-            linesRemoved: Math.max(0, oldLines - newLines),
+            linesAdded: lineChanges.added,
+            linesRemoved: lineChanges.removed,
           },
         }
       }
@@ -618,8 +652,8 @@ export async function executeTool(
           return { success: false, result: '', error: `Failed to write: ${path}` }
         }
 
-        const newLines = content.split('\n').length
-        const oldLines = oldContent ? oldContent.split('\n').length : 0
+        // 计算实际的行数变化
+        const lineChanges = calculateLineChanges(oldContent || '', content)
 
         return {
           success: true,
@@ -628,8 +662,8 @@ export async function executeTool(
             filePath: path,
             oldContent: oldContent || '',
             newContent: content,
-            linesAdded: newLines,
-            linesRemoved: oldLines,
+            linesAdded: lineChanges.added,
+            linesRemoved: lineChanges.removed,
             isNewFile,
           },
         }

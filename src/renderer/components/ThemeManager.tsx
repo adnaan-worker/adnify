@@ -76,13 +76,13 @@ export const themes: Record<ThemeName, Record<string, string>> = {
 };
 
 export const ThemeManager: React.FC = () => {
-    const currentTheme = useStore((state) => state.currentTheme);
+    const currentTheme = useStore((state) => state.currentTheme) as ThemeName;
 
     useEffect(() => {
         const root = document.documentElement;
         const themeVars = themes[currentTheme];
 
-        Object.entries(themeVars).forEach(([key, value]) => {
+        Object.entries(themeVars).forEach(([key, value]: [string, string]) => {
             root.style.setProperty(key, value);
         });
 

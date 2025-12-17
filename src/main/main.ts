@@ -8,7 +8,7 @@ import * as path from 'path'
 import * as fs from 'fs'
 import Store from 'electron-store'
 import { registerAllHandlers, cleanupAllHandlers, updateLLMServiceWindow } from './ipc'
-import { registerLspHandlers, stopLanguageServer } from './lspServer'
+import { lspManager } from './lspManager'
 
 // ==========================================
 // Store 初始化
@@ -41,10 +41,11 @@ let mainWindow: BrowserWindow | null = null
 // ==========================================
 
 function createWindow() {
+  // 图标路径：开发环境用 public，生产环境用 resources
   const iconPath =
     process.env.NODE_ENV === 'development'
       ? path.join(__dirname, '../../public/icon.png')
-      : path.join(__dirname, '../renderer/icon.png')
+      : path.join(process.resourcesPath, 'icon.png')
 
   mainWindow = new BrowserWindow({
     width: 1600,
@@ -89,8 +90,7 @@ app.whenReady().then(() => {
     },
   })
 
-  // 注册 LSP handlers
-  registerLspHandlers()
+
 
   // 创建窗口
   createWindow()
@@ -111,5 +111,5 @@ app.on('activate', () => {
 // 清理资源
 app.on('before-quit', async () => {
   await cleanupAllHandlers()
-  stopLanguageServer()
+  await lspManager.stopAllServers()
 })

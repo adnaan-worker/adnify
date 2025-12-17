@@ -13,6 +13,7 @@ import { Language } from '../i18n'
 import { themeManager, Theme } from '../config/themeConfig'
 import { BUILTIN_PROVIDERS, BuiltinProviderName } from '../types/provider'
 import { Logo } from './Logo'
+import { adnifyDir } from '../services/adnifyDirService'
 
 interface OnboardingWizardProps {
   onComplete: () => void
@@ -95,6 +96,8 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
     const result = await window.electronAPI.openFolder()
     if (result) {
       setWorkspacePath(result)
+      // 初始化 .adnify 目录
+      await adnifyDir.initialize(result)
       const items = await window.electronAPI.readDir(result)
       setFiles(items)
     }

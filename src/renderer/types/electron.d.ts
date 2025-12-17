@@ -193,6 +193,7 @@ export interface ElectronAPI {
 	lspInlayHint: (params: { uri: string; range: LspRange }) => Promise<LspInlayHint[] | null>
 	getLspDiagnostics: (filePath: string) => Promise<LspDiagnostic[]>
 	onLspDiagnostics: (callback: (params: { uri: string; diagnostics: LspDiagnostic[] }) => void) => () => void
+	
 }
 
 // Indexing types

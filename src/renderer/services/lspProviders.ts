@@ -90,7 +90,25 @@ const symbolKindMap: Record<number, number> = {
  * 注册所有 LSP 提供者
  */
 export function registerLspProviders(monaco: typeof Monaco) {
-  const languages = ['typescript', 'typescriptreact', 'javascript', 'javascriptreact']
+  // 支持的语言列表
+  const languages = [
+    // TypeScript/JavaScript
+    'typescript', 'typescriptreact', 'javascript', 'javascriptreact',
+    // Python
+    'python',
+    // Go
+    'go',
+    // Rust
+    'rust',
+    // C/C++
+    'c', 'cpp',
+    // Java
+    'java',
+    // Web
+    'html', 'css', 'scss', 'less',
+    // Data
+    'json', 'yaml',
+  ]
 
   // 悬停提供者
   monaco.languages.registerHoverProvider(languages, {
@@ -247,7 +265,7 @@ export function registerLspProviders(monaco: typeof Monaco) {
 
   // 引用提供者
   monaco.languages.registerReferenceProvider(languages, {
-    provideReferences: async (model, position, context) => {
+    provideReferences: async (model, position, _context) => {
       const filePath = lspUriToPath(model.uri.toString())
       const result = await findReferences(
         filePath,

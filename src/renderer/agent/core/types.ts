@@ -248,6 +248,16 @@ export interface PendingChange {
   linesRemoved: number
 }
 
+// ===== 消息级别的检查点 =====
+
+export interface MessageCheckpoint {
+  id: string
+  messageId: string           // 关联的用户消息 ID（在该消息之前创建）
+  timestamp: number
+  fileSnapshots: Record<string, FileSnapshot>  // 文件路径 -> 快照
+  description: string
+}
+
 // ===== Agent 配置 =====
 
 export interface AgentConfig {

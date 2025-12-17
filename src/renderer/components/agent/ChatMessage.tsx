@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback } from 'react'
-import { User, Copy, Check, RefreshCw, Edit2 } from 'lucide-react'
+import { User, Copy, Check, RefreshCw, Edit2, RotateCcw } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -27,10 +27,12 @@ interface ChatMessageProps {
   message: ChatMessageType
   onEdit?: (messageId: string, newContent: string) => void
   onRegenerate?: (messageId: string) => void
+  onRestore?: (messageId: string) => void
   onApproveTool?: () => void
   onRejectTool?: () => void
   onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
   pendingToolId?: string
+  hasCheckpoint?: boolean  // 是否有关联的检查点
 }
 
 // 代码块组件
@@ -168,10 +170,12 @@ export default function ChatMessage({
   message,
   onEdit,
   onRegenerate,
+  onRestore,
   onApproveTool,
   onRejectTool,
   onOpenDiff,
   pendingToolId,
+  hasCheckpoint,
 }: ChatMessageProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState('')
@@ -346,6 +350,17 @@ export default function ChatMessage({
                     >
                       <RefreshCw className="w-3 h-3" />
                       Regenerate
+                    </button>
+                  )}
+                  {/* Restore 按钮 - 只有用户消息且有检查点时显示 */}
+                  {isUser && hasCheckpoint && onRestore && (
+                    <button
+                      onClick={() => onRestore(message.id)}
+                      className="flex items-center gap-1 px-2 py-1 rounded text-xs text-text-muted hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                      title="Restore to this point (undo all changes after this message)"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Restore
                     </button>
                   )}
                   <button

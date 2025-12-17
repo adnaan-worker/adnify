@@ -1,19 +1,10 @@
 /**
- * 文件变更卡片组件
- * Cursor 风格的文件变更显示
+ * 文件变更卡片 - 简洁扁平化设计
  */
 
-import { useState, useCallback, useMemo } from 'react'
-import {
-  ChevronRight,
-  ChevronDown,
-  FileCode,
-  Check,
-  X,
-  Loader2,
-  ExternalLink,
-} from 'lucide-react'
-import { ToolCall, ToolStatus } from '../../agent/core/types'
+import { useState } from 'react'
+import { Check, X, ChevronDown, ChevronRight, ExternalLink, Loader2 } from 'lucide-react'
+import { ToolCall } from '../../agent/core/types'
 
 interface FileChangeCardProps {
   toolCall: ToolCall
@@ -30,225 +21,91 @@ export default function FileChangeCard({
   onReject,
   onOpenInEditor,
 }: FileChangeCardProps) {
-  const [isExpanded, setIsExpanded] = useState(true)
-
-  const { name, arguments: args, status, error } = toolCall
-  const isStreaming = args._streaming === true
-  const meta = args._meta as { filePath?: string; oldContent?: string; newContent?: string; linesAdded?: number; linesRemoved?: number; isNewFile?: boolean } | undefined
-
-  // 获取文件路径和内容
-  const filePath = (meta?.filePath || args.path || '') as string
+  const [isExpanded, setIsExpanded] = useState(false)
+  
+  const args = toolCall.arguments as Record<string, unknown>
+  const meta = args._meta as Record<string, unknown> | undefined
+  const filePath = (args.path || meta?.filePath) as string || 'unknown'
   const fileName = filePath.split(/[\\/]/).pop() || filePath
-  const oldContent = (meta?.oldContent || args.old_string || '') as string
-  const newContent = (meta?.newContent || args.content || args.new_string || '') as string
-  const isNewFile = meta?.isNewFile || false
-
-  // 计算行数变化
-  const linesAdded = meta?.linesAdded ?? (newContent ? newContent.split('\n').length : 0)
-  const linesRemoved = meta?.linesRemoved ?? (oldContent ? oldContent.split('\n').length : 0)
-
-  // 状态样式
-  const getStatusStyles = useCallback(() => {
-    if (isStreaming) return 'border-blue-500/40 bg-blue-500/5'
-    if (status === 'awaiting') return 'border-amber-500/50 bg-amber-500/5'
-    if (status === 'running') return 'border-blue-500/40 bg-blue-500/5'
-    if (status === 'success') return 'border-green-500/30 bg-green-500/5'
-    if (status === 'error') return 'border-red-500/30 bg-red-500/5'
-    if (status === 'rejected') return 'border-gray-500/30 bg-gray-500/5'
-    return 'border-border-subtle/50 bg-surface/30'
-  }, [status, isStreaming])
-
-  // 状态图标
-  const StatusIcon = useMemo(() => {
-    if (isStreaming || status === 'running' || status === 'pending') {
-      return <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
-    }
-    if (status === 'success') {
-      return <div className="w-2 h-2 rounded-full bg-green-500" />
-    }
-    if (status === 'error') {
-      return <div className="w-2 h-2 rounded-full bg-red-500" />
-    }
-    if (status === 'awaiting') {
-      return <div className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-    }
-    if (status === 'rejected') {
-      return <div className="w-2 h-2 rounded-full bg-gray-500" />
-    }
-    return <div className="w-2 h-2 rounded-full bg-gray-400" />
-  }, [status, isStreaming])
-
-  // 点击卡片展开/收起
-  const handleToggle = useCallback(() => {
-    if (newContent || oldContent) {
-      setIsExpanded(!isExpanded)
-    }
-  }, [newContent, oldContent, isExpanded])
-
-  // 在编辑器中打开
-  const handleOpenInEditor = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (onOpenInEditor && filePath) {
-      onOpenInEditor(filePath, oldContent, newContent)
-    }
-  }, [onOpenInEditor, filePath, oldContent, newContent])
-
-  const hasContent = newContent || oldContent
+  const linesAdded = (meta?.linesAdded as number) || 0
+  const linesRemoved = (meta?.linesRemoved as number) || 0
+  const oldContent = (meta?.oldContent as string) || ''
+  const newContent = (meta?.newContent as string) || (args.content as string) || ''
+  
+  const isRunning = toolCall.status === 'running' || toolCall.status === 'pending'
+  const isSuccess = toolCall.status === 'success'
+  const isError = toolCall.status === 'error'
 
   return (
-    <div className={`rounded-lg border overflow-hidden transition-all ${getStatusStyles()}`}>
-      {/* Header */}
-      <div
-        className={`flex items-center gap-2 px-3 py-2.5 ${hasContent ? 'cursor-pointer hover:bg-white/5' : ''}`}
-        onClick={handleToggle}
+    <div className="my-2 rounded-lg border border-border-subtle/50 bg-surface/20 overflow-hidden">
+      {/* 头部 - 文件名 + 状态 */}
+      <div 
+        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-surface/30 transition-colors"
+        onClick={() => setIsExpanded(!isExpanded)}
       >
-        {/* 展开图标 */}
-        {hasContent && (
-          isExpanded
-            ? <ChevronDown className="w-4 h-4 text-text-muted flex-shrink-0" />
-            : <ChevronRight className="w-4 h-4 text-text-muted flex-shrink-0" />
+        {isExpanded ? (
+          <ChevronDown className="w-4 h-4 text-text-muted" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-text-muted" />
         )}
-
-        {/* 文件图标 */}
-        <FileCode className={`w-4 h-4 flex-shrink-0 ${
-          isStreaming ? 'text-blue-400' :
-          status === 'success' ? 'text-green-400' :
-          status === 'error' ? 'text-red-400' :
-          'text-text-muted'
-        }`} />
-
-        {/* 文件名 */}
-        <span className={`text-sm font-medium flex-1 truncate ${
-          isStreaming ? 'text-blue-300' :
-          status === 'success' ? 'text-green-300' :
-          status === 'error' ? 'text-red-300' :
-          'text-text-primary'
-        }`}>
-          {fileName || 'Unknown file'}
-          {isNewFile && <span className="ml-1.5 text-xs text-green-400">(new)</span>}
-        </span>
-
-        {/* 状态图标 */}
-        {StatusIcon}
-
+        
+        <span className="text-accent text-sm">{'<>'}</span>
+        <span className="text-sm text-text-primary flex-1 truncate">{fileName}</span>
+        
         {/* 行数变化 */}
-        {hasContent && !isStreaming && (
-          <span className="text-xs font-mono text-text-muted">
+        {isSuccess && (
+          <span className="text-xs font-mono">
             <span className="text-green-400">+{linesAdded}</span>
-            {linesRemoved > 0 && (
-              <>
-                {' '}
-                <span className="text-red-400">-{linesRemoved}</span>
-              </>
-            )}
+            {linesRemoved > 0 && <span className="text-red-400 ml-1">-{linesRemoved}</span>}
           </span>
         )}
-
-        {/* 流式指示 */}
-        {isStreaming && (
-          <span className="text-xs text-blue-400 animate-pulse">streaming...</span>
-        )}
-
-        {/* 状态标签 */}
-        {status === 'success' && !isStreaming && (
-          <span className="text-xs text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">Applied</span>
-        )}
-        {status === 'rejected' && (
-          <span className="text-xs text-gray-400 bg-gray-500/10 px-1.5 py-0.5 rounded">Rejected</span>
-        )}
-        {status === 'error' && (
-          <span className="text-xs text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">Error</span>
-        )}
-
-        {/* 在编辑器中打开 */}
-        {filePath && !isStreaming && status === 'success' && (
+        
+        {/* 状态指示 */}
+        {isRunning && <Loader2 className="w-4 h-4 text-accent animate-spin" />}
+        {isSuccess && <span className="px-1.5 py-0.5 text-[10px] bg-green-500/20 text-green-400 rounded">Applied</span>}
+        {isError && <span className="px-1.5 py-0.5 text-[10px] bg-red-500/20 text-red-400 rounded">Failed</span>}
+        
+        {/* 打开按钮 */}
+        {isSuccess && onOpenInEditor && (
           <button
-            onClick={handleOpenInEditor}
-            className="p-1 hover:bg-white/10 rounded transition-colors"
-            title="Open diff in editor"
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenInEditor(filePath, oldContent, newContent)
+            }}
+            className="p-1 text-text-muted hover:text-accent rounded transition-colors"
           >
-            <ExternalLink className="w-3.5 h-3.5 text-text-muted" />
+            <ExternalLink className="w-4 h-4" />
           </button>
         )}
-
-        {/* 审批按钮 */}
-        {isAwaitingApproval && status === 'awaiting' && onApprove && onReject && (
-          <div className="flex items-center gap-1 ml-1">
-            <button
-              onClick={(e) => { e.stopPropagation(); onApprove() }}
-              className="p-1.5 text-green-400 hover:bg-green-500/20 rounded-md transition-colors"
-              title="Accept"
-            >
-              <Check className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onReject() }}
-              className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-md transition-colors"
-              title="Reject"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
       </div>
-
-      {/* 代码预览 */}
-      {isExpanded && hasContent && (
-        <div className="border-t border-border-subtle/30">
-          {name === 'edit_file' && oldContent ? (
-            // Edit: 显示 diff 预览
-            <div className="text-xs font-mono max-h-64 overflow-auto">
-              {/* 删除的行 */}
-              {oldContent.split('\n').slice(0, 8).map((line, i) => (
-                <div key={`old-${i}`} className="px-3 py-0.5 bg-red-500/10 text-red-300/90 flex">
-                  <span className="w-6 text-red-500/50 select-none text-right pr-2 flex-shrink-0">{i + 1}</span>
-                  <span className="w-3 text-red-500/60 select-none flex-shrink-0">-</span>
-                  <span className="flex-1 whitespace-pre overflow-hidden text-ellipsis">{line}</span>
-                </div>
-              ))}
-              {oldContent.split('\n').length > 8 && (
-                <div className="px-3 py-1 text-red-400/50 text-center text-[10px] bg-red-500/5">
-                  ... {oldContent.split('\n').length - 8} more lines
-                </div>
-              )}
-              {/* 添加的行 */}
-              {newContent.split('\n').slice(0, 8).map((line, i) => (
-                <div key={`new-${i}`} className="px-3 py-0.5 bg-green-500/10 text-green-300/90 flex">
-                  <span className="w-6 text-green-500/50 select-none text-right pr-2 flex-shrink-0">{i + 1}</span>
-                  <span className="w-3 text-green-500/60 select-none flex-shrink-0">+</span>
-                  <span className="flex-1 whitespace-pre overflow-hidden text-ellipsis">{line}</span>
-                </div>
-              ))}
-              {newContent.split('\n').length > 8 && (
-                <div className="px-3 py-1 text-green-400/50 text-center text-[10px] bg-green-500/5">
-                  ... {newContent.split('\n').length - 8} more lines
-                </div>
-              )}
-            </div>
-          ) : (
-            // Write/Create: 显示新内容
-            <div className="text-xs font-mono max-h-64 overflow-auto bg-green-500/5">
-              {newContent.split('\n').slice(0, 12).map((line, i) => (
-                <div key={i} className="px-3 py-0.5 text-green-300/90 flex">
-                  <span className="w-6 text-green-500/40 select-none text-right pr-2 flex-shrink-0">{i + 1}</span>
-                  <span className="w-3 text-green-500/50 select-none flex-shrink-0">+</span>
-                  <span className="flex-1 whitespace-pre overflow-hidden text-ellipsis">{line}</span>
-                </div>
-              ))}
-              {newContent.split('\n').length > 12 && (
-                <div className="px-3 py-1 text-green-400/50 text-center text-[10px]">
-                  ... {newContent.split('\n').length - 12} more lines
-                </div>
-              )}
-            </div>
-          )}
+      
+      {/* 展开的代码预览 */}
+      {isExpanded && newContent && (
+        <div className="border-t border-border-subtle/30 max-h-48 overflow-auto">
+          <pre className="p-3 text-xs font-mono text-text-secondary whitespace-pre-wrap">
+            {newContent.slice(0, 500)}
+            {newContent.length > 500 && '\n... (truncated)'}
+          </pre>
         </div>
       )}
-
-      {/* 错误信息 */}
-      {error && (
-        <div className="px-3 py-2 text-xs text-red-400 bg-red-500/10 border-t border-red-500/20">
-          {error}
+      
+      {/* 审批按钮 */}
+      {isAwaitingApproval && (
+        <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-border-subtle/30 bg-surface/30">
+          <button
+            onClick={onReject}
+            className="flex items-center gap-1 px-3 py-1 text-xs text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+            Reject
+          </button>
+          <button
+            onClick={onApprove}
+            className="flex items-center gap-1 px-3 py-1 text-xs text-white bg-green-500/80 hover:bg-green-500 rounded transition-colors"
+          >
+            <Check className="w-3.5 h-3.5" />
+            Accept
+          </button>
         </div>
       )}
     </div>

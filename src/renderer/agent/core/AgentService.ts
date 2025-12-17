@@ -77,17 +77,23 @@ class AgentServiceClass {
       const contextContent = await this.buildContextContent(contextItems)
       
       // 3. 添加用户消息到 store
-      store.addUserMessage(userMessage, contextItems)
+      const userMessageId = store.addUserMessage(userMessage, contextItems)
       store.clearContextItems()
 
-      // 4. 构建 LLM 消息历史
+      // 4. 创建消息检查点（在执行任何操作之前保存当前状态）
+      const messageText = typeof userMessage === 'string' 
+        ? userMessage.slice(0, 50) 
+        : 'User message'
+      await store.createMessageCheckpoint(userMessageId, messageText)
+
+      // 5. 构建 LLM 消息历史
       const llmMessages = await this.buildLLMMessages(userMessage, contextContent, systemPrompt)
 
-      // 5. 创建助手消息占位
+      // 6. 创建助手消息占位
       this.currentAssistantId = store.addAssistantMessage()
       store.setStreamPhase('streaming')
 
-      // 6. 执行 Agent 循环
+      // 7. 执行 Agent 循环
       await this.runAgentLoop(config, llmMessages, workspacePath)
 
     } catch (error) {
@@ -505,7 +511,7 @@ class AgentServiceClass {
 
     store.setStreamPhase('tool_running', { id, name, arguments: args, status: 'running' })
 
-    // 如果是文件修改工具，创建 checkpoint 和 pendingChange
+    // 如果是文件修改工具，记录文件快照到当前检查点
     let originalContent: string | null = null
     let fullPath: string | null = null
     if (WRITE_TOOLS.includes(name) || name === 'delete_file_or_folder') {
@@ -513,10 +519,9 @@ class AgentServiceClass {
       if (filePath && workspacePath) {
         fullPath = filePath.startsWith(workspacePath) ? filePath : `${workspacePath}/${filePath}`
         originalContent = await window.electronAPI.readFile(fullPath)
-        const fileSnapshots: Record<string, FileSnapshot> = {
-          [fullPath]: { fsPath: fullPath, content: originalContent }
-        }
-        store.addCheckpoint('tool_edit', fileSnapshots)
+        
+        // 将快照添加到当前消息检查点（用于 Restore 功能）
+        store.addSnapshotToCurrentCheckpoint(fullPath, originalContent)
       }
     }
 

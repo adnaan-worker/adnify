@@ -1,11 +1,11 @@
 /**
  * Agent 状态栏组件
- * Cursor 风格的底部状态栏
- * 显示：文件数量 | Undo | Keep | Review
+ * Cursor 风格的底部状态栏 - 扁平化设计
+ * 支持折叠、单条文件预览、接受、拒绝
  */
 
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, FileCode } from 'lucide-react'
+import { X, Check, ExternalLink, Square, ChevronDown, ChevronRight } from 'lucide-react'
 import { PendingChange } from '../../agent/core/types'
 
 interface AgentStatusBarProps {
@@ -14,9 +14,11 @@ interface AgentStatusBarProps {
   isAwaitingApproval: boolean
   streamingStatus?: string
   onStop?: () => void
-  onReview?: () => void
-  onUndo?: () => void
-  onKeep?: () => void
+  onReviewFile?: (filePath: string) => void
+  onAcceptFile?: (filePath: string) => void
+  onRejectFile?: (filePath: string) => void
+  onUndoAll?: () => void
+  onKeepAll?: () => void
 }
 
 export default function AgentStatusBar({
@@ -25,130 +27,154 @@ export default function AgentStatusBar({
   isAwaitingApproval,
   streamingStatus,
   onStop,
-  onReview,
-  onUndo,
-  onKeep,
+  onReviewFile,
+  onAcceptFile,
+  onRejectFile,
+  onUndoAll,
+  onKeepAll,
 }: AgentStatusBarProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
-
+  const [isExpanded, setIsExpanded] = useState(true)
+  
   const hasChanges = pendingChanges.length > 0
   const showBar = isStreaming || isAwaitingApproval || hasChanges
 
   if (!showBar) return null
 
   return (
-    <div className="border-t border-border-subtle bg-surface/30">
-      {/* 文件列表（可展开） */}
+    <div className="border-t border-border-subtle/50 bg-surface/20">
+      {/* 顶部操作栏：文件标签 + 全局操作 */}
       {hasChanges && (
-        <div className="border-b border-border-subtle/50">
-          {/* 文件列表头部 */}
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="w-full flex items-center gap-2 px-4 py-2 hover:bg-surface/50 transition-colors"
-          >
-            {isExpanded ? (
-              <ChevronDown className="w-4 h-4 text-text-muted" />
-            ) : (
-              <ChevronRight className="w-4 h-4 text-text-muted" />
+        <div className="flex items-center justify-between px-3 py-1.5">
+          {/* 左侧：折叠按钮 + 文件标签 */}
+          <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="p-0.5 text-text-muted hover:text-text-primary transition-colors"
+            >
+              {isExpanded ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
+              )}
+            </button>
+            {pendingChanges.slice(0, 3).map((change) => {
+              const fileName = change.filePath.split(/[\\/]/).pop() || change.filePath
+              return (
+                <button
+                  key={change.id}
+                  onClick={() => onReviewFile?.(change.filePath)}
+                  className="flex items-center gap-1 px-2 py-0.5 text-xs text-text-secondary hover:text-text-primary bg-surface/50 hover:bg-surface rounded transition-colors whitespace-nowrap"
+                  title={change.filePath}
+                >
+                  {fileName}
+                </button>
+              )
+            })}
+            {pendingChanges.length > 3 && (
+              <span className="text-xs text-text-muted px-1">
+                +{pendingChanges.length - 3}
+              </span>
             )}
-            <span className="text-sm text-text-secondary">
-              {pendingChanges.length} File{pendingChanges.length > 1 ? 's' : ''}
-            </span>
-          </button>
+          </div>
 
-          {/* 展开的文件列表 */}
-          {isExpanded && (
-            <div className="px-4 pb-2 space-y-1">
-              {pendingChanges.map((change) => {
-                const fileName = change.filePath.split(/[\\/]/).pop() || change.filePath
-                return (
-                  <div
-                    key={change.id}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface/50 transition-colors"
-                  >
-                    <FileCode className="w-4 h-4 text-accent flex-shrink-0" />
-                    <span className="text-sm text-text-primary flex-1 truncate">{fileName}</span>
-                    <span className="text-xs font-mono text-text-muted">
-                      <span className="text-green-400">+{change.linesAdded}</span>
-                      {change.linesRemoved > 0 && (
-                        <span className="text-red-400 ml-1">-{change.linesRemoved}</span>
-                      )}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 操作栏 */}
-      <div className="flex items-center justify-between px-4 py-2">
-        {/* 左侧：状态信息 */}
-        <div className="flex items-center gap-2">
-          {/* 流式状态 */}
-          {isStreaming && streamingStatus && (
-            <span className="text-xs text-text-muted animate-pulse">
-              {streamingStatus}
-            </span>
-          )}
-
-          {/* 等待审批状态 */}
-          {isAwaitingApproval && (
-            <span className="text-xs text-amber-400">
-              Waiting for approval...
-            </span>
-          )}
-        </div>
-
-        {/* 右侧：操作按钮 */}
-        <div className="flex items-center gap-2">
-          {/* Undo All 按钮 - 撤销所有更改 */}
-          {hasChanges && !isStreaming && (
+          {/* 右侧：全局操作 */}
+          <div className="flex items-center gap-1 ml-2 flex-shrink-0">
             <button
-              onClick={onUndo}
-              className="px-3 py-1.5 text-xs text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-              title="Undo all changes and restore original files"
+              onClick={onUndoAll}
+              className="px-2 py-0.5 text-xs text-text-muted hover:text-text-primary transition-colors"
             >
-              Undo All
+              Undo
             </button>
-          )}
-
-          {/* Accept All 按钮 - 接受所有更改（清除撤销历史） */}
-          {hasChanges && !isStreaming && (
             <button
-              onClick={onKeep}
-              className="px-3 py-1.5 text-xs text-text-muted hover:text-green-400 hover:bg-green-500/10 rounded transition-colors"
-              title="Accept all changes (files are already saved, this clears undo history)"
+              onClick={onKeepAll}
+              className="px-2 py-0.5 text-xs text-text-muted hover:text-text-primary transition-colors"
             >
-              Accept All
+              Keep
             </button>
-          )}
-
-          {/* Review 按钮 */}
-          {hasChanges && !isStreaming && (
             <button
-              onClick={onReview}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-accent hover:bg-accent-hover rounded transition-colors"
-              title="Review all changes in diff view"
+              onClick={() => onReviewFile?.(pendingChanges[0]?.filePath)}
+              className="px-2.5 py-0.5 text-xs font-medium text-white bg-accent/80 hover:bg-accent rounded transition-colors"
             >
               Review
             </button>
-          )}
+          </div>
+        </div>
+      )}
 
-          {/* Stop 按钮 */}
+      {/* 文件列表 - 可折叠 */}
+      {hasChanges && isExpanded && (
+        <div className="max-h-32 overflow-y-auto border-t border-border-subtle/30">
+          {pendingChanges.map((change) => {
+            const fileName = change.filePath.split(/[\\/]/).pop() || change.filePath
+            return (
+              <div
+                key={change.id}
+                className="group flex items-center gap-2 px-3 py-1 hover:bg-surface/30 transition-colors"
+              >
+                {/* 文件图标 + 名称 */}
+                <span className="text-accent text-xs">{'<>'}</span>
+                <span className="text-sm text-text-primary flex-1 truncate">
+                  {fileName}
+                </span>
+
+                {/* 行数变化 */}
+                <span className="text-xs font-mono">
+                  <span className="text-green-400">+{change.linesAdded}</span>
+                  {change.linesRemoved > 0 && (
+                    <span className="text-red-400 ml-1">-{change.linesRemoved}</span>
+                  )}
+                </span>
+
+                {/* 单条操作按钮 - hover 时显示 */}
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => onRejectFile?.(change.filePath)}
+                    className="p-1 text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                    title="Reject this change"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onAcceptFile?.(change.filePath)}
+                    className="p-1 text-text-muted hover:text-green-400 hover:bg-green-500/10 rounded transition-colors"
+                    title="Accept this change"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onReviewFile?.(change.filePath)}
+                    className="p-1 text-text-muted hover:text-accent hover:bg-accent/10 rounded transition-colors"
+                    title="Review in diff view"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* 流式状态 / 等待审批状态 */}
+      {(isStreaming || isAwaitingApproval) && (
+        <div className="flex items-center justify-between px-3 py-1.5 border-t border-border-subtle/30">
+          <span className="text-xs text-text-muted">
+            {isStreaming && streamingStatus}
+            {isAwaitingApproval && !isStreaming && (
+              <span className="text-amber-400">Waiting for approval...</span>
+            )}
+          </span>
           {isStreaming && (
             <button
               onClick={onStop}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-primary bg-surface-active hover:bg-surface-hover rounded transition-colors"
-              title="Stop the current operation"
+              className="flex items-center gap-1 px-2 py-0.5 text-xs text-text-muted hover:text-text-primary hover:bg-surface rounded transition-colors"
             >
+              <Square className="w-3 h-3" />
               Stop
-              <span className="text-[10px] text-text-muted">Ctrl+Shift+⌫</span>
             </button>
           )}
         </div>
-      </div>
+      )}
     </div>
   )
 }

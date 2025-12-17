@@ -907,6 +907,11 @@ export default function Editor() {
         // 检查是否在 pendingChanges 中（决定是否显示操作按钮）
         const isPendingChange = pendingChanges.some(c => c.filePath === activeDiff.filePath)
         
+        // 安全关闭 Diff 预览（延迟执行避免模型销毁问题）
+        const closeDiff = () => {
+          setTimeout(() => setActiveDiff(null), 0)
+        }
+        
         return (
           <div className="absolute inset-0 z-50 flex flex-col bg-editor-bg">
             {/* Header */}
@@ -927,7 +932,7 @@ export default function Editor() {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setActiveDiff(null)}
+                  onClick={closeDiff}
                   className="px-3 py-1.5 text-xs font-medium text-text-muted hover:text-text-primary hover:bg-surface-active rounded-md transition-colors"
                 >
                   <X className="w-4 h-4" />
@@ -938,7 +943,6 @@ export default function Editor() {
             {/* Monaco Diff Editor */}
             <div className="flex-1">
               <DiffEditor
-                key={`diff-${activeDiff.filePath}-${activeDiff.modified.length}`}
                 height="100%"
                 language={getLanguage(activeDiff.filePath)}
                 original={activeDiff.original}
@@ -966,7 +970,7 @@ export default function Editor() {
                   <button
                     onClick={async () => {
                       await undoChange(activeDiff.filePath)
-                      setActiveDiff(null)
+                      closeDiff()
                     }}
                     className="px-4 py-2 text-sm font-medium text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
                   >
@@ -976,7 +980,7 @@ export default function Editor() {
                     onClick={() => {
                       acceptChange(activeDiff.filePath)
                       updateFileContent(activeDiff.filePath, activeDiff.modified)
-                      setActiveDiff(null)
+                      closeDiff()
                     }}
                     className="px-4 py-2 text-sm font-medium bg-green-500 text-white hover:bg-green-600 rounded-md transition-colors"
                   >
@@ -985,7 +989,7 @@ export default function Editor() {
                 </>
               ) : (
                 <button
-                  onClick={() => setActiveDiff(null)}
+                  onClick={closeDiff}
                   className="px-4 py-2 text-sm font-medium text-text-muted hover:text-text-primary hover:bg-surface-active rounded-md transition-colors"
                 >
                   Close

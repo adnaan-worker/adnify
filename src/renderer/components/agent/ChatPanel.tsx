@@ -66,6 +66,7 @@ export default function ChatPanel() {
     isAwaitingApproval,
     pendingToolCall,
     pendingChanges,
+    messageCheckpoints,
     contextItems,
     allThreads: threads,
     currentThreadId,
@@ -82,6 +83,8 @@ export default function ChatPanel() {
     undoAllChanges,
     acceptChange,
     undoChange,
+    restoreToCheckpoint,
+    getCheckpointForMessage,
     addContextItem,
     removeContextItem,
     clearContextItems,
@@ -341,9 +344,36 @@ export default function ChatPanel() {
 
   const hasApiKey = !!llmConfig.apiKey
 
+  // 处理回退到检查点
+  const handleRestore = useCallback(async (messageId: string) => {
+    const checkpoint = getCheckpointForMessage(messageId)
+    if (!checkpoint) {
+      toast.error('No checkpoint found for this message')
+      return
+    }
+
+    // 确认对话框
+    const confirmed = window.confirm(
+      'This will restore all files to their state before this message and delete all messages after it. Continue?'
+    )
+    if (!confirmed) return
+
+    const result = await restoreToCheckpoint(checkpoint.id)
+    if (result.success) {
+      toast.success(`Restored ${result.restoredFiles.length} file(s)`)
+      // 关闭 Diff 预览
+      setActiveDiff(null)
+    } else if (result.errors.length > 0) {
+      toast.error(`Restore failed: ${result.errors[0]}`)
+    }
+  }, [getCheckpointForMessage, restoreToCheckpoint, setActiveDiff, toast])
+
   // 渲染消息
   const renderMessage = useCallback((msg: ChatMessageType) => {
     if (!isUserMessage(msg) && !isAssistantMessage(msg)) return null
+
+    // 检查是否有关联的检查点
+    const hasCheckpoint = isUserMessage(msg) && messageCheckpoints.some(cp => cp.messageId === msg.id)
 
     return (
       <ChatMessageUI
@@ -351,13 +381,15 @@ export default function ChatPanel() {
         message={msg}
         onEdit={handleEditMessage}
         onRegenerate={handleRegenerate}
+        onRestore={handleRestore}
         onApproveTool={approveCurrentTool}
         onRejectTool={rejectCurrentTool}
         onOpenDiff={handleShowDiff}
         pendingToolId={pendingToolCall?.id}
+        hasCheckpoint={hasCheckpoint}
       />
     )
-  }, [handleEditMessage, handleRegenerate, approveCurrentTool, rejectCurrentTool, handleShowDiff, pendingToolCall])
+  }, [handleEditMessage, handleRegenerate, handleRestore, approveCurrentTool, rejectCurrentTool, handleShowDiff, pendingToolCall, messageCheckpoints])
 
   // 获取流式状态文本
   const getStreamingStatus = useCallback(() => {
@@ -534,28 +566,34 @@ export default function ChatPanel() {
           isAwaitingApproval={isAwaitingApproval}
           streamingStatus={getStreamingStatus()}
           onStop={abort}
-          onReview={async () => {
-            if (pendingChanges.length === 0) {
-              toast.info('No changes to review')
-              return
-            }
+          onReviewFile={async (filePath) => {
+            const change = pendingChanges.find(c => c.filePath === filePath)
+            if (!change) return
             
-            // 获取第一个文件的快照
-            const firstChange = pendingChanges[0]
-            const currentContent = await window.electronAPI.readFile(firstChange.filePath)
+            const currentContent = await window.electronAPI.readFile(filePath)
             if (currentContent !== null) {
-              // 打开文件并显示 diff
-              openFile(firstChange.filePath, currentContent)
-              setActiveFile(firstChange.filePath)
+              openFile(filePath, currentContent)
+              setActiveFile(filePath)
               setActiveDiff({
-                original: firstChange.snapshot.content || '',
+                original: change.snapshot.content || '',
                 modified: currentContent,
-                filePath: firstChange.filePath,
+                filePath,
               })
-              toast.info(`Reviewing ${pendingChanges.length} file(s)`)
             }
           }}
-          onUndo={async () => {
+          onAcceptFile={(filePath) => {
+            acceptChange(filePath)
+            toast.success(`Accepted: ${filePath.split(/[\\/]/).pop()}`)
+          }}
+          onRejectFile={async (filePath) => {
+            const success = await undoChange(filePath)
+            if (success) {
+              toast.success(`Reverted: ${filePath.split(/[\\/]/).pop()}`)
+            } else {
+              toast.error('Failed to revert')
+            }
+          }}
+          onUndoAll={async () => {
             if (pendingChanges.length === 0) {
               toast.info('No changes to undo')
               return
@@ -563,24 +601,22 @@ export default function ChatPanel() {
             const result = await undoAllChanges()
             if (result.success && result.restoredFiles.length > 0) {
               toast.success(`Restored ${result.restoredFiles.length} file(s)`)
-              // 关闭 Diff 预览
               setActiveDiff(null)
             } else if (result.errors.length > 0) {
               toast.error(`Undo failed: ${result.errors[0]}`)
             }
           }}
-          onKeep={() => {
+          onKeepAll={() => {
             if (pendingChanges.length === 0) {
               toast.info('No changes to accept')
               return
             }
-            // Accept All = 清除待确认更改（文件已保存）
             acceptAllChanges()
-            // 关闭 Diff 预览
             setActiveDiff(null)
             toast.success('Changes accepted')
           }}
         />
+
 
         {/* Context Items */}
         <div className="px-6 py-2">

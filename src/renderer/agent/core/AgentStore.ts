@@ -20,6 +20,7 @@ import {
   ToolResultType,
   AssistantPart,
   PendingChange,
+  MessageCheckpoint,
 } from './types'
 
 // ===== Store 类型 =====
@@ -34,6 +35,9 @@ interface AgentState {
   
   // 待确认的更改（不持久化）
   pendingChanges: PendingChange[]
+  
+  // 消息级别的检查点（不持久化，用于回退）
+  messageCheckpoints: MessageCheckpoint[]
   
   // 配置
   autoApprove: {
@@ -83,10 +87,18 @@ interface AgentActions {
   undoChange: (filePath: string) => Promise<boolean>
   clearPendingChanges: () => void
   
+  // 消息检查点操作
+  createMessageCheckpoint: (messageId: string, description: string) => Promise<string>
+  addSnapshotToCurrentCheckpoint: (filePath: string, content: string | null) => void
+  restoreToCheckpoint: (checkpointId: string) => Promise<{ success: boolean; restoredFiles: string[]; errors: string[] }>
+  getCheckpointForMessage: (messageId: string) => MessageCheckpoint | null
+  clearMessageCheckpoints: () => void
+  
   // 获取器
   getCurrentThread: () => ChatThread | null
   getMessages: () => ChatMessage[]
   getPendingChanges: () => PendingChange[]
+  getMessageCheckpoints: () => MessageCheckpoint[]
 }
 
 type AgentStore = AgentState & AgentActions
@@ -117,6 +129,7 @@ export const useAgentStore = create<AgentStore>()(
       currentThreadId: null,
       streamState: { phase: 'idle' },
       pendingChanges: [],
+      messageCheckpoints: [],
       autoApprove: {
         edits: false,
         terminal: false,
@@ -695,6 +708,187 @@ export const useAgentStore = create<AgentStore>()(
         set({ pendingChanges: [] })
       },
 
+      // 消息检查点操作
+      createMessageCheckpoint: async (messageId, description) => {
+        const state = get()
+        const threadId = state.currentThreadId
+        if (!threadId) return ''
+
+        // 创建检查点时，记录当前所有 pendingChanges 中的文件快照
+        // 这样每个检查点都有独立的快照记录
+        const fileSnapshots: Record<string, FileSnapshot> = {}
+        
+        // 复制当前 pendingChanges 中的快照到检查点
+        for (const change of state.pendingChanges) {
+          fileSnapshots[change.filePath] = { ...change.snapshot }
+        }
+        
+        const checkpoint: MessageCheckpoint = {
+          id: crypto.randomUUID(),
+          messageId,
+          timestamp: Date.now(),
+          fileSnapshots,
+          description,
+        }
+
+        console.log('[Checkpoint] Created checkpoint:', checkpoint.id, 'for message:', messageId, 'with files:', Object.keys(fileSnapshots))
+
+        set(state => ({
+          messageCheckpoints: [...state.messageCheckpoints, checkpoint],
+        }))
+
+        return checkpoint.id
+      },
+      
+      // 添加文件快照到当前检查点（在文件修改前调用）
+      addSnapshotToCurrentCheckpoint: (filePath: string, content: string | null) => {
+        console.log('[Checkpoint] Adding snapshot for:', filePath, 'content length:', content?.length ?? 'null')
+        
+        set(state => {
+          // 找到最新的检查点
+          if (state.messageCheckpoints.length === 0) {
+            console.log('[Checkpoint] No checkpoints exist, cannot add snapshot')
+            return state
+          }
+          
+          const checkpoints = [...state.messageCheckpoints]
+          const lastCheckpoint = checkpoints[checkpoints.length - 1]
+          
+          console.log('[Checkpoint] Current checkpoint:', lastCheckpoint.id, 'existing files:', Object.keys(lastCheckpoint.fileSnapshots))
+          
+          // 如果该文件还没有快照，添加它（只保留最早的快照）
+          if (!(filePath in lastCheckpoint.fileSnapshots)) {
+            checkpoints[checkpoints.length - 1] = {
+              ...lastCheckpoint,
+              fileSnapshots: {
+                ...lastCheckpoint.fileSnapshots,
+                [filePath]: { fsPath: filePath, content },
+              },
+            }
+            console.log('[Checkpoint] Added snapshot for:', filePath)
+            return { messageCheckpoints: checkpoints }
+          }
+          
+          console.log('[Checkpoint] Snapshot already exists for:', filePath)
+          return state
+        })
+      },
+
+      restoreToCheckpoint: async (checkpointId) => {
+        const state = get()
+        const checkpointIdx = state.messageCheckpoints.findIndex(cp => cp.id === checkpointId)
+        
+        console.log('[Restore] Looking for checkpoint:', checkpointId)
+        console.log('[Restore] All checkpoints:', state.messageCheckpoints.map(cp => ({
+          id: cp.id,
+          messageId: cp.messageId,
+          files: Object.keys(cp.fileSnapshots),
+        })))
+        
+        if (checkpointIdx === -1) {
+          return { success: false, restoredFiles: [], errors: ['Checkpoint not found'] }
+        }
+        
+        const checkpoint = state.messageCheckpoints[checkpointIdx]
+        const restoredFiles: string[] = []
+        const errors: string[] = []
+
+        // 收集该检查点及之后所有检查点的文件快照
+        // 我们需要恢复到该检查点之前的状态
+        const filesToRestore: Record<string, FileSnapshot> = {}
+        
+        // 从该检查点开始，收集所有需要恢复的文件
+        for (let i = checkpointIdx; i < state.messageCheckpoints.length; i++) {
+          const cp = state.messageCheckpoints[i]
+          for (const [path, snapshot] of Object.entries(cp.fileSnapshots)) {
+            // 只保留最早的快照（即该检查点的快照）
+            if (!(path in filesToRestore)) {
+              filesToRestore[path] = snapshot
+            }
+          }
+        }
+        
+        // 同时检查 pendingChanges 中的文件（可能有检查点之后新增的修改）
+        for (const change of state.pendingChanges) {
+          if (!(change.filePath in filesToRestore)) {
+            filesToRestore[change.filePath] = change.snapshot
+          }
+        }
+        
+        console.log('[Restore] Files to restore:', Object.keys(filesToRestore))
+        console.log('[Restore] PendingChanges:', state.pendingChanges.map(c => c.filePath))
+
+        // 恢复所有文件
+        for (const [filePath, snapshot] of Object.entries(filesToRestore)) {
+          try {
+            if (snapshot.content === null) {
+              // 文件原本不存在，删除它
+              const deleted = await window.electronAPI.deleteFile(filePath)
+              if (deleted) {
+                restoredFiles.push(filePath)
+              }
+            } else {
+              // 恢复文件内容
+              const written = await window.electronAPI.writeFile(filePath, snapshot.content)
+              if (written) {
+                restoredFiles.push(filePath)
+              } else {
+                errors.push(`Failed to restore: ${filePath}`)
+              }
+            }
+          } catch (e) {
+            errors.push(`Error restoring ${filePath}: ${e}`)
+          }
+        }
+
+        // 删除该检查点关联消息及之后的所有消息
+        const threadId = state.currentThreadId
+        if (threadId) {
+          const thread = state.threads[threadId]
+          if (thread) {
+            const messageIdx = thread.messages.findIndex(m => m.id === checkpoint.messageId)
+            if (messageIdx !== -1) {
+              // 删除该消息及之后的所有消息（保留该消息之前的）
+              set(state => {
+                const thread = state.threads[threadId]
+                if (!thread) return state
+                return {
+                  threads: {
+                    ...state.threads,
+                    [threadId]: {
+                      ...thread,
+                      messages: thread.messages.slice(0, messageIdx),
+                      lastModified: Date.now(),
+                    },
+                  },
+                }
+              })
+            }
+          }
+        }
+
+        // 删除该检查点及之后的检查点，清空待确认更改
+        set(state => ({
+          messageCheckpoints: state.messageCheckpoints.slice(0, checkpointIdx),
+          pendingChanges: [],
+        }))
+
+        return {
+          success: errors.length === 0,
+          restoredFiles,
+          errors,
+        }
+      },
+
+      getCheckpointForMessage: (messageId) => {
+        const state = get()
+        return state.messageCheckpoints.find(cp => cp.messageId === messageId) || null
+      },
+
+      clearMessageCheckpoints: () => {
+        set({ messageCheckpoints: [] })
+      },
+
       // 获取器
       getCurrentThread: () => {
         const state = get()
@@ -709,6 +903,10 @@ export const useAgentStore = create<AgentStore>()(
 
       getPendingChanges: () => {
         return get().pendingChanges
+      },
+
+      getMessageCheckpoints: () => {
+        return get().messageCheckpoints
       },
     }),
     {
@@ -755,3 +953,5 @@ export const selectIsAwaitingApproval = (state: AgentStore) =>
 export const selectPendingChanges = (state: AgentStore) => state.pendingChanges
 
 export const selectHasPendingChanges = (state: AgentStore) => state.pendingChanges.length > 0
+
+export const selectMessageCheckpoints = (state: AgentStore) => state.messageCheckpoints

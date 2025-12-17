@@ -13,6 +13,7 @@ import {
   selectIsStreaming,
   selectIsAwaitingApproval,
   selectPendingChanges,
+  selectMessageCheckpoints,
 } from '@/renderer/agent/core/AgentStore'
 import { AgentService } from '@/renderer/agent/core/AgentService'
 import { MessageContent, ChatThread, ToolCall } from '@/renderer/agent/core/types'
@@ -29,6 +30,7 @@ export function useAgent() {
   const isStreaming = useAgentStore(selectIsStreaming)
   const isAwaitingApproval = useAgentStore(selectIsAwaitingApproval)
   const pendingChanges = useAgentStore(selectPendingChanges)
+  const messageCheckpoints = useAgentStore(selectMessageCheckpoints)
 
   // 获取线程相关状态
   const threads = useAgentStore(state => state.threads)
@@ -58,6 +60,10 @@ export function useAgent() {
   const undoAllChanges = useAgentStore(state => state.undoAllChanges)
   const acceptChange = useAgentStore(state => state.acceptChange)
   const undoChange = useAgentStore(state => state.undoChange)
+  
+  // 消息检查点操作
+  const restoreToCheckpoint = useAgentStore(state => state.restoreToCheckpoint)
+  const getCheckpointForMessage = useAgentStore(state => state.getCheckpointForMessage)
 
   // 发送消息
   const sendMessage = useCallback(async (content: MessageContent) => {
@@ -113,6 +119,7 @@ export function useAgent() {
     isAwaitingApproval,
     pendingToolCall,
     pendingChanges,
+    messageCheckpoints,
     
     // 线程
     allThreads,
@@ -136,6 +143,10 @@ export function useAgent() {
     undoAllChanges,
     acceptChange,
     undoChange,
+    
+    // 消息检查点操作
+    restoreToCheckpoint,
+    getCheckpointForMessage,
     
     // 上下文操作
     addContextItem,

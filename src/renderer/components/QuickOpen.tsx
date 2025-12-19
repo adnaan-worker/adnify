@@ -8,8 +8,8 @@ import { Search, FileText, X } from 'lucide-react'
 import { useStore } from '../store'
 import { getFileName } from '../utils/pathUtils'
 import { keybindingService } from '../services/keybindingService'
-
 import { t } from '../i18n'
+import { Button } from './ui'
 
 interface QuickOpenProps {
   onClose: () => void
@@ -303,12 +303,14 @@ export default function QuickOpen({ onClose }: QuickOpenProps) {
             className="flex-1 bg-transparent text-lg text-text-primary placeholder-text-muted focus:outline-none"
           />
           {query && (
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => setQuery('')}
-              className="p-1 rounded-full hover:bg-surface-hover transition-colors"
+              className="rounded-full w-6 h-6 min-h-0 p-0"
             >
               <X className="w-4 h-4 text-text-muted" />
-            </button>
+            </Button>
           )}
         </div>
 

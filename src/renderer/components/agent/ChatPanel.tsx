@@ -42,6 +42,7 @@ import ContextPanel from './ContextPanel'
 import { keybindingService } from '@/renderer/services/keybindingService'
 import SlashCommandPopup from './SlashCommandPopup'
 import { slashCommandService, SlashCommand } from '@/renderer/services/slashCommandService'
+import { Button } from '../ui'
 
 export default function ChatPanel() {
   const {
@@ -489,53 +490,61 @@ export default function ChatPanel() {
       onDrop={handleDrop}
     >
       {/* Header - Glassmorphism */}
-      <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-3 bg-background/60 backdrop-blur-xl border-b border-white/5">
-        <div className="flex items-center gap-1 bg-black/20 rounded-lg p-0.5 border border-white/5">
-          <button
+      <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-3 bg-background/40 backdrop-blur-md border-b border-border-subtle select-none">
+        <div className="flex items-center gap-1 bg-surface/50 rounded-lg p-0.5 border border-border-subtle/50">
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setChatMode('chat')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${chatMode === 'chat'
-              ? 'bg-white/10 text-white shadow-sm'
-              : 'text-text-muted hover:text-text-secondary hover:bg-white/5'
+            className={`h-7 px-3 gap-1.5 text-xs font-medium ${chatMode === 'chat'
+              ? 'bg-surface text-text-primary shadow-sm hover:bg-surface'
+              : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover'
               }`}
           >
             <MessageSquare className="w-3.5 h-3.5" />
             Chat
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setChatMode('agent')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${chatMode === 'agent'
-              ? 'bg-accent/20 text-accent shadow-sm shadow-accent/10'
-              : 'text-text-muted hover:text-text-secondary hover:bg-white/5'
+            className={`h-7 px-3 gap-1.5 text-xs font-medium ${chatMode === 'agent'
+              ? 'bg-accent/10 text-accent shadow-sm shadow-accent/5 hover:bg-accent/15'
+              : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover'
               }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
             Agent
-          </button>
+          </Button>
         </div>
 
         <div className="flex items-center gap-1">
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setShowThreads(!showThreads)}
-            className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-colors"
             title="Chat history"
           >
             <History className="w-4 h-4" />
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => createThread()}
-            className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-colors"
             title="New chat"
           >
             <Plus className="w-4 h-4" />
-          </button>
-          <div className="w-px h-4 bg-white/10 mx-1" />
-          <button
+          </Button>
+          <div className="w-px h-4 bg-border-subtle mx-1" />
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={clearMessages}
-            className="p-2 rounded-lg hover:bg-red-500/10 text-text-muted hover:text-red-500 transition-colors"
+            className="hover:bg-red-500/10 hover:text-red-500"
             title="Clear chat"
           >
             <Trash2 className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -545,9 +554,9 @@ export default function ChatPanel() {
           <div className="flex flex-col gap-2 max-w-2xl mx-auto">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-medium text-text-primary">Chat History</h3>
-              <button onClick={() => setShowThreads(false)} className="p-1 rounded hover:bg-surface-active text-text-muted">
+              <Button variant="ghost" size="icon" onClick={() => setShowThreads(false)} className="h-6 w-6">
                 <X className="w-4 h-4" />
-              </button>
+              </Button>
             </div>
             {threads.map((thread: ChatThread) => {
               if (!thread) return null
@@ -558,7 +567,7 @@ export default function ChatPanel() {
                   key={thread.id}
                   className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-colors border ${currentThreadId === thread.id
                     ? 'bg-accent/10 border-accent/20 text-accent'
-                    : 'bg-surface/30 border-white/5 hover:border-white/10 text-text-secondary'
+                    : 'bg-surface/30 border-border-subtle hover:border-border-hover text-text-secondary'
                     }`}
                   onClick={() => { switchThread(thread.id); setShowThreads(false) }}
                 >
@@ -568,12 +577,14 @@ export default function ChatPanel() {
                       {new Date(thread.lastModified).toLocaleDateString()}
                     </p>
                   </div>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={(e) => { e.stopPropagation(); deleteThread(thread.id) }}
-                    className="p-2 rounded-lg hover:bg-red-500/10 text-text-muted hover:text-red-500"
+                    className="hover:bg-red-500/10 hover:text-red-500"
                   >
                     <Trash2 className="w-4 h-4" />
-                  </button>
+                  </Button>
                 </div>
               )
             })}
@@ -616,7 +627,7 @@ export default function ChatPanel() {
         {/* Empty State */}
         {messages.length === 0 && hasApiKey && (
           <div className="h-full flex flex-col items-center justify-center gap-6 pb-20 opacity-50">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-surface to-surface-active border border-white/5 flex items-center justify-center shadow-2xl">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-surface to-surface-active border border-white/5 flex items-center justify-center shadow-2xl shadow-accent/5">
               <Logo className="w-12 h-12 text-text-primary" glow />
             </div>
             <div className="text-center">
@@ -645,7 +656,7 @@ export default function ChatPanel() {
       )}
 
       {/* Bottom Input Area - Glassmorphism */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 bg-background/80 backdrop-blur-xl border-t border-white/5">
+      <div className="absolute bottom-0 left-0 right-0 z-20 bg-background/60 backdrop-blur-xl border-t border-border-subtle">
 
         {/* Status Bar */}
         <AgentStatusBar

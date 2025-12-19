@@ -20,7 +20,7 @@ import { FileItem } from '../types/electron'
 import { t } from '../i18n'
 import { getDirPath, joinPath } from '../utils/pathUtils'
 import { toast } from './Toast'
-import { ContextMenu, ContextMenuItem } from './ContextMenu'
+import { Input, ContextMenu, ContextMenuItem } from './ui'
 import { directoryCacheService } from '../services/directoryCacheService'
 import { keybindingService } from '../services/keybindingService'
 
@@ -389,10 +389,10 @@ export function VirtualFileTree({
           ) : (
             <FilePlus className="w-3.5 h-3.5 text-accent flex-shrink-0" />
           )}
-          <input
+          <Input
             autoFocus
             placeholder={creatingIn.type === 'file' ? 'filename.ext' : 'folder name'}
-            className="flex-1 bg-surface-active border border-accent rounded px-1.5 py-0.5 text-[13px] focus:outline-none focus:ring-1 focus:ring-accent min-w-0 text-text-primary"
+            className="flex-1 h-6 text-[13px]"
             onBlur={(e) => {
               if (e.target.value.trim()) {
                 onCreateSubmit(creatingIn.path, e.target.value.trim(), creatingIn.type)
@@ -462,7 +462,7 @@ export function VirtualFileTree({
 
         {/* Name */}
         {isRenaming ? (
-          <input
+          <Input
             ref={renameInputRef}
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
@@ -472,7 +472,8 @@ export function VirtualFileTree({
               if (keybindingService.matches(e, 'list.cancel')) setRenamingPath(null)
             }}
             onClick={(e) => e.stopPropagation()}
-            className="flex-1 bg-surface-active border-none rounded px-1 py-0 text-[13px] h-5 focus:outline-none focus:ring-1 focus:ring-accent min-w-0 text-text-primary"
+            className="flex-1 h-5 text-[13px] px-1 py-0"
+            autoFocus
           />
         ) : (
           <span className="text-[13px] truncate leading-normal flex-1 opacity-90 group-hover:opacity-100">

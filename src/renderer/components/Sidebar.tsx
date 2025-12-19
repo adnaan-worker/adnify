@@ -16,9 +16,9 @@ import { getEditorConfig } from '../config/editorConfig'
 import { toast } from './Toast'
 import { onDiagnostics, getDocumentSymbols } from '../services/lspService'
 import { adnifyDir } from '../services/adnifyDirService'
-import { ContextMenu, ContextMenuItem } from './ContextMenu'
 import { directoryCacheService } from '../services/directoryCacheService'
 import { keybindingService } from '../services/keybindingService'
+import { Input, Button, Tooltip, ContextMenu, ContextMenuItem } from './ui'
 
 
 const getFileIcon = (name: string) => {
@@ -81,14 +81,15 @@ function InlineCreateInput({
             ) : (
                 <FilePlus className="w-3.5 h-3.5 text-accent flex-shrink-0" />
             )}
-            <input
+            <Input
                 ref={inputRef}
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 onBlur={handleSubmit}
                 onKeyDown={handleKeyDown}
                 placeholder={type === 'file' ? 'filename.ext' : 'folder name'}
-                className="flex-1 bg-surface-active border border-accent rounded px-1.5 py-0.5 text-[13px] focus:outline-none focus:ring-1 focus:ring-accent min-w-0 text-text-primary"
+                className="flex-1 h-6 text-[13px]"
+                autoFocus
             />
         </div>
     )
@@ -307,14 +308,15 @@ function FileTreeItem({
                 )}
 
                 {isRenaming ? (
-                    <input
+                    <Input
                         ref={renameInputRef}
                         value={renameValue}
                         onChange={(e) => setRenameValue(e.target.value)}
                         onBlur={handleRenameSubmit}
                         onKeyDown={handleKeyDown}
                         onClick={(e) => e.stopPropagation()}
-                        className="flex-1 bg-surface-active border-none rounded px-1 py-0 text-[13px] h-5 focus:outline-none focus:ring-1 focus:ring-accent min-w-0 text-text-primary"
+                        className="flex-1 h-5 text-[13px] px-1 py-0"
+                        autoFocus
                     />
                 ) : (
                     <span className="text-[13px] truncate leading-normal flex-1 opacity-90 group-hover:opacity-100">{item.name}</span>
@@ -550,21 +552,31 @@ function ExplorerView() {
                     {t('explorer', language)}
                 </span>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => handleRootCreate('file')} className="p-1 hover:bg-surface-active rounded transition-colors" title={t('newFile', language)}>
-                        <FilePlus className="w-3.5 h-3.5 text-text-muted hover:text-text-primary" />
-                    </button>
-                    <button onClick={() => handleRootCreate('folder')} className="p-1 hover:bg-surface-active rounded transition-colors" title={t('newFolder', language)}>
-                        <FolderPlus className="w-3.5 h-3.5 text-text-muted hover:text-text-primary" />
-                    </button>
-                    <button onClick={refreshFiles} className="p-1 hover:bg-surface-active rounded transition-colors" title={t('refresh', language)}>
-                        <RefreshCw className="w-3.5 h-3.5 text-text-muted hover:text-text-primary" />
-                    </button>
-                    <button onClick={handleOpenFolder} className="p-1 hover:bg-surface-active rounded transition-colors" title={t('openFolder', language)}>
-                        <FolderOpen className="w-3.5 h-3.5 text-text-muted hover:text-text-primary" />
-                    </button>
-                    <button onClick={handleAddFolder} className="p-1 hover:bg-surface-active rounded transition-colors" title="Add Folder to Workspace">
-                        <FolderPlus className="w-3.5 h-3.5 text-text-muted hover:text-text-primary" />
-                    </button>
+                    <Tooltip content={t('newFile', language)}>
+                        <Button variant="icon" size="icon" onClick={() => handleRootCreate('file')} className="w-6 h-6">
+                            <FilePlus className="w-3.5 h-3.5" />
+                        </Button>
+                    </Tooltip>
+                    <Tooltip content={t('newFolder', language)}>
+                        <Button variant="icon" size="icon" onClick={() => handleRootCreate('folder')} className="w-6 h-6">
+                            <FolderPlus className="w-3.5 h-3.5" />
+                        </Button>
+                    </Tooltip>
+                    <Tooltip content={t('refresh', language)}>
+                        <Button variant="icon" size="icon" onClick={refreshFiles} className="w-6 h-6">
+                            <RefreshCw className="w-3.5 h-3.5" />
+                        </Button>
+                    </Tooltip>
+                    <Tooltip content={t('openFolder', language)}>
+                        <Button variant="icon" size="icon" onClick={handleOpenFolder} className="w-6 h-6">
+                            <FolderOpen className="w-3.5 h-3.5" />
+                        </Button>
+                    </Tooltip>
+                    <Tooltip content="Add Folder to Workspace">
+                        <Button variant="icon" size="icon" onClick={handleAddFolder} className="w-6 h-6">
+                            <FolderPlus className="w-3.5 h-3.5" />
+                        </Button>
+                    </Tooltip>
                 </div>
             </div>
 

@@ -1,7 +1,7 @@
 import { useRef, useCallback, useEffect, useState } from 'react'
 import MonacoEditor, { DiffEditor, OnMount, loader } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
-import { X, Circle, AlertTriangle, AlertCircle, RefreshCw, FileCode, ChevronRight, Home } from 'lucide-react'
+import { FileCode, X, ChevronRight, AlertCircle, AlertTriangle, RefreshCw, Home } from 'lucide-react'
 import { useStore } from '../store'
 import { useAgent } from '../hooks/useAgent'
 import { t } from '../i18n'
@@ -152,12 +152,10 @@ export default function Editor() {
   useEffect(() => {
     if (monacoRef.current && currentTheme) {
       const monaco = monacoRef.current
-      // 动态导入主题定义（避免循环依赖，或者直接在这里处理）
       import('./ThemeManager').then(({ themes }) => {
-        const themeVars = themes[currentTheme]
+        const themeVars = themes[currentTheme] || themes['adnify-dark']
         if (!themeVars) return
 
-        // 辅助函数：RGB "r g b" 转 Hex
         const rgbToHex = (rgbStr: string) => {
           const [r, g, b] = rgbStr.split(' ').map(Number)
           return '#' + [r, g, b].map(x => {
@@ -169,23 +167,38 @@ export default function Editor() {
         const bg = rgbToHex(themeVars['--color-background'])
         const surface = rgbToHex(themeVars['--color-surface'])
         const text = rgbToHex(themeVars['--color-text-primary'])
+        const textMuted = rgbToHex(themeVars['--color-text-muted'])
         const border = rgbToHex(themeVars['--color-border'])
-        const selection = rgbToHex(themeVars['--color-accent']) + '40' // 25% opacity
+        const accent = rgbToHex(themeVars['--color-accent'])
+        const selection = accent + '40' // 25% opacity
 
         monaco.editor.defineTheme('adnify-dynamic', {
           base: currentTheme === 'dawn' ? 'vs' : 'vs-dark',
           inherit: true,
-          rules: [],
+          rules: [
+            { token: 'comment', foreground: textMuted, fontStyle: 'italic' },
+            { token: 'keyword', foreground: accent },
+            { token: 'string', foreground: 'a5d6ff' }, // Light blue for strings
+            { token: 'number', foreground: 'ffc600' }, // Yellow for numbers
+            { token: 'type', foreground: '4ec9b0' }, // Teal for types
+          ],
           colors: {
             'editor.background': bg,
             'editor.foreground': text,
             'editor.lineHighlightBackground': surface,
-            'editorCursor.foreground': text,
+            'editorCursor.foreground': accent,
             'editorWhitespace.foreground': border,
             'editorIndentGuide.background': border,
             'editor.selectionBackground': selection,
-            'editorLineNumber.foreground': rgbToHex(themeVars['--color-text-muted']),
-            // 更多颜色适配...
+            'editorLineNumber.foreground': textMuted,
+            'editorLineNumber.activeForeground': text,
+            'editorWidget.background': surface,
+            'editorWidget.border': border,
+            'editorSuggestWidget.background': surface,
+            'editorSuggestWidget.border': border,
+            'editorSuggestWidget.selectedBackground': accent + '20',
+            'editorHoverWidget.background': surface,
+            'editorHoverWidget.border': border,
           }
         })
         monaco.editor.setTheme('adnify-dynamic')
@@ -245,6 +258,14 @@ export default function Editor() {
           'editorIndentGuide.background': border,
           'editor.selectionBackground': selection,
           'editorLineNumber.foreground': rgbToHex(themeVars['--color-text-muted']),
+          'editorLineNumber.activeForeground': text,
+          'editorWidget.background': surface,
+          'editorWidget.border': border,
+          'editorSuggestWidget.background': surface,
+          'editorSuggestWidget.border': border,
+          'editorSuggestWidget.selectedBackground': selection,
+          'editorHoverWidget.background': surface,
+          'editorHoverWidget.border': border,
         }
       })
       monaco.editor.setTheme('adnify-dynamic')
@@ -772,21 +793,35 @@ export default function Editor() {
 
   if (openFiles.length === 0) {
     return (
-      <div className="h-full flex flex-col bg-background relative overflow-hidden">
+      <div className="h-full flex flex-col bg-transparent relative overflow-hidden">
         {/* Background Decoration */}
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-900/10 via-background to-background pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-transparent pointer-events-none" />
 
-        <div className="flex-1 flex items-center justify-center relative z-10">
-          <div className="text-center">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 border border-white/5 flex items-center justify-center backdrop-blur-sm shadow-glow">
-              <FileCode className="w-10 h-10 text-accent opacity-80" />
+        <div className="flex-1 flex items-center justify-center relative z-10 animate-fade-in">
+          <div className="text-center p-8 rounded-2xl bg-surface/30 backdrop-blur-md border border-white/5 shadow-glow-lg max-w-md w-full mx-4">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-accent/20 to-transparent border border-white/10 flex items-center justify-center shadow-inner-glow relative group">
+              <div className="absolute inset-0 bg-accent/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <FileCode className="w-10 h-10 text-accent relative z-10" />
             </div>
-            <h2 className="text-xl font-medium text-text-primary mb-2 tracking-tight">{t('welcome', language)}</h2>
-            <p className="text-text-muted text-sm">{t('welcomeDesc', language)}</p>
+            <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight font-sans">ADNIFY</h2>
+            <p className="text-text-muted text-sm mb-8">Advanced AI-Powered Editor</p>
 
-            <div className="mt-8 flex flex-col gap-2 text-xs text-text-muted opacity-60">
-              <p><kbd className="font-mono bg-surface px-1.5 py-0.5 rounded border border-border-subtle">Ctrl+P</kbd> {t('searchFile', language)}</p>
-              <p><kbd className="font-mono bg-surface px-1.5 py-0.5 rounded border border-border-subtle">Ctrl+Shift+P</kbd> {t('commandPalette', language)}</p>
+            <div className="flex flex-col gap-3 text-xs text-text-secondary">
+              <div className="flex items-center justify-between bg-surface/50 px-3 py-2 rounded-lg border border-white/5 hover:border-accent/30 transition-colors group cursor-pointer" onClick={() => useStore.getState().setShowQuickOpen(true)}>
+                <span className="group-hover:text-text-primary transition-colors">{t('searchFile', language)}</span>
+                <div className="flex gap-1">
+                  <kbd className="font-mono bg-white/5 px-1.5 py-0.5 rounded text-[10px] min-w-[20px] text-center">Ctrl</kbd>
+                  <kbd className="font-mono bg-white/5 px-1.5 py-0.5 rounded text-[10px] min-w-[20px] text-center">P</kbd>
+                </div>
+              </div>
+              <div className="flex items-center justify-between bg-surface/50 px-3 py-2 rounded-lg border border-white/5 hover:border-accent/30 transition-colors group cursor-pointer">
+                <span className="group-hover:text-text-primary transition-colors">{t('commandPalette', language)}</span>
+                <div className="flex gap-1">
+                  <kbd className="font-mono bg-white/5 px-1.5 py-0.5 rounded text-[10px] min-w-[20px] text-center">Ctrl</kbd>
+                  <kbd className="font-mono bg-white/5 px-1.5 py-0.5 rounded text-[10px] min-w-[20px] text-center">Shift</kbd>
+                  <kbd className="font-mono bg-white/5 px-1.5 py-0.5 rounded text-[10px] min-w-[20px] text-center">P</kbd>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -795,51 +830,50 @@ export default function Editor() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-background" onKeyDown={handleKeyDown}>
+    <div className="h-full flex flex-col bg-transparent" onKeyDown={handleKeyDown}>
       {/* Tabs */}
-      <div className="h-10 flex items-center bg-background-secondary border-b border-border-subtle overflow-hidden select-none">
-        <div className="flex items-center flex-1 overflow-x-auto no-scrollbar h-full">
-          {openFiles.map((file: { path: string; isDirty?: boolean }) => {
-            const fileName = getFileName(file.path)
-            const isActive = file.path === activeFilePath
-            return (
-              <div
-                key={file.path}
-                onClick={() => setActiveFile(file.path)}
-                onContextMenu={(e) => {
-                  e.preventDefault()
-                  setTabContextMenu({ x: e.clientX, y: e.clientY, filePath: file.path })
+      <div className="h-9 flex items-center bg-background-secondary/50 border-b border-border-subtle overflow-x-auto custom-scrollbar select-none backdrop-blur-sm">
+        {openFiles.map((file: { path: string; isDirty?: boolean }) => {
+          const isActive = file.path === activeFilePath
+          const fileName = getFileName(file.path)
+
+          return (
+            <div
+              key={file.path}
+              className={`
+                group relative flex items-center gap-2 px-3 h-full min-w-[120px] max-w-[200px] cursor-pointer transition-all duration-200 border-r border-white/5
+                ${isActive
+                  ? 'bg-surface text-text-primary'
+                  : 'bg-transparent text-text-muted hover:bg-surface-hover hover:text-text-primary'}
+              `}
+              onClick={() => setActiveFile(file.path)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setTabContextMenu({ x: e.clientX, y: e.clientY, filePath: file.path })
+              }}
+            >
+              {isActive && <div className="absolute top-0 left-0 right-0 h-[2px] bg-accent shadow-[0_0_8px_rgba(var(--accent)/0.5)]" />}
+
+              <span className="text-xs truncate flex-1">{fileName}</span>
+
+              <div className="flex items-center justify-center w-5 h-5 rounded-md hover:bg-white/10 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleCloseFile(file.path)
                 }}
-                className={`
-                  flex items-center gap-2 px-4 h-full cursor-pointer
-                  transition-all group min-w-[120px] max-w-[200px] border-r border-border-subtle/30
-                  ${isActive
-                    ? 'bg-background text-text-primary border-t-2 border-t-accent'
-                    : 'bg-transparent text-text-muted hover:bg-surface-hover hover:text-text-primary border-t-2 border-t-transparent'}
-                `}
               >
-                <FileCode className={`w-3.5 h-3.5 opacity-70 ${isActive ? 'text-accent' : ''}`} />
-                <span className="truncate text-xs flex-1">{fileName}</span>
-                {file.isDirty && (
-                  <Circle className="w-2 h-2 fill-accent text-transparent mr-1" />
-                )}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleCloseFile(file.path)
-                  }}
-                  className={`p-0.5 rounded hover:bg-surface-active opacity-0 group-hover:opacity-100 transition-opacity ${isActive ? 'opacity-100' : ''}`}
-                >
-                  <X className="w-3 h-3 text-text-muted" />
-                </button>
+                {file.isDirty ? (
+                  <div className="w-2 h-2 rounded-full bg-accent group-hover:hidden" />
+                ) : null}
+                <X className={`w-3 h-3 ${file.isDirty ? 'hidden group-hover:block' : 'opacity-0 group-hover:opacity-100'} transition-opacity`} />
               </div>
-            )
-          })}
-        </div>
+            </div>
+          )
+        })}
 
         {/* Lint 状态和按钮 */}
         {activeFile && (
-          <div className="flex items-center gap-2 px-3 flex-shrink-0 bg-background-secondary h-full border-l border-border-subtle">
+          <div className="ml-auto flex items-center gap-2 px-3 flex-shrink-0 h-full border-l border-border-subtle bg-background-secondary/50">
             {lintErrors.length > 0 && (
               <div className="flex items-center gap-2 text-xs mr-2">
                 {lintErrors.filter(e => e.severity === 'error').length > 0 && (
@@ -870,20 +904,23 @@ export default function Editor() {
 
       {/* Breadcrumbs */}
       {activeFile && (
-        <div className="h-6 flex items-center px-4 bg-background border-b border-border-subtle/50 text-[11px] text-text-muted select-none">
-          <div className="flex items-center gap-1 opacity-70 flex-1">
+        <div className="h-7 flex items-center px-4 border-b border-border-subtle bg-background/40 backdrop-blur-sm text-[11px] text-text-muted select-none">
+          <div className="flex items-center gap-1 hover:text-text-primary transition-colors cursor-pointer">
             <Home className="w-3 h-3" />
-            <span className="mx-1 opacity-30">/</span>
-            {getBreadcrumbs(activeFile.path).map((part, i, arr) => (
-              <div key={i} className="flex items-center">
-                <span className={i === arr.length - 1 ? 'text-text-primary font-medium' : ''}>{part}</span>
-                {i < arr.length - 1 && <ChevronRight className="w-3 h-3 mx-1 opacity-30" />}
-              </div>
-            ))}
           </div>
+          <span className="mx-1 opacity-30">/</span>
+          {getBreadcrumbs(activeFile.path).map((part, index, arr) => (
+            <div key={index} className="flex items-center gap-1">
+              <span className={`hover:text-text-primary transition-colors cursor-pointer ${index === arr.length - 1 ? 'text-text-primary font-medium' : ''}`}>
+                {part}
+              </span>
+              {index < arr.length - 1 && <ChevronRight className="w-3 h-3 opacity-30" />}
+            </div>
+          ))}
+
           {/* 大文件警告 */}
           {activeFileInfo?.isLarge && (
-            <div className="flex items-center gap-1 text-status-warning">
+            <div className="ml-auto flex items-center gap-1 text-status-warning">
               <AlertTriangle className="w-3 h-3" />
               <span>{getLargeFileWarning(activeFileInfo, language)}</span>
             </div>
@@ -922,7 +959,7 @@ export default function Editor() {
         }
 
         return (
-          <div className="absolute inset-0 z-50 flex flex-col bg-editor-bg">
+          <div className="absolute inset-0 z-50 flex flex-col bg-background">
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-2 border-b border-border-subtle bg-surface/50">
               <div className="flex items-center gap-2">
@@ -956,7 +993,7 @@ export default function Editor() {
                 language={getLanguage(activeDiff.filePath)}
                 original={activeDiff.original}
                 modified={activeDiff.modified}
-                theme="vs-dark"
+                theme="adnify-dynamic"
                 options={{
                   readOnly: true,
                   renderSideBySide: true,
@@ -981,7 +1018,7 @@ export default function Editor() {
                       await undoChange(activeDiff.filePath)
                       closeDiff()
                     }}
-                    className="px-4 py-2 text-sm font-medium text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                    className="px-4 py-2 text-sm font-medium text-text-muted hover:text-status-error hover:bg-status-error/10 rounded-md transition-colors"
                   >
                     {t('rejectChanges', language)}
                   </button>
@@ -991,7 +1028,7 @@ export default function Editor() {
                       updateFileContent(activeDiff.filePath, activeDiff.modified)
                       closeDiff()
                     }}
-                    className="px-4 py-2 text-sm font-medium bg-green-500 text-white hover:bg-green-600 rounded-md transition-colors"
+                    className="px-4 py-2 text-sm font-medium bg-status-success text-white hover:bg-status-success/90 rounded-md transition-colors"
                   >
                     {t('acceptChanges', language)}
                   </button>
@@ -1043,7 +1080,7 @@ export default function Editor() {
               language={activeLanguage}
               original={activeFile.originalContent}
               modified={activeFile.content}
-              theme="vs-dark"
+              theme="adnify-dynamic"
               onMount={(editor, monaco) => {
                 // Hook up the modified editor to our existing refs so commands work
                 const modifiedEditor = editor.getModifiedEditor()
@@ -1076,7 +1113,7 @@ export default function Editor() {
               path={monaco.Uri.file(activeFile.path).toString()}
               language={activeLanguage}
               value={activeFile.content}
-              theme="vs-dark"
+              theme="adnify-dynamic"
               beforeMount={(monacoInstance) => {
                 // 初始化 TypeScript 语言服务
                 initMonacoTypeService(monacoInstance)

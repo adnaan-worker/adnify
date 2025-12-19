@@ -2,11 +2,12 @@
  * 自定义确认对话框组件
  * 替代原生 window.confirm，支持国际化和自定义样式
  */
-import { useEffect, useRef, useState, useCallback, createContext, useContext, ReactNode } from 'react'
-import { AlertTriangle, X } from 'lucide-react'
+import { useRef, useState, useCallback, createContext, useContext, ReactNode, useEffect } from 'react'
+import { AlertTriangle } from 'lucide-react'
 import { useStore } from '../store'
 import { t } from '../i18n'
-import { keybindingService } from '../services/keybindingService'
+import { Modal } from './ui/Modal'
+import { Button } from './ui/Button'
 
 interface ConfirmDialogProps {
   isOpen: boolean
@@ -30,94 +31,45 @@ export default function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   const { language } = useStore()
-  const dialogRef = useRef<HTMLDivElement>(null)
-
-  // 按 Escape 关闭
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (keybindingService.matches(e, 'list.cancel') && isOpen) {
-        onCancel()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, onCancel])
-
-  // 点击外部关闭
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dialogRef.current && !dialogRef.current.contains(e.target as Node)) {
-        onCancel()
-      }
-    }
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [isOpen, onCancel])
-
-  if (!isOpen) return null
 
   const variantStyles = {
     danger: {
       icon: 'text-red-400 bg-red-500/10',
-      button: 'bg-red-600 hover:bg-red-700',
+      buttonVariant: 'danger' as const,
     },
     warning: {
       icon: 'text-yellow-400 bg-yellow-500/10',
-      button: 'bg-yellow-600 hover:bg-yellow-700',
+      buttonVariant: 'primary' as const,
     },
     info: {
       icon: 'text-blue-400 bg-blue-500/10',
-      button: 'bg-accent hover:bg-accent-hover',
+      buttonVariant: 'primary' as const,
     },
   }
 
   const styles = variantStyles[variant]
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div
-        ref={dialogRef}
-        className="bg-background border border-border-subtle rounded-xl shadow-2xl max-w-md w-full mx-4 animate-scale-in"
-      >
-        <div className="flex items-start gap-4 p-5">
-          <div className={`p-2 rounded-lg ${styles.icon}`}>
-            <AlertTriangle className="w-5 h-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            {title && (
-              <h3 className="text-sm font-semibold text-text-primary mb-1">
-                {title}
-              </h3>
-            )}
-            <p className="text-sm text-text-secondary leading-relaxed">
-              {message}
-            </p>
-          </div>
-          <button
-            onClick={onCancel}
-            className="p-1 hover:bg-surface-hover rounded-lg transition-colors text-text-muted hover:text-text-primary"
-          >
-            <X className="w-4 h-4" />
-          </button>
+    <Modal isOpen={isOpen} onClose={onCancel} title={title} size="sm">
+      <div className="flex items-start gap-4">
+        <div className={`p-2 rounded-lg ${styles.icon}`}>
+          <AlertTriangle className="w-5 h-5" />
         </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border-subtle bg-surface/30">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-hover rounded-lg transition-colors"
-          >
-            {cancelText || t('cancel', language)}
-          </button>
-          <button
-            onClick={onConfirm}
-            className={`px-4 py-2 text-sm text-white rounded-lg transition-colors ${styles.button}`}
-          >
-            {confirmText || 'OK'}
-          </button>
+        <div className="flex-1 min-w-0 pt-1">
+          <p className="text-sm text-text-secondary leading-relaxed">
+            {message}
+          </p>
         </div>
       </div>
-    </div>
+      <div className="flex items-center justify-end gap-2 mt-6">
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          {cancelText || t('cancel', language)}
+        </Button>
+        <Button variant={styles.buttonVariant} size="sm" onClick={onConfirm}>
+          {confirmText || 'OK'}
+        </Button>
+      </div>
+    </Modal>
   )
 }
 

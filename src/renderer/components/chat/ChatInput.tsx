@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { useStore, ChatMode } from '../../store'
 import { t } from '../../i18n'
+import { Button } from '../ui'
 
 export interface PendingImage {
   id: string
@@ -208,13 +209,14 @@ export default function ChatInput({
                 e.target.value = ''
               }}
             />
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors"
               title={t('uploadImage', language)}
             >
               <Paperclip className="w-3.5 h-3.5" />
-            </button>
+            </Button>
 
             <button
               onClick={isStreaming ? onAbort : onSubmit}

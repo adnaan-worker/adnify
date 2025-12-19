@@ -3,10 +3,8 @@
  * 支持 success、error、warning、info 四种类型
  */
 
-import { useEffect, useState, useCallback, createContext, useContext, ReactNode } from 'react'
-import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react'
-
-export type ToastType = 'success' | 'error' | 'warning' | 'info'
+import { useState, useCallback, createContext, useContext, ReactNode } from 'react'
+import { Toast, ToastType } from './ui/Toast'
 
 export interface ToastMessage {
   id: string
@@ -32,106 +30,6 @@ interface ToastContextType {
 
 const ToastContext = createContext<ToastContextType | null>(null)
 
-// Toast 图标配置
-const TOAST_ICONS = {
-  success: CheckCircle,
-  error: XCircle,
-  warning: AlertTriangle,
-  info: Info,
-}
-
-// Toast 样式配置
-const TOAST_STYLES = {
-  success: {
-    bg: 'bg-status-success/10',
-    border: 'border-status-success/30',
-    icon: 'text-status-success',
-    title: 'text-status-success',
-  },
-  error: {
-    bg: 'bg-status-error/10',
-    border: 'border-status-error/30',
-    icon: 'text-status-error',
-    title: 'text-status-error',
-  },
-  warning: {
-    bg: 'bg-status-warning/10',
-    border: 'border-status-warning/30',
-    icon: 'text-status-warning',
-    title: 'text-status-warning',
-  },
-  info: {
-    bg: 'bg-accent/10',
-    border: 'border-accent/30',
-    icon: 'text-accent',
-    title: 'text-accent',
-  },
-}
-
-// 默认持续时间
-const DEFAULT_DURATION = {
-  success: 3000,
-  error: 5000,
-  warning: 4000,
-  info: 3000,
-}
-
-// 单个 Toast 组件
-function ToastItem({ toast, onRemove }: { toast: ToastMessage; onRemove: () => void }) {
-  const [isExiting, setIsExiting] = useState(false)
-  const Icon = TOAST_ICONS[toast.type]
-  const styles = TOAST_STYLES[toast.type]
-
-  const handleRemove = useCallback(() => {
-    setIsExiting(true)
-    setTimeout(onRemove, 200)
-  }, [onRemove])
-
-  useEffect(() => {
-    if (toast.duration !== 0) {
-      const duration = toast.duration || DEFAULT_DURATION[toast.type]
-      const timer = setTimeout(handleRemove, duration)
-      return () => clearTimeout(timer)
-    }
-  }, [toast.duration, toast.type, handleRemove])
-
-  return (
-    <div
-      className={`
-        flex items-start gap-3 p-4 rounded-lg border shadow-lg backdrop-blur-sm
-        ${styles.bg} ${styles.border}
-        transition-all duration-200 ease-out
-        ${isExiting ? 'opacity-0 translate-x-4' : 'opacity-100 translate-x-0'}
-        animate-slide-in
-      `}
-    >
-      <Icon className={`w-5 h-5 flex-shrink-0 mt-0.5 ${styles.icon}`} />
-      
-      <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium ${styles.title}`}>{toast.title}</p>
-        {toast.message && (
-          <p className="text-xs text-text-muted mt-1 break-words">{toast.message}</p>
-        )}
-        {toast.action && (
-          <button
-            onClick={() => { toast.action?.onClick(); handleRemove() }}
-            className="text-xs text-accent hover:underline mt-2"
-          >
-            {toast.action.label}
-          </button>
-        )}
-      </div>
-
-      <button
-        onClick={handleRemove}
-        className="p-1 rounded hover:bg-surface-hover transition-colors flex-shrink-0"
-      >
-        <X className="w-4 h-4 text-text-muted" />
-      </button>
-    </div>
-  )
-}
-
 // Toast 容器组件
 function ToastContainer({ toasts, removeToast }: { toasts: ToastMessage[]; removeToast: (id: string) => void }) {
   if (toasts.length === 0) return null
@@ -140,7 +38,15 @@ function ToastContainer({ toasts, removeToast }: { toasts: ToastMessage[]; remov
     <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
       {toasts.map((toast) => (
         <div key={toast.id} className="pointer-events-auto">
-          <ToastItem toast={toast} onRemove={() => removeToast(toast.id)} />
+          <Toast
+            id={toast.id}
+            type={toast.type}
+            title={toast.title}
+            message={toast.message}
+            duration={toast.duration}
+            action={toast.action}
+            onDismiss={removeToast}
+          />
         </div>
       ))}
     </div>

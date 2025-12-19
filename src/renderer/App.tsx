@@ -25,7 +25,6 @@ import { useAgentStore } from './agent/core/AgentStore'
 import { keybindingService } from './services/keybindingService'
 import { registerCoreCommands } from './config/commands'
 import { LAYOUT_LIMITS } from '../shared/constants'
-import noiseSvg from './assets/images/noise.svg'
 
 // 懒加载大组件以优化首屏性能
 const ComposerPanel = lazy(() => import('./components/ComposerPanel'))
@@ -291,12 +290,8 @@ function AppContent() {
   }, [handleGlobalKeyDown])
 
   return (
-    <div className="h-screen flex flex-col bg-background overflow-hidden text-text-primary selection:bg-accent/30 selection:text-white relative">
-      <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-black pointer-events-none z-0" />
-      <div
-        className="absolute inset-0 opacity-[0.03] pointer-events-none z-0 mix-blend-overlay"
-        style={{ backgroundImage: `url(${noiseSvg})` }}
-      />
+    <div className="h-screen flex flex-col bg-transparent overflow-hidden text-text-primary selection:bg-accent/30 selection:text-white relative">
+      {/* Background is handled by globals.css body style for better performance and consistency */}
 
       <div className="relative z-10 flex flex-col h-full">
         <TitleBar />

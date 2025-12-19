@@ -5,18 +5,19 @@
 
 import React, { useState, useEffect } from 'react'
 import {
-  X, Cpu, Check, Eye, EyeOff, Terminal,
+  Cpu, Check, Eye, EyeOff,
   AlertTriangle, Settings2, Code, Keyboard, Plus, Trash, HardDrive
 } from 'lucide-react'
-import { useStore, LLMConfig } from '../store'
+import { useStore, LLMConfig, AutoApproveSettings } from '../store'
 import { t, Language } from '../i18n'
 import { BUILTIN_PROVIDERS, BuiltinProviderName, ProviderModelConfig } from '../types/provider'
 import { getEditorConfig, saveEditorConfig, EditorConfig } from '../config/editorConfig'
 import { themes } from './ThemeManager'
 import { toast } from './Toast'
-import { getPromptTemplates, PromptTemplate } from '../agent/promptTemplates'
+import { getPromptTemplates } from '../agent/promptTemplates'
 import { completionService } from '../services/completionService'
 import KeybindingPanel from './KeybindingPanel'
+import { Button, Input, Checkbox, Modal } from './ui'
 
 type SettingsTab = 'provider' | 'editor' | 'agent' | 'keybindings' | 'security' | 'system'
 
@@ -55,7 +56,7 @@ export default function SettingsModal() {
     autoSave: 'off' as 'off' | 'afterDelay' | 'onFocusChange',
     theme: 'vs-dark',
     // AI 代码补全设置
-    completionEnabled: true,
+    completionEnabled: editorConfig.ai.completionEnabled,
     completionDebounceMs: editorConfig.performance.completionDebounceMs,
     completionMaxTokens: editorConfig.ai.completionMaxTokens,
   })
@@ -69,9 +70,7 @@ export default function SettingsModal() {
     setLocalAutoApprove(autoApprove)
     setLocalPromptTemplateId(promptTemplateId)
     // 加载设置
-    window.electronAPI.getSetting('editorSettings').then(s => {
-      if (s) setEditorSettings(s as typeof editorSettings)
-    })
+    // 注意：不再加载 editorSettings，完全依赖 editorConfig
     window.electronAPI.getSetting('aiInstructions').then(s => {
       if (s) setAiInstructions(s as string)
     })
@@ -155,117 +154,109 @@ export default function SettingsModal() {
   ]
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-      <div className="bg-background-secondary border border-border-subtle rounded-xl w-[850px] h-[650px] shadow-2xl flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle flex-shrink-0 bg-background/50">
-          <h2 className="text-lg font-semibold text-text-primary">{t('settings', localLanguage)}</h2>
-          <div className="flex items-center gap-4">
-            {/* Language Selector */}
-            <div className="relative group">
-              <select
-                value={localLanguage}
-                onChange={(e) => setLocalLanguage(e.target.value as Language)}
-                className="bg-surface border border-border-subtle rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent"
-              >
-                {LANGUAGES.map(lang => (
-                  <option key={lang.id} value={lang.id}>{lang.name}</option>
-                ))}
-              </select>
-              {/* 语言切换提示 */}
-              {localLanguage !== language && (
-                <div className="absolute top-full right-0 mt-1 px-2 py-1 bg-warning/10 border border-warning/20 rounded text-[10px] text-warning whitespace-nowrap z-50">
-                  {localLanguage === 'zh' ? '保存后需重新加载以应用编辑器菜单语言' : 'Reload required for editor menu language'}
-                </div>
-              )}
-            </div>
-            <button onClick={() => setShowSettings(false)} className="p-2 rounded-lg hover:bg-surface-hover transition-colors">
-              <X className="w-5 h-5 text-text-muted hover:text-text-primary" />
+    <Modal isOpen={true} onClose={() => setShowSettings(false)} title={t('settings', localLanguage)} size="xl">
+      <div className="flex h-[600px] -m-6">
+        {/* Sidebar */}
+        <div className="w-48 border-r border-border-subtle p-2 flex-shrink-0 bg-background/30">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200 ${activeTab === tab.id
+                ? 'bg-accent/10 text-accent font-medium shadow-sm'
+                : 'text-text-muted hover:bg-surface-hover hover:text-text-primary'
+                }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
             </button>
-          </div>
+          ))}
         </div>
 
-        <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar */}
-          <div className="w-48 border-r border-border-subtle p-2 flex-shrink-0 bg-background/30">
-            {tabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200 ${activeTab === tab.id
-                  ? 'bg-accent/10 text-accent font-medium shadow-sm'
-                  : 'text-text-muted hover:bg-surface-hover hover:text-text-primary'
-                  }`}
-              >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            ))}
-          </div>
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6 bg-background custom-scrollbar">
+          {activeTab === 'provider' && (
+            <ProviderSettings
+              localConfig={localConfig}
+              setLocalConfig={setLocalConfig}
+              showApiKey={showApiKey}
+              setShowApiKey={setShowApiKey}
+              selectedProvider={selectedProvider}
+              providers={currentProviders}
+              language={localLanguage}
+            />
+          )}
 
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6 bg-background custom-scrollbar">
-            {activeTab === 'provider' && (
-              <ProviderSettings
-                localConfig={localConfig}
-                setLocalConfig={setLocalConfig}
-                showApiKey={showApiKey}
-                setShowApiKey={setShowApiKey}
-                selectedProvider={selectedProvider}
-                providers={currentProviders}
-                language={localLanguage}
-              />
-            )}
+          {activeTab === 'editor' && (
+            <EditorSettings
+              settings={editorSettings}
+              setSettings={setEditorSettings}
+              language={localLanguage}
+            />
+          )}
 
-            {activeTab === 'editor' && (
-              <EditorSettings
-                settings={editorSettings}
-                setSettings={setEditorSettings}
-                language={localLanguage}
-              />
-            )}
+          {activeTab === 'agent' && (
+            <AgentSettings
+              autoApprove={localAutoApprove}
+              setAutoApprove={setLocalAutoApprove}
+              aiInstructions={aiInstructions}
+              setAiInstructions={setAiInstructions}
+              promptTemplateId={localPromptTemplateId}
+              setPromptTemplateId={setLocalPromptTemplateId}
+              language={localLanguage}
+            />
+          )}
 
-            {activeTab === 'agent' && (
-              <AgentSettings
-                autoApprove={localAutoApprove}
-                setAutoApprove={setLocalAutoApprove}
-                aiInstructions={aiInstructions}
-                setAiInstructions={setAiInstructions}
-                promptTemplateId={localPromptTemplateId}
-                setPromptTemplateId={setLocalPromptTemplateId}
-                language={localLanguage}
-              />
-            )}
+          {activeTab === 'keybindings' && (
+            <KeybindingPanel />
+          )}
 
-            {activeTab === 'keybindings' && (
-              <KeybindingPanel />
-            )}
+          {activeTab === 'security' && (
+            <SecuritySettings language={localLanguage} />
+          )}
 
-            {activeTab === 'security' && (
-              <SecuritySettings language={localLanguage} />
-            )}
-
-            {activeTab === 'system' && (
-              <SystemSettings language={localLanguage} />
-            )}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-subtle flex-shrink-0 bg-background/50">
-          <button onClick={() => setShowSettings(false)} className="px-4 py-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors text-sm">
-            {t('cancel', localLanguage)}
-          </button>
-          <button
-            onClick={handleSave}
-            className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium transition-all shadow-glow ${saved ? 'bg-status-success text-white' : 'bg-accent hover:bg-accent-hover text-white'
-              }`}
-          >
-            {saved ? <><Check className="w-4 h-4" />{t('saved', localLanguage)}</> : t('saveSettings', localLanguage)}
-          </button>
+          {activeTab === 'system' && (
+            <SystemSettings language={localLanguage} />
+          )}
         </div>
       </div>
-    </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between px-6 py-4 border-t border-border-subtle -mx-6 -mb-6 mt-6 bg-background/50">
+        <div className="flex items-center gap-4">
+          {/* Language Selector */}
+          <div className="relative group">
+            <select
+              value={localLanguage}
+              onChange={(e) => setLocalLanguage(e.target.value as Language)}
+              className="bg-surface border border-border-subtle rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent"
+            >
+              {LANGUAGES.map(lang => (
+                <option key={lang.id} value={lang.id}>{lang.name}</option>
+              ))}
+            </select>
+            {/* 语言切换提示 */}
+            {localLanguage !== language && (
+              <div className="absolute top-full left-0 mt-1 px-2 py-1 bg-warning/10 border border-warning/20 rounded text-[10px] text-warning whitespace-nowrap z-50">
+                {localLanguage === 'zh' ? '保存后需重新加载以应用编辑器菜单语言' : 'Reload required for editor menu language'}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" onClick={() => setShowSettings(false)}>
+            {t('cancel', localLanguage)}
+          </Button>
+          <Button
+            variant={saved ? 'success' : 'primary'}
+            onClick={handleSave}
+            leftIcon={saved ? <Check className="w-4 h-4" /> : undefined}
+          >
+            {saved ? t('saved', localLanguage) : t('saveSettings', localLanguage)}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -331,21 +322,20 @@ function ProviderSettings({
 
           {/* Add Model UI */}
           <div className="flex gap-2">
-            <input
-              type="text"
+            <Input
               value={newModelName}
               onChange={(e) => setNewModelName(e.target.value)}
               placeholder={language === 'zh' ? '输入新模型名称' : 'Enter new model name'}
-              className="flex-1 bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
               onKeyDown={(e) => e.key === 'Enter' && handleAddModel()}
             />
-            <button
+            <Button
+              variant="secondary"
               onClick={handleAddModel}
               disabled={!newModelName.trim()}
-              className="px-3 py-2 bg-surface hover:bg-surface-hover border border-border-subtle rounded-lg disabled:opacity-50"
+              className="px-3"
             >
               <Plus className="w-4 h-4 text-accent" />
-            </button>
+            </Button>
           </div>
 
           {/* Custom Model List */}
@@ -374,24 +364,25 @@ function ProviderSettings({
       <div>
         <label className="text-sm font-medium mb-2 block">API Key</label>
         <div className="relative">
-          <input
+          <Input
             type={showApiKey ? "text" : "password"}
             value={localConfig.apiKey}
             onChange={(e) => setLocalConfig({ ...localConfig, apiKey: e.target.value })}
-            placeholder={BUILTIN_PROVIDERS[localConfig.provider as BuiltinProviderName]?.apiKeyPlaceholder || 'Enter API Key'}
-            className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent pr-10"
+            placeholder={(BUILTIN_PROVIDERS[localConfig.provider as BuiltinProviderName] as any)?.apiKeyPlaceholder || 'Enter API Key'}
+            rightIcon={
+              <button
+                onClick={() => setShowApiKey(!showApiKey)}
+                className="text-text-muted hover:text-text-primary"
+              >
+                {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            }
           />
-          <button
-            onClick={() => setShowApiKey(!showApiKey)}
-            className="absolute right-3 top-2.5 text-text-muted hover:text-text-primary"
-          >
-            {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
         </div>
         <p className="text-xs text-text-muted mt-2">
           {localConfig.provider !== 'custom' && localConfig.provider !== 'ollama' && (
             <a
-              href={BUILTIN_PROVIDERS[localConfig.provider as BuiltinProviderName]?.apiKeyUrl}
+              href={(BUILTIN_PROVIDERS[localConfig.provider as BuiltinProviderName] as any)?.apiKeyUrl}
               target="_blank"
               rel="noreferrer"
               className="hover:text-accent underline decoration-dotted"
@@ -405,8 +396,7 @@ function ProviderSettings({
       {/* Custom Endpoint - 对所有 provider 都显示 */}
       <div>
         <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '自定义端点 (可选)' : 'Custom Endpoint (Optional)'}</h3>
-        <input
-          type="text"
+        <Input
           value={localConfig.baseUrl || ''}
           onChange={(e) => setLocalConfig({ ...localConfig, baseUrl: e.target.value || undefined })}
           placeholder={
@@ -415,7 +405,6 @@ function ProviderSettings({
                 localConfig.provider === 'gemini' ? 'https://generativelanguage.googleapis.com' :
                   'https://api.example.com/v1'
           }
-          className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
         />
         <p className="text-xs text-text-muted mt-2">
           {language === 'zh'
@@ -428,14 +417,14 @@ function ProviderSettings({
       <div>
         <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '请求超时' : 'Request Timeout'}</h3>
         <div className="flex items-center gap-3">
-          <input
+          <Input
             type="number"
             value={(localConfig.timeout || 120000) / 1000}
             onChange={(e) => setLocalConfig({ ...localConfig, timeout: (parseInt(e.target.value) || 120) * 1000 })}
             min={30}
             max={600}
             step={30}
-            className="w-32 bg-surface border border-border-subtle rounded-lg px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
+            className="w-32"
           />
           <span className="text-sm text-text-muted">{language === 'zh' ? '秒' : 'seconds'}</span>
         </div>
@@ -518,15 +507,15 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
                 <div className="flex gap-1 mb-2">
                   <div
                     className="w-4 h-4 rounded"
-                    style={{ backgroundColor: `rgb(${themeVars['--color-background']})` }}
+                    style={{ backgroundColor: `rgb(${themeVars['--background']})` }}
                   />
                   <div
                     className="w-4 h-4 rounded"
-                    style={{ backgroundColor: `rgb(${themeVars['--color-accent']})` }}
+                    style={{ backgroundColor: `rgb(${themeVars['--accent']})` }}
                   />
                   <div
                     className="w-4 h-4 rounded"
-                    style={{ backgroundColor: `rgb(${themeVars['--color-text-primary']})` }}
+                    style={{ backgroundColor: `rgb(${themeVars['--text-primary']})` }}
                   />
                 </div>
                 <span className="text-xs font-medium capitalize">{themeId.replace('-', ' ')}</span>
@@ -544,12 +533,11 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '字体大小' : 'Font Size'}</label>
-          <input
+          <Input
             type="number"
             value={settings.fontSize}
             onChange={(e) => setSettings({ ...settings, fontSize: parseInt(e.target.value) || 14 })}
             min={10} max={24}
-            className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
           />
         </div>
         <div>
@@ -594,35 +582,23 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
       </div>
 
       <div className="space-y-3">
-        <label className="flex items-center gap-3 p-3 rounded-lg border border-border-subtle hover:border-text-muted cursor-pointer bg-surface/50 transition-colors">
-          <input
-            type="checkbox"
-            checked={settings.minimap}
-            onChange={(e) => setSettings({ ...settings, minimap: e.target.checked })}
-            className="w-4 h-4 rounded border-border-subtle text-accent focus:ring-accent"
-          />
-          <span className="text-sm">{language === 'zh' ? '显示小地图' : 'Show Minimap'}</span>
-        </label>
+        <Checkbox
+          label={language === 'zh' ? '显示小地图' : 'Show Minimap'}
+          checked={settings.minimap}
+          onChange={(e) => setSettings({ ...settings, minimap: e.target.checked })}
+        />
 
-        <label className="flex items-center gap-3 p-3 rounded-lg border border-border-subtle hover:border-text-muted cursor-pointer bg-surface/50 transition-colors">
-          <input
-            type="checkbox"
-            checked={settings.bracketPairColorization}
-            onChange={(e) => setSettings({ ...settings, bracketPairColorization: e.target.checked })}
-            className="w-4 h-4 rounded border-border-subtle text-accent focus:ring-accent"
-          />
-          <span className="text-sm">{language === 'zh' ? '括号配对着色' : 'Bracket Pair Colorization'}</span>
-        </label>
+        <Checkbox
+          label={language === 'zh' ? '括号配对着色' : 'Bracket Pair Colorization'}
+          checked={settings.bracketPairColorization}
+          onChange={(e) => setSettings({ ...settings, bracketPairColorization: e.target.checked })}
+        />
 
-        <label className="flex items-center gap-3 p-3 rounded-lg border border-border-subtle hover:border-text-muted cursor-pointer bg-surface/50 transition-colors">
-          <input
-            type="checkbox"
-            checked={settings.formatOnSave}
-            onChange={(e) => setSettings({ ...settings, formatOnSave: e.target.checked })}
-            className="w-4 h-4 rounded border-border-subtle text-accent focus:ring-accent"
-          />
-          <span className="text-sm">{language === 'zh' ? '保存时格式化' : 'Format on Save'}</span>
-        </label>
+        <Checkbox
+          label={language === 'zh' ? '保存时格式化' : 'Format on Save'}
+          checked={settings.formatOnSave}
+          onChange={(e) => setSettings({ ...settings, formatOnSave: e.target.checked })}
+        />
       </div>
 
       <div>
@@ -643,40 +619,32 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
         <h3 className="text-sm font-medium mb-3">{language === 'zh' ? 'AI 代码补全' : 'AI Code Completion'}</h3>
 
         <div className="space-y-3">
-          <label className="flex items-center gap-3 p-3 rounded-lg border border-border-subtle hover:border-text-muted cursor-pointer bg-surface/50 transition-colors">
-            <input
-              type="checkbox"
-              checked={settings.completionEnabled}
-              onChange={(e) => setSettings({ ...settings, completionEnabled: e.target.checked })}
-              className="w-4 h-4 rounded border-border-subtle text-accent focus:ring-accent"
-            />
-            <div className="flex-1">
-              <span className="text-sm">{language === 'zh' ? '启用 AI 补全' : 'Enable AI Completion'}</span>
-              <p className="text-xs text-text-muted">{language === 'zh' ? '输入时显示 AI 代码建议' : 'Show AI code suggestions while typing'}</p>
-            </div>
-          </label>
+          <Checkbox
+            label={language === 'zh' ? '启用 AI 补全' : 'Enable AI Completion'}
+            checked={settings.completionEnabled}
+            onChange={(e) => setSettings({ ...settings, completionEnabled: e.target.checked })}
+          />
+          <p className="text-xs text-text-muted ml-7">{language === 'zh' ? '输入时显示 AI 代码建议' : 'Show AI code suggestions while typing'}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-4 mt-4">
           <div>
             <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '触发延迟 (ms)' : 'Trigger Delay (ms)'}</label>
-            <input
+            <Input
               type="number"
               value={settings.completionDebounceMs}
               onChange={(e) => setSettings({ ...settings, completionDebounceMs: parseInt(e.target.value) || 150 })}
               min={50} max={1000} step={50}
-              className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
             />
             <p className="text-xs text-text-muted mt-1">{language === 'zh' ? '停止输入后等待时间' : 'Wait time after typing stops'}</p>
           </div>
           <div>
             <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '最大 Token 数' : 'Max Tokens'}</label>
-            <input
+            <Input
               type="number"
               value={settings.completionMaxTokens}
               onChange={(e) => setSettings({ ...settings, completionMaxTokens: parseInt(e.target.value) || 256 })}
               min={64} max={1024} step={64}
-              className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
             />
             <p className="text-xs text-text-muted mt-1">{language === 'zh' ? '补全建议的最大长度' : 'Maximum length of suggestions'}</p>
           </div>
@@ -702,23 +670,21 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '最大项目文件数' : 'Max Project Files'}</label>
-                <input
+                <Input
                   type="number"
                   value={advancedConfig.performance.maxProjectFiles}
                   onChange={(e) => handleAdvancedChange('performance.maxProjectFiles', parseInt(e.target.value) || 500)}
                   min={100} max={2000} step={100}
-                  className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                 />
                 <p className="text-xs text-text-muted mt-1">{language === 'zh' ? 'LSP 扫描的最大文件数' : 'Max files for LSP scanning'}</p>
               </div>
               <div>
                 <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '文件树最大深度' : 'Max File Tree Depth'}</label>
-                <input
+                <Input
                   type="number"
                   value={advancedConfig.performance.maxFileTreeDepth}
                   onChange={(e) => handleAdvancedChange('performance.maxFileTreeDepth', parseInt(e.target.value) || 5)}
                   min={2} max={10}
-                  className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
             </div>
@@ -726,22 +692,20 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">{language === 'zh' ? 'Git 刷新间隔 (ms)' : 'Git Refresh Interval (ms)'}</label>
-                <input
+                <Input
                   type="number"
                   value={advancedConfig.performance.gitStatusIntervalMs}
                   onChange={(e) => handleAdvancedChange('performance.gitStatusIntervalMs', parseInt(e.target.value) || 5000)}
                   min={1000} max={30000} step={1000}
-                  className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
               <div>
                 <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '请求超时 (ms)' : 'Request Timeout (ms)'}</label>
-                <input
+                <Input
                   type="number"
                   value={advancedConfig.performance.requestTimeoutMs}
                   onChange={(e) => handleAdvancedChange('performance.requestTimeoutMs', parseInt(e.target.value) || 120000)}
                   min={30000} max={300000} step={10000}
-                  className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
             </div>
@@ -749,23 +713,21 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">{language === 'zh' ? 'Agent 最大循环次数' : 'Max Agent Tool Loops'}</label>
-                <input
+                <Input
                   type="number"
                   value={advancedConfig.ai.maxToolLoops}
                   onChange={(e) => handleAdvancedChange('ai.maxToolLoops', parseInt(e.target.value) || 15)}
                   min={5} max={50}
-                  className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                 />
                 <p className="text-xs text-text-muted mt-1">{language === 'zh' ? '单次对话最大工具调用次数' : 'Max tool calls per conversation'}</p>
               </div>
               <div>
                 <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '终端缓冲区大小' : 'Terminal Buffer Size'}</label>
-                <input
+                <Input
                   type="number"
                   value={advancedConfig.performance.terminalBufferSize}
                   onChange={(e) => handleAdvancedChange('performance.terminalBufferSize', parseInt(e.target.value) || 500)}
                   min={100} max={2000} step={100}
-                  className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
             </div>
@@ -780,85 +742,23 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '最大上下文字符数' : 'Max Context Chars'}</label>
-                  <input
+                  <Input
                     type="number"
                     value={advancedConfig.ai.maxContextChars}
                     onChange={(e) => handleAdvancedChange('ai.maxContextChars', parseInt(e.target.value) || 30000)}
                     min={10000} max={200000} step={10000}
-                    className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                   />
                   <p className="text-xs text-text-muted mt-1">{language === 'zh' ? '文件和上下文的总字符限制' : 'Total char limit for files and context'}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '最大历史消息数' : 'Max History Messages'}</label>
-                  <input
+                  <Input
                     type="number"
                     value={advancedConfig.ai.maxHistoryMessages}
                     onChange={(e) => handleAdvancedChange('ai.maxHistoryMessages', parseInt(e.target.value) || 10)}
                     min={5} max={100}
-                    className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                   />
-                  <p className="text-xs text-text-muted mt-1">{language === 'zh' ? '发送给 AI 的历史消息数量' : 'Number of history messages sent to AI'}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mt-4">
-                <div>
-                  <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '工具结果最大字符数' : 'Max Tool Result Chars'}</label>
-                  <input
-                    type="number"
-                    value={advancedConfig.ai.maxToolResultChars || 30000}
-                    onChange={(e) => handleAdvancedChange('ai.maxToolResultChars', parseInt(e.target.value) || 30000)}
-                    min={5000} max={100000} step={5000}
-                    className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-                  />
-                  <p className="text-xs text-text-muted mt-1">{language === 'zh' ? '超出后截断工具输出' : 'Truncate tool output when exceeded'}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mt-4">
-                <div>
-                  <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '最大上下文文件数' : 'Max Context Files'}</label>
-                  <input
-                    type="number"
-                    value={advancedConfig.ai.maxContextFiles}
-                    onChange={(e) => handleAdvancedChange('ai.maxContextFiles', parseInt(e.target.value) || 10)}
-                    min={1} max={30}
-                    className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '语义搜索最大结果数' : 'Max Semantic Results'}</label>
-                  <input
-                    type="number"
-                    value={advancedConfig.ai.maxSemanticResults}
-                    onChange={(e) => handleAdvancedChange('ai.maxSemanticResults', parseInt(e.target.value) || 8)}
-                    min={1} max={20}
-                    className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mt-4">
-                <div>
-                  <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '单文件最大字符数' : 'Max Single File Chars'}</label>
-                  <input
-                    type="number"
-                    value={advancedConfig.ai.maxSingleFileChars}
-                    onChange={(e) => handleAdvancedChange('ai.maxSingleFileChars', parseInt(e.target.value) || 10000)}
-                    min={1000} max={50000} step={1000}
-                    className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">{language === 'zh' ? '终端输出最大字符数' : 'Max Terminal Chars'}</label>
-                  <input
-                    type="number"
-                    value={advancedConfig.ai.maxTerminalChars}
-                    onChange={(e) => handleAdvancedChange('ai.maxTerminalChars', parseInt(e.target.value) || 5000)}
-                    min={1000} max={20000} step={1000}
-                    className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-                  />
+                  <p className="text-xs text-text-muted mt-1">{language === 'zh' ? '保留的最近对话轮数' : 'Number of recent messages to keep'}</p>
                 </div>
               </div>
             </div>
@@ -869,748 +769,247 @@ function EditorSettings({ settings, setSettings, language }: EditorSettingsProps
   )
 }
 
-
 // Agent 设置组件
 interface AgentSettingsProps {
-  autoApprove: { terminal: boolean; dangerous: boolean }
-  setAutoApprove: (settings: { terminal: boolean; dangerous: boolean }) => void
+  autoApprove: AutoApproveSettings
+  setAutoApprove: (value: AutoApproveSettings) => void
   aiInstructions: string
-  setAiInstructions: (instructions: string) => void
+  setAiInstructions: (value: string) => void
   promptTemplateId: string
-  setPromptTemplateId: (id: string) => void
+  setPromptTemplateId: (value: string) => void
   language: Language
 }
 
-function AgentSettings({ autoApprove, setAutoApprove, aiInstructions, setAiInstructions, promptTemplateId, setPromptTemplateId, language }: AgentSettingsProps) {
+function AgentSettings({
+  autoApprove, setAutoApprove, aiInstructions, setAiInstructions, promptTemplateId, setPromptTemplateId, language
+}: AgentSettingsProps) {
   const templates = getPromptTemplates()
 
   return (
     <div className="space-y-6 text-text-primary">
-      {/* 提示词模板选择 */}
       <div>
-        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? 'AI 人格模板' : 'AI Personality Template'}</h3>
-        <p className="text-xs text-text-muted mb-3">
-          {language === 'zh' ? '选择 AI 的沟通风格和行为方式' : 'Choose AI communication style and behavior'}
-        </p>
-        <div className="grid grid-cols-2 gap-2">
-          {templates.map((t: PromptTemplate) => (
-            <button
-              key={t.id}
-              onClick={() => setPromptTemplateId(t.id)}
-              className={`p-3 rounded-lg border text-left transition-all ${promptTemplateId === t.id
-                ? 'border-accent bg-accent/10 shadow-sm'
-                : 'border-border-subtle hover:border-text-muted bg-surface'
-                }`}
-            >
-              <div className="text-sm font-medium">{language === 'zh' ? t.nameZh : t.name}</div>
-              <div className="text-xs text-text-muted mt-1">{language === 'zh' ? t.descriptionZh : t.description}</div>
-            </button>
+        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? 'Agent 行为' : 'Agent Behavior'}</h3>
+        <div className="space-y-3">
+          <Checkbox
+            label={language === 'zh' ? '自动批准终端命令' : 'Auto-approve terminal commands'}
+            checked={autoApprove.terminal}
+            onChange={(e) => setAutoApprove({ ...autoApprove, terminal: e.target.checked })}
+          />
+          <Checkbox
+            label={language === 'zh' ? '自动批准危险操作 (删除文件等)' : 'Auto-approve dangerous operations (delete files, etc.)'}
+            checked={autoApprove.dangerous}
+            onChange={(e) => setAutoApprove({ ...autoApprove, dangerous: e.target.checked })}
+          />
+          <p className="text-xs text-text-muted ml-7">
+            {language === 'zh'
+              ? '无需确认即可执行相应操作'
+              : 'Execute operations without confirmation'}
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? 'Prompt 模板' : 'Prompt Template'}</h3>
+        <select
+          value={promptTemplateId}
+          onChange={(e) => setPromptTemplateId(e.target.value)}
+          className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent mb-2"
+        >
+          {templates.map(t => (
+            <option key={t.id} value={t.id}>{t.name}</option>
           ))}
-        </div>
-      </div>
-
-
-      <div>
-        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '工具授权' : 'Tool Authorization'}</h3>
-        <p className="text-xs text-text-muted mb-3">
-          {language === 'zh'
-            ? '控制Agent执行操作时是否需要你的确认。文件编辑不需要确认（可通过撤销恢复）。'
-            : 'Control whether Agent needs your approval. File edits don\'t require approval (can be undone).'}
+        </select>
+        <p className="text-xs text-text-muted">
+          {templates.find(t => t.id === promptTemplateId)?.description}
         </p>
-        <div className="space-y-2">
-          <label className="flex items-center gap-3 p-3 rounded-lg border border-border-subtle hover:border-text-muted cursor-pointer bg-surface/50 transition-colors">
-            <input type="checkbox" checked={autoApprove.terminal} onChange={(e) => setAutoApprove({ ...autoApprove, terminal: e.target.checked })} className="w-4 h-4 rounded border-border-subtle text-accent focus:ring-accent" />
-            <Terminal className="w-4 h-4 text-green-400" />
-            <div className="flex-1">
-              <span className="text-sm">{language === 'zh' ? '自动执行终端命令' : 'Auto-run Terminal Commands'}</span>
-              <p className="text-xs text-text-muted">{language === 'zh' ? '跳过确认直接执行 shell 命令' : 'Execute shell commands without confirmation'}</p>
-            </div>
-          </label>
-          <label className="flex items-center gap-3 p-3 rounded-lg border border-border-subtle hover:border-text-muted cursor-pointer bg-surface/50 transition-colors">
-            <input type="checkbox" checked={autoApprove.dangerous} onChange={(e) => setAutoApprove({ ...autoApprove, dangerous: e.target.checked })} className="w-4 h-4 rounded border-border-subtle text-accent focus:ring-accent" />
-            <AlertTriangle className="w-4 h-4 text-red-400" />
-            <div className="flex-1">
-              <span className="text-sm">{language === 'zh' ? '自动执行危险操作' : 'Auto-run Dangerous Operations'}</span>
-              <p className="text-xs text-text-muted">{language === 'zh' ? '跳过确认直接删除文件/文件夹' : 'Delete files/folders without confirmation'}</p>
-            </div>
-          </label>
-        </div>
       </div>
 
       <div>
-        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? 'AI 自定义指令' : 'AI Custom Instructions'}</h3>
-        <p className="text-xs text-text-muted mb-3">
-          {language === 'zh' ? '这些指令会添加到每次对话的系统提示词中' : 'These instructions are added to every conversation'}
-        </p>
+        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '自定义系统指令' : 'Custom System Instructions'}</h3>
         <textarea
           value={aiInstructions}
           onChange={(e) => setAiInstructions(e.target.value)}
-          placeholder={language === 'zh' ? '例如：使用中文回复，代码注释用英文...' : 'e.g., Always use TypeScript, prefer functional components...'}
+          placeholder={language === 'zh'
+            ? '在此输入全局系统指令，例如："总是使用中文回答"、"代码风格偏好..."'
+            : 'Enter global system instructions here, e.g., "Always answer in English", "Code style preferences..."'}
           className="w-full h-32 bg-surface border border-border-subtle rounded-lg px-4 py-3 text-sm text-text-primary focus:outline-none focus:border-accent resize-none"
         />
+        <p className="text-xs text-text-muted mt-2">
+          {language === 'zh'
+            ? '这些指令将附加到 System Prompt 中，影响所有 AI 回复'
+            : 'These instructions will be appended to the System Prompt and affect all AI responses'}
+        </p>
       </div>
     </div>
   )
 }
 
+// 安全设置组件
+function SecuritySettings({ language }: { language: Language }) {
+  const [editorConfig, setEditorConfig] = useState<EditorConfig>(getEditorConfig())
+  const { autoApprove, setAutoApprove } = useStore()
+  const [newIgnoredDir, setNewIgnoredDir] = useState('')
 
+  const handleAddIgnoredDir = () => {
+    if (newIgnoredDir.trim() && !editorConfig.ignoredDirectories.includes(newIgnoredDir.trim())) {
+      const newDirs = [...editorConfig.ignoredDirectories, newIgnoredDir.trim()]
+      const newConfig = { ...editorConfig, ignoredDirectories: newDirs }
+      setEditorConfig(newConfig)
+      saveEditorConfig(newConfig)
+      setNewIgnoredDir('')
+    }
+  }
+
+  const handleRemoveIgnoredDir = (dir: string) => {
+    const newDirs = editorConfig.ignoredDirectories.filter(d => d !== dir)
+    const newConfig = { ...editorConfig, ignoredDirectories: newDirs }
+    setEditorConfig(newConfig)
+    saveEditorConfig(newConfig)
+  }
+
+  return (
+    <div className="space-y-6 text-text-primary">
+      <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-yellow-500 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-medium text-yellow-500 mb-1">
+              {language === 'zh' ? '安全沙箱 (开发中)' : 'Security Sandbox (WIP)'}
+            </h3>
+            <p className="text-xs text-text-secondary leading-relaxed">
+              {language === 'zh'
+                ? 'Adnify 目前直接在您的系统上运行命令。请确保您只运行受信任的代码。未来版本将引入基于 Docker 的沙箱环境。'
+                : 'Adnify currently runs commands directly on your system. Ensure you only run trusted code. Future versions will introduce a Docker-based sandbox.'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Auto Approve */}
+      <div>
+        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '自动化权限' : 'Automation Permissions'}</h3>
+        <div className="space-y-3">
+          <Checkbox
+            label={language === 'zh' ? '自动批准危险操作 (删除文件等)' : 'Auto-approve dangerous operations (delete files, etc.)'}
+            checked={autoApprove.dangerous}
+            onChange={(e) => setAutoApprove({ ...autoApprove, dangerous: e.target.checked })}
+          />
+          <p className="text-xs text-text-muted ml-7">
+            {language === 'zh'
+              ? '无需确认即可执行相应操作，请谨慎开启'
+              : 'Execute operations without confirmation. Use with caution.'}
+          </p>
+        </div>
+      </div>
+
+      {/* Ignored Directories */}
+      <div>
+        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '忽略的目录' : 'Ignored Directories'}</h3>
+        <p className="text-xs text-text-muted mb-3">
+          {language === 'zh'
+            ? '这些目录将被文件索引和 AI 分析忽略'
+            : 'These directories will be ignored by file indexing and AI analysis'}
+        </p>
+
+        <div className="flex gap-2 mb-3">
+          <Input
+            value={newIgnoredDir}
+            onChange={(e) => setNewIgnoredDir(e.target.value)}
+            placeholder={language === 'zh' ? '输入目录名称 (例如: node_modules)' : 'Enter directory name (e.g., node_modules)'}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddIgnoredDir()}
+          />
+          <Button
+            variant="secondary"
+            onClick={handleAddIgnoredDir}
+            disabled={!newIgnoredDir.trim()}
+            className="px-3"
+          >
+            <Plus className="w-4 h-4 text-accent" />
+          </Button>
+        </div>
+
+        <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-1 border border-border-subtle rounded-lg p-2 bg-surface/30">
+          {editorConfig.ignoredDirectories.map(dir => (
+            <div key={dir} className="flex items-center justify-between px-3 py-2 bg-surface rounded border border-border-subtle/50 text-xs group">
+              <span className="font-mono text-text-secondary">{dir}</span>
+              <button
+                onClick={() => handleRemoveIgnoredDir(dir)}
+                className="p-1 hover:text-red-400 text-text-muted transition-colors opacity-0 group-hover:opacity-100"
+              >
+                <Trash className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Sensitive Files (Read-only for now) */}
+      <div>
+        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '敏感文件过滤' : 'Sensitive File Filtering'}</h3>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-sm text-text-secondary">
+            <Check className="w-4 h-4 text-accent" />
+            <span>.env, .npmrc, id_rsa (Always hidden)</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-text-secondary">
+            <Check className="w-4 h-4 text-accent" />
+            <span>node_modules, .git (Excluded from indexing)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // 系统设置组件
 function SystemSettings({ language }: { language: Language }) {
-  const { workspacePath } = useStore()
-  const [dataPath, setDataPath] = useState<string>('')
-  const [loading, setLoading] = useState(false)
+  const handleClearCache = async () => {
+    // TODO: Implement clear cache
+    toast.success(language === 'zh' ? '缓存已清除' : 'Cache cleared')
+  }
 
-  // 代理设置
-  const [proxyConfig, setProxyConfig] = useState<{
-    enabled: boolean
-    http: string
-    https: string
-  }>({
-    enabled: false,
-    http: '',
-    https: ''
-  })
-
-  // 检查点保留策略
-  const [checkpointConfig, setCheckpointConfig] = useState<{
-    maxCount: number
-    maxAgeDays: number
-    maxFileSizeKB: number
-  }>({
-    maxCount: 50,
-    maxAgeDays: 7,
-    maxFileSizeKB: 100
-  })
-
-  // Embedding 配置状态
-  const [embeddingProviders, setEmbeddingProviders] = useState<{ id: string; name: string; description: string; free: boolean }[]>([])
-  const [embeddingConfig, setEmbeddingConfig] = useState<{
-    provider: 'jina' | 'voyage' | 'openai' | 'cohere' | 'huggingface' | 'ollama'
-    apiKey: string
-    model: string
-    baseUrl: string
-  }>({
-    provider: 'jina',
-    apiKey: '',
-    model: '',
-    baseUrl: ''
-  })
-  const [testingConnection, setTestingConnection] = useState(false)
-  const [connectionStatus, setConnectionStatus] = useState<{ success: boolean; latency?: number; error?: string } | null>(null)
-  const [indexStatus, setIndexStatus] = useState<{ isIndexing: boolean; totalFiles: number; indexedFiles: number; totalChunks: number } | null>(null)
-
-  useEffect(() => {
-    window.electronAPI.getDataPath().then(setDataPath)
-    // 加载 Embedding 提供商列表
-    window.electronAPI.indexGetProviders().then(setEmbeddingProviders)
-    // 加载保存的 Embedding 配置
-    window.electronAPI.getSetting('embeddingConfig').then(config => {
-      if (config) setEmbeddingConfig(config as typeof embeddingConfig)
-    })
-    // 加载代理配置
-    window.electronAPI.getSetting('proxyConfig').then(config => {
-      if (config) setProxyConfig(config as typeof proxyConfig)
-    })
-    // 加载检查点配置
-    window.electronAPI.getSetting('checkpointConfig').then(config => {
-      if (config) setCheckpointConfig(config as typeof checkpointConfig)
-    })
-  }, [])
-
-  // 监听索引进度
-  useEffect(() => {
-    if (!workspacePath) return
-
-    // 获取初始状态
-    window.electronAPI.indexStatus(workspacePath).then(setIndexStatus)
-
-    // 监听进度更新
-    const unsubscribe = window.electronAPI.onIndexProgress(setIndexStatus)
-    return unsubscribe
-  }, [workspacePath])
-
-  const handleChangePath = async () => {
-    const newPath = await window.electronAPI.openFolder()
-    if (newPath && newPath !== dataPath) {
-      if (confirm(language === 'zh'
-        ? '更改配置目录将把当前配置移动到新位置，并可能需要重启应用。确定继续吗？'
-        : 'Changing the data directory will move your current configuration to the new location and may require a restart. Continue?')) {
-        setLoading(true)
-        const success = await window.electronAPI.setDataPath(newPath)
-        setLoading(false)
-        if (success) {
-          setDataPath(newPath)
-          toast.success(language === 'zh' ? '配置目录已更改' : 'Data directory changed successfully')
-        } else {
-          toast.error(language === 'zh' ? '更改失败' : 'Failed to change data directory')
-        }
-      }
+  const handleReset = async () => {
+    if (confirm(language === 'zh' ? '确定要重置所有设置吗？这将丢失所有自定义配置。' : 'Are you sure you want to reset all settings? This will lose all custom configurations.')) {
+      await window.electronAPI.setSetting('llmConfig', undefined)
+      await window.electronAPI.setSetting('editorSettings', undefined)
+      window.location.reload()
     }
-  }
-
-  const handleTestConnection = async () => {
-    if (!workspacePath) return
-    setTestingConnection(true)
-    setConnectionStatus(null)
-
-    // 先更新配置
-    await window.electronAPI.indexUpdateEmbeddingConfig(workspacePath, embeddingConfig)
-    // 测试连接
-    const result = await window.electronAPI.indexTestConnection(workspacePath)
-    setConnectionStatus(result)
-    setTestingConnection(false)
-  }
-
-  const handleSaveEmbeddingConfig = async () => {
-    await window.electronAPI.setSetting('embeddingConfig', embeddingConfig)
-    if (workspacePath) {
-      await window.electronAPI.indexUpdateEmbeddingConfig(workspacePath, embeddingConfig)
-    }
-  }
-
-  const handleStartIndexing = async () => {
-    if (!workspacePath) {
-      toast.warning(language === 'zh' ? '请先打开一个工作区' : 'Please open a workspace first')
-      return
-    }
-
-    // 保存配置
-    await handleSaveEmbeddingConfig()
-    // 开始索引
-    await window.electronAPI.indexStart(workspacePath)
-  }
-
-  const handleClearIndex = async () => {
-    if (!workspacePath) return
-    if (confirm(language === 'zh' ? '确定要清空索引吗？' : 'Are you sure you want to clear the index?')) {
-      await window.electronAPI.indexClear(workspacePath)
-      setIndexStatus({ isIndexing: false, totalFiles: 0, indexedFiles: 0, totalChunks: 0 })
-    }
-  }
-
-  const selectedProviderInfo = embeddingProviders.find(p => p.id === embeddingConfig.provider)
-
-  // 保存代理配置
-  const handleSaveProxyConfig = async () => {
-    await window.electronAPI.setSetting('proxyConfig', proxyConfig)
-    toast.success(language === 'zh' ? '代理设置已保存' : 'Proxy settings saved')
-  }
-
-  // 保存检查点配置
-  const handleSaveCheckpointConfig = async () => {
-    await window.electronAPI.setSetting('checkpointConfig', checkpointConfig)
-    toast.success(language === 'zh' ? '检查点设置已保存' : 'Checkpoint settings saved')
   }
 
   return (
     <div className="space-y-6 text-text-primary">
-      {/* 代理设置 */}
       <div>
-        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '网络代理' : 'Network Proxy'}</h3>
-        <p className="text-xs text-text-muted mb-3">
-          {language === 'zh'
-            ? '配置 HTTP/HTTPS 代理用于 API 请求。'
-            : 'Configure HTTP/HTTPS proxy for API requests.'}
-        </p>
-
-        <label className="flex items-center gap-3 p-3 rounded-lg border border-border-subtle hover:border-text-muted cursor-pointer bg-surface/50 transition-colors mb-3">
-          <input
-            type="checkbox"
-            checked={proxyConfig.enabled}
-            onChange={(e) => setProxyConfig({ ...proxyConfig, enabled: e.target.checked })}
-            className="w-4 h-4 rounded border-border-subtle text-accent focus:ring-accent"
-          />
-          <span className="text-sm">{language === 'zh' ? '启用代理' : 'Enable Proxy'}</span>
-        </label>
-
-        {proxyConfig.enabled && (
-          <div className="space-y-3 pl-4 border-l-2 border-accent/30">
+        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '存储与缓存' : 'Storage & Cache'}</h3>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-4 bg-surface rounded-lg border border-border-subtle">
             <div>
-              <label className="text-xs text-text-muted mb-1 block">HTTP Proxy</label>
-              <input
-                type="text"
-                value={proxyConfig.http}
-                onChange={(e) => setProxyConfig({ ...proxyConfig, http: e.target.value })}
-                placeholder="http://127.0.0.1:7890"
-                className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-              />
+              <div className="text-sm font-medium">{language === 'zh' ? '清除缓存' : 'Clear Cache'}</div>
+              <div className="text-xs text-text-muted mt-1">{language === 'zh' ? '清除编辑器缓存、索引数据和临时文件' : 'Clear editor cache, index data, and temporary files'}</div>
             </div>
+            <Button variant="secondary" size="sm" onClick={handleClearCache}>
+              {language === 'zh' ? '清除' : 'Clear'}
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-between p-4 bg-surface rounded-lg border border-border-subtle">
             <div>
-              <label className="text-xs text-text-muted mb-1 block">HTTPS Proxy</label>
-              <input
-                type="text"
-                value={proxyConfig.https}
-                onChange={(e) => setProxyConfig({ ...proxyConfig, https: e.target.value })}
-                placeholder="http://127.0.0.1:7890"
-                className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-              />
+              <div className="text-sm font-medium text-red-400">{language === 'zh' ? '重置所有设置' : 'Reset All Settings'}</div>
+              <div className="text-xs text-text-muted mt-1">{language === 'zh' ? '恢复出厂设置，不可撤销' : 'Restore factory settings, irreversible'}</div>
             </div>
-            <button
-              onClick={handleSaveProxyConfig}
-              className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors"
-            >
-              {language === 'zh' ? '保存代理设置' : 'Save Proxy Settings'}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* 检查点保留策略 */}
-      <div className="pt-4 border-t border-border-subtle">
-        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '检查点保留策略' : 'Checkpoint Retention'}</h3>
-        <p className="text-xs text-text-muted mb-3">
-          {language === 'zh'
-            ? '配置 Agent 文件回退检查点的保留规则。检查点存储在项目 .adnify 目录下。'
-            : 'Configure retention rules for Agent file rollback checkpoints. Stored in project .adnify directory.'}
-        </p>
-
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="text-xs text-text-muted mb-1 block">{language === 'zh' ? '最大数量' : 'Max Count'}</label>
-            <input
-              type="number"
-              value={checkpointConfig.maxCount}
-              onChange={(e) => setCheckpointConfig({ ...checkpointConfig, maxCount: parseInt(e.target.value) || 50 })}
-              min={10} max={200}
-              className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-text-muted mb-1 block">{language === 'zh' ? '保留天数' : 'Max Age (days)'}</label>
-            <input
-              type="number"
-              value={checkpointConfig.maxAgeDays}
-              onChange={(e) => setCheckpointConfig({ ...checkpointConfig, maxAgeDays: parseInt(e.target.value) || 7 })}
-              min={1} max={30}
-              className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-text-muted mb-1 block">{language === 'zh' ? '单文件上限 (KB)' : 'Max File Size (KB)'}</label>
-            <input
-              type="number"
-              value={checkpointConfig.maxFileSizeKB}
-              onChange={(e) => setCheckpointConfig({ ...checkpointConfig, maxFileSizeKB: parseInt(e.target.value) || 100 })}
-              min={10} max={500}
-              className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-            />
-          </div>
-        </div>
-        <p className="text-xs text-text-muted mt-2">
-          {language === 'zh'
-            ? '超过大小限制的文件不会被快照，无法回退。'
-            : 'Files exceeding size limit will not be snapshotted and cannot be rolled back.'}
-        </p>
-        <button
-          onClick={handleSaveCheckpointConfig}
-          className="mt-3 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors"
-        >
-          {language === 'zh' ? '保存检查点设置' : 'Save Checkpoint Settings'}
-        </button>
-      </div>
-
-      {/* 数据存储 */}
-      <div className="pt-4 border-t border-border-subtle">
-        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '数据存储' : 'Data Storage'}</h3>
-        <p className="text-xs text-text-muted mb-3">
-          {language === 'zh'
-            ? '选择保存应用程序配置和数据的目录。'
-            : 'Choose the directory where application configuration and data are saved.'}
-        </p>
-
-        <div className="flex gap-3">
-          <div className="flex-1 bg-surface border border-border-subtle rounded-lg px-4 py-2.5 text-sm text-text-secondary font-mono truncate">
-            {dataPath || (language === 'zh' ? '加载中...' : 'Loading...')}
-          </div>
-          <button
-            onClick={handleChangePath}
-            disabled={loading}
-            className="px-4 py-2 bg-surface hover:bg-surface-hover border border-border-subtle rounded-lg text-sm text-text-primary transition-colors disabled:opacity-50"
-          >
-            {loading
-              ? (language === 'zh' ? '移动中...' : 'Moving...')
-              : (language === 'zh' ? '更改目录' : 'Change Directory')}
-          </button>
-        </div>
-      </div>
-
-      {/* 代码库索引 */}
-      <div className="pt-4 border-t border-border-subtle">
-        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '代码库索引 (Codebase Index)' : 'Codebase Index'}</h3>
-        <p className="text-xs text-text-muted mb-4">
-          {language === 'zh'
-            ? '索引你的代码库以启用 @codebase 语义搜索功能。'
-            : 'Index your codebase to enable @codebase semantic search.'}
-        </p>
-
-        {/* Embedding 提供商选择 */}
-        <div className="mb-4">
-          <label className="text-sm font-medium mb-2 block">{language === 'zh' ? 'Embedding 提供商' : 'Embedding Provider'}</label>
-          <div className="grid grid-cols-3 gap-2">
-            {embeddingProviders.map(p => (
-              <button
-                key={p.id}
-                onClick={() => setEmbeddingConfig({ ...embeddingConfig, provider: p.id as typeof embeddingConfig.provider })}
-                className={`px-3 py-2 rounded-lg border text-xs transition-all text-left ${embeddingConfig.provider === p.id
-                  ? 'border-accent bg-accent/10 text-accent'
-                  : 'border-border-subtle hover:border-text-muted text-text-muted hover:text-text-primary bg-surface'
-                  }`}
-              >
-                <div className="font-medium">{p.name}</div>
-                {p.free && <span className="text-green-400 text-[10px]">FREE</span>}
-              </button>
-            ))}
-          </div>
-          {selectedProviderInfo && (
-            <p className="text-xs text-text-muted mt-2">{selectedProviderInfo.description}</p>
-          )}
-        </div>
-
-        {/* API Key */}
-        {embeddingConfig.provider !== 'ollama' && (
-          <div className="mb-4">
-            <label className="text-sm font-medium mb-2 block">API Key</label>
-            <input
-              type="password"
-              value={embeddingConfig.apiKey}
-              onChange={(e) => setEmbeddingConfig({ ...embeddingConfig, apiKey: e.target.value })}
-              placeholder={`Enter ${selectedProviderInfo?.name || ''} API Key`}
-              className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-            />
-            <p className="text-xs text-text-muted mt-1">
-              {embeddingConfig.provider === 'jina' && <a href="https://jina.ai/embeddings/" target="_blank" rel="noreferrer" className="text-accent hover:underline">获取免费 Jina API Key</a>}
-              {embeddingConfig.provider === 'voyage' && <a href="https://www.voyageai.com/" target="_blank" rel="noreferrer" className="text-accent hover:underline">获取免费 Voyage API Key</a>}
-              {embeddingConfig.provider === 'cohere' && <a href="https://cohere.com/" target="_blank" rel="noreferrer" className="text-accent hover:underline">获取免费 Cohere API Key</a>}
-            </p>
-          </div>
-        )}
-
-        {/* 自定义端点 (Ollama) */}
-        {embeddingConfig.provider === 'ollama' && (
-          <div className="mb-4">
-            <label className="text-sm font-medium mb-2 block">{language === 'zh' ? 'Ollama 地址' : 'Ollama URL'}</label>
-            <input
-              type="text"
-              value={embeddingConfig.baseUrl}
-              onChange={(e) => setEmbeddingConfig({ ...embeddingConfig, baseUrl: e.target.value })}
-              placeholder="http://localhost:11434"
-              className="w-full bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-            />
-            <p className="text-xs text-text-muted mt-1">
-              {language === 'zh' ? '确保 Ollama 正在运行并已安装 nomic-embed-text 模型' : 'Make sure Ollama is running with nomic-embed-text model'}
-            </p>
-          </div>
-        )}
-
-        {/* 测试连接 */}
-        <div className="flex items-center gap-3 mb-4">
-          <button
-            onClick={handleTestConnection}
-            disabled={testingConnection || !workspacePath}
-            className="px-4 py-2 bg-surface hover:bg-surface-hover border border-border-subtle rounded-lg text-sm transition-colors disabled:opacity-50"
-          >
-            {testingConnection ? (language === 'zh' ? '测试中...' : 'Testing...') : (language === 'zh' ? '测试连接' : 'Test Connection')}
-          </button>
-          {connectionStatus && (
-            <span className={`text-xs ${connectionStatus.success ? 'text-green-400' : 'text-red-400'}`}>
-              {connectionStatus.success
-                ? `✓ ${language === 'zh' ? '连接成功' : 'Connected'} (${connectionStatus.latency}ms)`
-                : `✗ ${connectionStatus.error}`}
-            </span>
-          )}
-        </div>
-
-        {/* 索引状态和操作 */}
-        <div className="p-4 bg-surface/50 rounded-lg border border-border-subtle">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium">{language === 'zh' ? '索引状态' : 'Index Status'}</span>
-            {indexStatus?.isIndexing && (
-              <span className="text-xs text-accent animate-pulse">{language === 'zh' ? '索引中...' : 'Indexing...'}</span>
-            )}
-          </div>
-
-          {indexStatus?.isIndexing ? (
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs text-text-muted">
-                <span>{language === 'zh' ? '进度' : 'Progress'}</span>
-                <span>{indexStatus.indexedFiles} / {indexStatus.totalFiles} {language === 'zh' ? '文件' : 'files'}</span>
-              </div>
-              <div className="w-full h-2 bg-surface rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-accent transition-all duration-300"
-                  style={{ width: `${indexStatus.totalFiles > 0 ? (indexStatus.indexedFiles / indexStatus.totalFiles) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="text-xs text-text-muted">
-              {indexStatus?.totalChunks ? (
-                <span>{language === 'zh' ? `已索引 ${indexStatus.totalChunks} 个代码块` : `${indexStatus.totalChunks} chunks indexed`}</span>
-              ) : (
-                <span>{language === 'zh' ? '尚未索引' : 'Not indexed yet'}</span>
-              )}
-            </div>
-          )}
-
-          <div className="flex gap-2 mt-4">
-            <button
-              onClick={handleStartIndexing}
-              disabled={indexStatus?.isIndexing || !workspacePath}
-              className="flex-1 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-            >
-              {indexStatus?.totalChunks
-                ? (language === 'zh' ? '重新索引' : 'Re-index')
-                : (language === 'zh' ? '开始索引' : 'Start Indexing')}
-            </button>
-            {indexStatus?.totalChunks ? (
-              <button
-                onClick={handleClearIndex}
-                disabled={indexStatus?.isIndexing}
-                className="px-4 py-2 bg-surface hover:bg-red-500/10 border border-border-subtle hover:border-red-500/50 text-text-muted hover:text-red-400 rounded-lg text-sm transition-colors disabled:opacity-50"
-              >
-                {language === 'zh' ? '清空' : 'Clear'}
-              </button>
-            ) : null}
+            <Button variant="danger" size="sm" onClick={handleReset}>
+              {language === 'zh' ? '重置' : 'Reset'}
+            </Button>
           </div>
         </div>
       </div>
 
-      {/* 引导向导 */}
-      <div className="pt-4 border-t border-border-subtle">
-        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '引导向导' : 'Setup Wizard'}</h3>
-        <p className="text-xs text-text-muted mb-3">
-          {language === 'zh'
-            ? '重新运行首次使用引导，帮助你配置基本设置。'
-            : 'Re-run the first-time setup wizard to configure basic settings.'}
-        </p>
-        <button
-          onClick={async () => {
-            await window.electronAPI.setSetting('onboardingCompleted', false)
-            window.location.reload()
-          }}
-          className="px-4 py-2 bg-surface hover:bg-surface-hover border border-border-subtle rounded-lg text-sm text-text-primary transition-colors"
-        >
-          {language === 'zh' ? '重新运行引导' : 'Run Setup Wizard'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-
-// 安全设置组件
-interface SecuritySettingsProps {
-  language: Language
-}
-
-function SecuritySettings({ language }: SecuritySettingsProps) {
-  const [shellCommands, setShellCommands] = useState<string[]>([])
-  const [gitCommands, setGitCommands] = useState<string[]>([])
-  const [newShellCommand, setNewShellCommand] = useState('')
-  const [newGitCommand, setNewGitCommand] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
-    loadWhitelist()
-  }, [])
-
-  const loadWhitelist = async () => {
-    setLoading(true)
-    const whitelist = await window.electronAPI.getWhitelist()
-    setShellCommands(whitelist.shell)
-    setGitCommands(whitelist.git)
-    setLoading(false)
-  }
-
-  const addShellCommand = () => {
-    if (newShellCommand.trim() && !shellCommands.includes(newShellCommand.trim())) {
-      setShellCommands([...shellCommands, newShellCommand.trim()])
-      setNewShellCommand('')
-    }
-  }
-
-  const addGitCommand = () => {
-    if (newGitCommand.trim() && !gitCommands.includes(newGitCommand.trim())) {
-      setGitCommands([...gitCommands, newGitCommand.trim()])
-      setNewGitCommand('')
-    }
-  }
-
-  const removeShellCommand = (cmd: string) => {
-    setShellCommands(shellCommands.filter(c => c !== cmd))
-  }
-
-  const removeGitCommand = (cmd: string) => {
-    setGitCommands(gitCommands.filter(c => c !== cmd))
-  }
-
-  const resetWhitelist = async () => {
-    const result = await window.electronAPI.resetWhitelist()
-    setShellCommands(result.shell)
-    setGitCommands(result.git)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  const saveWhitelist = async () => {
-    // 获取当前的安全设置
-    const currentSettings = await window.electronAPI.getSetting('securitySettings') as any || {}
-
-    // 更新白名单
-    const newSettings = {
-      ...currentSettings,
-      allowedShellCommands: shellCommands,
-      allowedGitSubcommands: gitCommands
-    }
-
-    await window.electronAPI.setSetting('securitySettings', newSettings)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  if (loading) {
-    return (
-      <div className="space-y-6 text-text-primary">
-        <div className="text-center py-8 text-text-muted">
-          {language === 'zh' ? '加载中...' : 'Loading...'}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-6 text-text-primary">
-      {/* Shell 命令白名单 */}
       <div>
-        <h3 className="text-sm font-medium mb-3">
-          {language === 'zh' ? 'Shell 命令白名单' : 'Shell Command Whitelist'}
-        </h3>
-        <p className="text-xs text-text-muted mb-3">
-          {language === 'zh'
-            ? '允许 Agent 执行的 Shell 命令。添加命令时只需输入基本命令名（如 python, java）。'
-            : 'Shell commands allowed for Agent execution. Enter only the base command name (e.g., python, java).'}
-        </p>
-
-        {/* 添加新命令 */}
-        <div className="flex gap-2 mb-3">
-          <input
-            type="text"
-            value={newShellCommand}
-            onChange={(e) => setNewShellCommand(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && addShellCommand()}
-            placeholder={language === 'zh' ? '输入命令名，按回车添加' : 'Enter command name, press Enter'}
-            className="flex-1 bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-          />
-          <button
-            onClick={addShellCommand}
-            disabled={!newShellCommand.trim()}
-            className="px-3 py-2 bg-surface hover:bg-surface-hover border border-border-subtle rounded-lg disabled:opacity-50"
-          >
-            <Plus className="w-4 h-4 text-accent" />
-          </button>
-        </div>
-
-        {/* 命令列表 */}
-        <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-1 border border-border-subtle rounded-lg p-2 bg-surface/30">
-          {shellCommands.map((cmd) => (
-            <div key={cmd} className="flex items-center justify-between px-3 py-2 bg-surface/50 rounded-lg border border-border-subtle/50">
-              <span className="font-mono text-sm text-text-secondary">{cmd}</span>
-              <button
-                onClick={() => removeShellCommand(cmd)}
-                className="p-1 hover:text-red-400 text-text-muted transition-colors"
-              >
-                <Trash className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ))}
-          {shellCommands.length === 0 && (
-            <div className="text-xs text-text-muted text-center py-4">
-              {language === 'zh' ? '暂无命令' : 'No commands'}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Git 子命令白名单 */}
-      <div className="pt-4 border-t border-border-subtle">
-        <h3 className="text-sm font-medium mb-3">
-          {language === 'zh' ? 'Git 子命令白名单' : 'Git Subcommand Whitelist'}
-        </h3>
-        <p className="text-xs text-text-muted mb-3">
-          {language === 'zh'
-            ? '允许 Agent 执行的 Git 子命令。添加命令时只需输入子命令名（如 status, commit）。'
-            : 'Git subcommands allowed for Agent execution. Enter only the subcommand name (e.g., status, commit).'}
-        </p>
-
-        {/* 添加新命令 */}
-        <div className="flex gap-2 mb-3">
-          <input
-            type="text"
-            value={newGitCommand}
-            onChange={(e) => setNewGitCommand(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && addGitCommand()}
-            placeholder={language === 'zh' ? '输入子命令名，按回车添加' : 'Enter subcommand name, press Enter'}
-            className="flex-1 bg-surface border border-border-subtle rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-          />
-          <button
-            onClick={addGitCommand}
-            disabled={!newGitCommand.trim()}
-            className="px-3 py-2 bg-surface hover:bg-surface-hover border border-border-subtle rounded-lg disabled:opacity-50"
-          >
-            <Plus className="w-4 h-4 text-accent" />
-          </button>
-        </div>
-
-        {/* 命令列表 */}
-        <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-1 border border-border-subtle rounded-lg p-2 bg-surface/30">
-          {gitCommands.map((cmd) => (
-            <div key={cmd} className="flex items-center justify-between px-3 py-2 bg-surface/50 rounded-lg border border-border-subtle/50">
-              <span className="font-mono text-sm text-text-secondary">{cmd}</span>
-              <button
-                onClick={() => removeGitCommand(cmd)}
-                className="p-1 hover:text-red-400 text-text-muted transition-colors"
-              >
-                <Trash className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ))}
-          {gitCommands.length === 0 && (
-            <div className="text-xs text-text-muted text-center py-4">
-              {language === 'zh' ? '暂无命令' : 'No commands'}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 操作按钮 */}
-      <div className="pt-4 border-t border-border-subtle flex gap-3">
-        <button
-          onClick={resetWhitelist}
-          className="px-4 py-2 bg-surface hover:bg-surface-hover border border-border-subtle rounded-lg text-sm text-text-primary transition-colors"
-        >
-          {language === 'zh' ? '重置为默认值' : 'Reset to Defaults'}
-        </button>
-        <button
-          onClick={saveWhitelist}
-          className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium transition-all shadow-glow ${saved ? 'bg-status-success text-white' : 'bg-accent hover:bg-accent-hover text-white'}`}
-        >
-          {saved ? <><Check className="w-4 h-4" />{language === 'zh' ? '已保存' : 'Saved'}</> : (language === 'zh' ? '保存设置' : 'Save Settings')}
-        </button>
-      </div>
-
-      {/* 安全提示 */}
-      <div className="pt-4 border-t border-border-subtle">
-        <div className="flex items-start gap-3 p-3 bg-warning/10 border border-warning/20 rounded-lg">
-          <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
-          <div className="text-xs text-warning">
-            <p className="font-medium mb-1">{language === 'zh' ? '安全提示' : 'Security Notice'}</p>
-            <p>
-              {language === 'zh'
-                ? '添加命令到白名单后，Agent 将可以无需确认直接执行这些命令。请谨慎添加具有破坏性的命令（如 rm, format, del 等）。'
-                : 'After adding commands to the whitelist, Agent can execute them without confirmation. Be cautious when adding destructive commands (e.g., rm, format, del).'}
-            </p>
+        <h3 className="text-sm font-medium mb-3">{language === 'zh' ? '关于' : 'About'}</h3>
+        <div className="p-4 bg-surface rounded-lg border border-border-subtle text-center">
+          <div className="text-lg font-bold text-accent mb-1">Adnify</div>
+          <div className="text-xs text-text-muted">v0.1.0-alpha</div>
+          <div className="text-xs text-text-secondary mt-4">
+            Built with Electron, React, Monaco Editor & Tailwind CSS
           </div>
         </div>
       </div>

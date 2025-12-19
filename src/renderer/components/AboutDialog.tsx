@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 import { X, Github, ExternalLink, Heart, Code2, Sparkles } from 'lucide-react'
 import { Logo } from './Logo'
 import { useStore } from '../store'
+import { Modal } from './ui'
 
 
 interface AboutDialogProps {
@@ -40,119 +41,108 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
         loadVersions()
     }, [])
 
-    const handleBackdropClick = (e: React.MouseEvent) => {
-        if (e.target === e.currentTarget) {
-            onClose()
-        }
-    }
-
     return (
-        <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200]"
-            onClick={handleBackdropClick}
-        >
-            <div className="bg-surface rounded-2xl shadow-2xl border border-border-subtle w-[420px] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                {/* Header */}
-                <div className="relative px-6 pt-8 pb-6 bg-gradient-to-br from-accent/10 to-transparent">
-                    <button
-                        onClick={onClose}
-                        className="absolute top-4 right-4 p-2 rounded-lg hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
+        <Modal isOpen={true} onClose={onClose} noPadding size="sm">
+            {/* Header */}
+            <div className="relative px-6 pt-8 pb-6 bg-gradient-to-br from-accent/10 to-transparent">
+                <button
+                    onClick={onClose}
+                    className="absolute top-4 right-4 p-2 rounded-lg hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
+                >
+                    <X className="w-5 h-5" />
+                </button>
 
-                    <div className="flex flex-col items-center gap-4">
-                        <div className="w-20 h-20 bg-gradient-to-br from-accent to-accent/60 rounded-2xl flex items-center justify-center shadow-lg shadow-accent/20">
-                            <Logo className="w-12 h-12 text-white" />
-                        </div>
-                        <div className="text-center">
-                            <h1 className="text-2xl font-bold text-text-primary">Adnify</h1>
-                            <p className="text-sm text-text-muted mt-1">
-                                {language === 'zh' ? 'AI 驱动的代码编辑器' : 'AI-Powered Code Editor'}
-                            </p>
-                        </div>
+                <div className="flex flex-col items-center gap-4">
+                    <div className="w-20 h-20 bg-gradient-to-br from-accent to-accent/60 rounded-2xl flex items-center justify-center shadow-lg shadow-accent/20">
+                        <Logo className="w-12 h-12 text-white" />
                     </div>
-                </div>
-
-                {/* Version Info */}
-                <div className="px-6 py-4 border-t border-border-subtle">
-                    <div className="flex items-center justify-between py-2">
-                        <span className="text-sm text-text-muted">Version</span>
-                        <span className="text-sm font-medium text-text-primary">{version}</span>
+                    <div className="text-center">
+                        <h1 className="text-2xl font-bold text-text-primary">Adnify</h1>
+                        <p className="text-sm text-text-muted mt-1">
+                            {language === 'zh' ? 'AI 驱动的代码编辑器' : 'AI-Powered Code Editor'}
+                        </p>
                     </div>
-                    {electronVersion && (
-                        <div className="flex items-center justify-between py-2">
-                            <span className="text-sm text-text-muted">Electron</span>
-                            <span className="text-sm text-text-secondary">{electronVersion}</span>
-                        </div>
-                    )}
-                    {nodeVersion && (
-                        <div className="flex items-center justify-between py-2">
-                            <span className="text-sm text-text-muted">Node.js</span>
-                            <span className="text-sm text-text-secondary">{nodeVersion}</span>
-                        </div>
-                    )}
-                    {chromeVersion && (
-                        <div className="flex items-center justify-between py-2">
-                            <span className="text-sm text-text-muted">Chrome</span>
-                            <span className="text-sm text-text-secondary">{chromeVersion}</span>
-                        </div>
-                    )}
-                </div>
-
-                {/* Features */}
-                <div className="px-6 py-4 border-t border-border-subtle">
-                    <div className="grid grid-cols-3 gap-3">
-                        <div className="flex flex-col items-center gap-2 p-3 rounded-lg bg-surface-hover/50">
-                            <Sparkles className="w-5 h-5 text-accent" />
-                            <span className="text-xs text-text-muted text-center">AI Agent</span>
-                        </div>
-                        <div className="flex flex-col items-center gap-2 p-3 rounded-lg bg-surface-hover/50">
-                            <Code2 className="w-5 h-5 text-green-400" />
-                            <span className="text-xs text-text-muted text-center">
-                                {language === 'zh' ? '代码补全' : 'Completion'}
-                            </span>
-                        </div>
-                        <div className="flex flex-col items-center gap-2 p-3 rounded-lg bg-surface-hover/50">
-                            <Heart className="w-5 h-5 text-red-400" />
-                            <span className="text-xs text-text-muted text-center">
-                                {language === 'zh' ? '开源' : 'Open Source'}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Links */}
-                <div className="px-6 py-4 border-t border-border-subtle">
-                    <div className="flex gap-3">
-                        <a
-                            href="https://github.com/AInfinityLikeYou/adnify"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-surface-hover hover:bg-surface-active text-text-primary transition-colors"
-                        >
-                            <Github className="w-4 h-4" />
-                            <span className="text-sm">GitHub</span>
-                        </a>
-                        <a
-                            href="https://adnify.dev"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-surface-hover hover:bg-surface-active text-text-primary transition-colors"
-                        >
-                            <ExternalLink className="w-4 h-4" />
-                            <span className="text-sm">{language === 'zh' ? '官网' : 'Website'}</span>
-                        </a>
-                    </div>
-                </div>
-
-                {/* Footer */}
-                <div className="px-6 py-4 border-t border-border-subtle text-center">
-                    <p className="text-xs text-text-muted">
-                        © {new Date().getFullYear()} Adnify. {language === 'zh' ? '保留所有权利' : 'All rights reserved'}.
-                    </p>
                 </div>
             </div>
-        </div>
+
+            {/* Version Info */}
+            <div className="px-6 py-4 border-t border-border-subtle">
+                <div className="flex items-center justify-between py-2">
+                    <span className="text-sm text-text-muted">Version</span>
+                    <span className="text-sm font-medium text-text-primary">{version}</span>
+                </div>
+                {electronVersion && (
+                    <div className="flex items-center justify-between py-2">
+                        <span className="text-sm text-text-muted">Electron</span>
+                        <span className="text-sm text-text-secondary">{electronVersion}</span>
+                    </div>
+                )}
+                {nodeVersion && (
+                    <div className="flex items-center justify-between py-2">
+                        <span className="text-sm text-text-muted">Node.js</span>
+                        <span className="text-sm text-text-secondary">{nodeVersion}</span>
+                    </div>
+                )}
+                {chromeVersion && (
+                    <div className="flex items-center justify-between py-2">
+                        <span className="text-sm text-text-muted">Chrome</span>
+                        <span className="text-sm text-text-secondary">{chromeVersion}</span>
+                    </div>
+                )}
+            </div>
+
+            {/* Features */}
+            <div className="px-6 py-4 border-t border-border-subtle">
+                <div className="grid grid-cols-3 gap-3">
+                    <div className="flex flex-col items-center gap-2 p-3 rounded-lg bg-surface-hover/50">
+                        <Sparkles className="w-5 h-5 text-accent" />
+                        <span className="text-xs text-text-muted text-center">AI Agent</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-2 p-3 rounded-lg bg-surface-hover/50">
+                        <Code2 className="w-5 h-5 text-green-400" />
+                        <span className="text-xs text-text-muted text-center">
+                            {language === 'zh' ? '代码补全' : 'Completion'}
+                        </span>
+                    </div>
+                    <div className="flex flex-col items-center gap-2 p-3 rounded-lg bg-surface-hover/50">
+                        <Heart className="w-5 h-5 text-red-400" />
+                        <span className="text-xs text-text-muted text-center">
+                            {language === 'zh' ? '开源' : 'Open Source'}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Links */}
+            <div className="px-6 py-4 border-t border-border-subtle">
+                <div className="flex gap-3">
+                    <a
+                        href="https://github.com/AInfinityLikeYou/adnify"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-surface-hover hover:bg-surface-active text-text-primary transition-colors"
+                    >
+                        <Github className="w-4 h-4" />
+                        <span className="text-sm">GitHub</span>
+                    </a>
+                    <a
+                        href="https://adnify.dev"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-surface-hover hover:bg-surface-active text-text-primary transition-colors"
+                    >
+                        <ExternalLink className="w-4 h-4" />
+                        <span className="text-sm">{language === 'zh' ? '官网' : 'Website'}</span>
+                    </a>
+                </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-border-subtle text-center">
+                <p className="text-xs text-text-muted">
+                    © {new Date().getFullYear()} Adnify. {language === 'zh' ? '保留所有权利' : 'All rights reserved'}.
+                </p>
+            </div>
+        </Modal>
     )
 }

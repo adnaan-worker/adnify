@@ -167,77 +167,215 @@ interface WebSearchResult {
     error?: string
 }
 
+// 搜索 API key 缓存 (可选增强)
+let cachedSearchApiKey: string | null = null
+let cachedSearchApiType: 'serper' | 'tavily' | null = null
+
+// 设置搜索 API key (从设置界面调用)
+export function setSearchApiKey(type: 'serper' | 'tavily', key: string) {
+    cachedSearchApiType = type
+    cachedSearchApiKey = key
+    console.log(`[HTTP] Search API configured: ${type}`)
+}
+
 async function webSearch(query: string, maxResults = 5): Promise<WebSearchResult> {
-    // 使用 DuckDuckGo Instant Answers API (免费，无需 key，但功能有限)
-    // 或者可以后续集成 SerpAPI/Google API
-    try {
-        const encodedQuery = encodeURIComponent(query)
-        const url = `https://api.duckduckgo.com/?q=${encodedQuery}&format=json&no_html=1&skip_disambig=1`
+    // 优先使用配置的 API (如果有)
+    const apiKey = cachedSearchApiKey || process.env.SERPER_API_KEY || process.env.TAVILY_API_KEY || ''
+    const apiType = cachedSearchApiType ||
+        (process.env.SERPER_API_KEY ? 'serper' : process.env.TAVILY_API_KEY ? 'tavily' : null)
 
-        const result = await fetchUrl(url, 10000)
-
-        if (!result.success || !result.content) {
-            return {
-                success: false,
-                error: result.error || 'Search failed',
-            }
-        }
-
+    if (apiKey && apiType) {
         try {
-            const data = JSON.parse(result.content)
-            const results: SearchResult[] = []
-
-            // DuckDuckGo 返回的结构
-            if (data.AbstractText) {
-                results.push({
-                    title: data.Heading || query,
-                    url: data.AbstractURL || '',
-                    snippet: data.AbstractText,
-                })
+            if (apiType === 'serper') {
+                return await searchWithSerper(query, apiKey, maxResults)
+            } else if (apiType === 'tavily') {
+                return await searchWithTavily(query, apiKey, maxResults)
             }
-
-            // 相关主题
-            if (data.RelatedTopics) {
-                for (const topic of data.RelatedTopics.slice(0, maxResults - results.length)) {
-                    if (topic.Text && topic.FirstURL) {
-                        results.push({
-                            title: topic.Text.split(' - ')[0] || topic.Text,
-                            url: topic.FirstURL,
-                            snippet: topic.Text,
-                        })
-                    }
-                }
-            }
-
-            // 结果
-            if (data.Results) {
-                for (const r of data.Results.slice(0, maxResults - results.length)) {
-                    if (r.Text && r.FirstURL) {
-                        results.push({
-                            title: r.Text,
-                            url: r.FirstURL,
-                            snippet: r.Text,
-                        })
-                    }
-                }
-            }
-
-            return {
-                success: true,
-                results: results.slice(0, maxResults),
-            }
-        } catch {
-            return {
-                success: false,
-                error: 'Failed to parse search results',
-            }
-        }
-    } catch (error) {
-        return {
-            success: false,
-            error: `Search error: ${error}`,
+        } catch (error) {
+            console.error(`[HTTP] ${apiType} search failed, falling back to local:`, error)
         }
     }
+
+    // 本地抓取方案 - 使用 Electron BrowserWindow
+    try {
+        return await searchWithLocalBrowser(query, maxResults)
+    } catch (error) {
+        console.error('[HTTP] Local browser search failed:', error)
+        return {
+            success: false,
+            error: `搜索失败: ${error}`,
+        }
+    }
+}
+
+// 本地浏览器抓取 (使用 Electron BrowserWindow)
+async function searchWithLocalBrowser(query: string, maxResults: number): Promise<WebSearchResult> {
+    const { BrowserWindow } = require('electron')
+
+    // 创建隐藏的浏览器窗口
+    const win = new BrowserWindow({
+        width: 1280,
+        height: 800,
+        show: false,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+        },
+    })
+
+    try {
+        // 使用 Bing 搜索 (比 Google 更容易抓取)
+        const encodedQuery = encodeURIComponent(query)
+        const searchUrl = `https://www.bing.com/search?q=${encodedQuery}&count=${maxResults * 2}`
+
+        await win.loadURL(searchUrl)
+
+        // 等待页面加载完成
+        await new Promise(resolve => setTimeout(resolve, 2000))
+
+        // 执行 JavaScript 提取搜索结果
+        const results = await win.webContents.executeJavaScript(`
+            (function() {
+                const results = [];
+                // Bing 搜索结果选择器
+                const items = document.querySelectorAll('#b_results .b_algo');
+                
+                items.forEach(item => {
+                    const titleEl = item.querySelector('h2 a');
+                    const snippetEl = item.querySelector('.b_caption p');
+                    
+                    if (titleEl) {
+                        results.push({
+                            title: titleEl.textContent || '',
+                            url: titleEl.href || '',
+                            snippet: snippetEl ? snippetEl.textContent : '',
+                        });
+                    }
+                });
+                
+                return results;
+            })()
+        `)
+
+        win.close()
+
+        return {
+            success: true,
+            results: results.slice(0, maxResults),
+        }
+    } catch (error) {
+        win.close()
+        throw error
+    }
+}
+
+// Serper.dev API (Google Search - 可选)
+async function searchWithSerper(query: string, apiKey: string, maxResults: number): Promise<WebSearchResult> {
+    return new Promise((resolve) => {
+        const postData = JSON.stringify({
+            q: query,
+            num: maxResults,
+        })
+
+        const options = {
+            hostname: 'google.serper.dev',
+            port: 443,
+            path: '/search',
+            method: 'POST',
+            headers: {
+                'X-API-KEY': apiKey,
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(postData),
+            },
+        }
+
+        const req = https.request(options, (res) => {
+            let data = ''
+            res.on('data', (chunk) => data += chunk)
+            res.on('end', () => {
+                try {
+                    const json = JSON.parse(data)
+                    const results: SearchResult[] = []
+
+                    if (json.organic) {
+                        for (const item of json.organic.slice(0, maxResults)) {
+                            results.push({
+                                title: item.title || '',
+                                url: item.link || '',
+                                snippet: item.snippet || '',
+                            })
+                        }
+                    }
+
+                    resolve({ success: true, results })
+                } catch {
+                    resolve({ success: false, error: 'Failed to parse Serper response' })
+                }
+            })
+        })
+
+        req.on('error', (error) => {
+            resolve({ success: false, error: `Serper request failed: ${error.message}` })
+        })
+
+        req.write(postData)
+        req.end()
+    })
+}
+
+// Tavily API (专为 AI 设计的搜索 - 可选)
+async function searchWithTavily(query: string, apiKey: string, maxResults: number): Promise<WebSearchResult> {
+    return new Promise((resolve) => {
+        const postData = JSON.stringify({
+            api_key: apiKey,
+            query: query,
+            max_results: maxResults,
+            include_answer: false,
+        })
+
+        const options = {
+            hostname: 'api.tavily.com',
+            port: 443,
+            path: '/search',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(postData),
+            },
+        }
+
+        const req = https.request(options, (res) => {
+            let data = ''
+            res.on('data', (chunk) => data += chunk)
+            res.on('end', () => {
+                try {
+                    const json = JSON.parse(data)
+                    const results: SearchResult[] = []
+
+                    if (json.results) {
+                        for (const item of json.results.slice(0, maxResults)) {
+                            results.push({
+                                title: item.title || '',
+                                url: item.url || '',
+                                snippet: item.content || '',
+                            })
+                        }
+                    }
+
+                    resolve({ success: true, results })
+                } catch {
+                    resolve({ success: false, error: 'Failed to parse Tavily response' })
+                }
+            })
+        })
+
+        req.on('error', (error) => {
+            resolve({ success: false, error: `Tavily request failed: ${error.message}` })
+        })
+
+        req.write(postData)
+        req.end()
+    })
 }
 
 // ===== 注册 IPC Handlers =====
@@ -255,5 +393,14 @@ export function registerHttpHandlers() {
         return webSearch(query, maxResults)
     })
 
+    // 配置搜索 API (可选)
+    ipcMain.handle('http:setSearchApi', async (_event, type: 'serper' | 'tavily', key: string) => {
+        setSearchApiKey(type, key)
+        return { success: true }
+    })
+
     console.log('[HTTP] IPC handlers registered')
 }
+
+
+

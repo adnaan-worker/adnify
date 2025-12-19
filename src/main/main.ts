@@ -54,18 +54,18 @@ function initStore() {
   }
 }
 
-// 初始化 store
 initStore()
 
 // ==========================================
-// 窗口管理
+// 全局状态
 // ==========================================
 
-const windows = new Set<BrowserWindow>()
-let mainWindow: BrowserWindow | null = null
+const windows = new Map<number, BrowserWindow>()
+let lastActiveWindow: BrowserWindow | null = null
+let isQuitting = false
 
-function getMainWindow(): BrowserWindow | null {
-  return mainWindow
+function getMainWindow() {
+  return lastActiveWindow || Array.from(windows.values())[0] || null
 }
 
 // 单例锁定
@@ -74,17 +74,27 @@ if (!gotTheLock) {
   app.quit()
 }
 
-function createWindow(isEmpty = true): BrowserWindow {
+// ==========================================
+// 窗口创建
+// ==========================================
+
+function createWindow(isEmpty: boolean = false) {
+  // 图标路径：开发环境用 public，生产环境用 resources
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'icon.png')
+    : path.join(__dirname, '../../public/icon.png')
+
   const win = new BrowserWindow({
     width: 1600,
     height: 1000,
     minWidth: 1200,
     minHeight: 700,
-    backgroundColor: '#09090b',
-    show: false, // 等待渲染完成后显示
+    frame: false,
     titleBarStyle: 'hidden',
-    titleBarOverlay: false,
-    autoHideMenuBar: true,
+    icon: iconPath,
+    trafficLightPosition: { x: 15, y: 15 },
+    backgroundColor: '#09090b',
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
@@ -92,30 +102,43 @@ function createWindow(isEmpty = true): BrowserWindow {
     },
   })
 
-  windows.add(win)
-  if (!mainWindow) {
-    mainWindow = win
-  }
+  const windowId = win.id
+  windows.set(windowId, win)
+  lastActiveWindow = win
 
-  // 每个窗口都需要更新 LLM service 的引用
-  updateLLMServiceWindow(win)
+  win.on('focus', () => {
+    lastActiveWindow = win
+    updateLLMServiceWindow(win)
+  })
 
-  win.on('closed', () => {
-    windows.delete(win)
-    if (windows.size === 0) {
-      mainWindow = null
-      cleanupAllHandlers()
-      lspManager.stopAllServers()
+  win.on('close', async (e) => {
+    if (windows.size === 1 && !isQuitting) {
+      // 最后一个窗口关闭时，执行全局清理
+      isQuitting = true
+      e.preventDefault()
+      console.log('[Main] Last window closing, starting cleanup...')
+      try {
+        cleanupAllHandlers()
+        await lspManager.stopAllServers()
+        console.log('[Main] Cleanup completed')
+      } catch (err) {
+        console.error('[Main] Cleanup error:', err)
+      }
+      win.destroy()
+      app.quit()
     } else {
-      // 如果关闭的是 mainWindow，选择一个新的
-      if (mainWindow === win) {
-        mainWindow = windows.values().next().value ?? null
+      // 非最后一个窗口，直接移除引用
+      windows.delete(windowId)
+      if (lastActiveWindow === win) {
+        lastActiveWindow = Array.from(windows.values())[0] || null
       }
     }
   })
 
-  if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
-    win.loadURL(`http://localhost:5173${isEmpty ? '?empty=1' : ''}`)
+  // 加载页面
+  const query = isEmpty ? '?empty=1' : ''
+  if (!app.isPackaged) {
+    win.loadURL(`http://localhost:5173${query}`)
   } else {
     win.loadFile(path.join(__dirname, '../renderer/index.html'), { query: isEmpty ? { empty: '1' } : undefined })
   }
@@ -130,7 +153,6 @@ function createWindow(isEmpty = true): BrowserWindow {
 app.whenReady().then(() => {
   console.log('[Security] 🔒 初始化安全模块...')
 
-  // 使用共享常量作为默认值
   const securityConfig = mainStore.get('securitySettings', {
     enablePermissionConfirm: true,
     enableAuditLog: true,

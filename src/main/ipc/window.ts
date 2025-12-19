@@ -32,4 +32,12 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
   ipcMain.handle('app:getVersion', () => {
     return app.getVersion()
   })
+
+  // 渲染端准备完毕，显示窗口
+  ipcMain.on('app:ready', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win && !win.isDestroyed()) {
+      win.show()
+    }
+  })
 }

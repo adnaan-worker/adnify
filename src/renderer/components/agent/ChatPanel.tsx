@@ -11,12 +11,6 @@ import {
   Plus,
   Trash2,
   Upload,
-  Database,
-  GitBranch,
-  Terminal,
-  File,
-  Code,
-  Folder,
   X,
   MessageSquare
 } from 'lucide-react'
@@ -44,6 +38,7 @@ import { ChatInput, PendingImage } from '@/renderer/components/chat'
 import FileMentionPopup from '@/renderer/components/FileMentionPopup'
 import ChatMessageUI from './ChatMessage'
 import AgentStatusBar from './AgentStatusBar'
+import ContextPanel from './ContextPanel'
 import { keybindingService } from '@/renderer/services/keybindingService'
 import SlashCommandPopup from './SlashCommandPopup'
 import { slashCommandService, SlashCommand } from '@/renderer/services/slashCommandService'
@@ -712,60 +707,13 @@ export default function ChatPanel() {
 
 
         {/* Context Items */}
-        <div className="px-6 py-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            {activeFilePath && !contextItems.some((s: ContextItem) => s.type === 'File' && (s as FileContext).uri === activeFilePath) && (
-              <button
-                onClick={handleAddCurrentFile}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-accent/10 hover:bg-accent/20 rounded-full border border-accent/20 text-xs text-accent transition-all"
-              >
-                <Plus className="w-3 h-3" />
-                <span className="truncate max-w-[120px] font-medium">{activeFilePath.split(/[\\/]/).pop()}</span>
-              </button>
-            )}
-
-            {contextItems.map((item: ContextItem, index: number) => {
-              const getIconAndLabel = () => {
-                switch (item.type) {
-                  case 'File': return { icon: <File className="w-3 h-3 text-accent" />, label: (item as FileContext).uri.split(/[\\/]/).pop() || 'File' }
-                  case 'CodeSelection': return { icon: <Code className="w-3 h-3 text-blue-400" />, label: 'Selection' }
-                  case 'Folder': return { icon: <Folder className="w-3 h-3 text-yellow-400" />, label: 'Folder' }
-                  case 'Codebase': return { icon: <Database className="w-3 h-3 text-purple-400" />, label: '@codebase' }
-                  case 'Git': return { icon: <GitBranch className="w-3 h-3 text-orange-400" />, label: '@git' }
-                  case 'Terminal': return { icon: <Terminal className="w-3 h-3 text-green-400" />, label: '@terminal' }
-                  case 'Symbols': return { icon: <Code className="w-3 h-3 text-blue-400" />, label: '@symbols' }
-                  default: return { icon: <File className="w-3 h-3" />, label: 'Unknown' }
-                }
-              }
-              const { icon, label } = getIconAndLabel()
-
-              return (
-                <div
-                  key={`${item.type}-${index}`}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface/50 rounded-full border border-white/10 text-xs group hover:border-white/20 transition-colors"
-                >
-                  {icon}
-                  <span className="text-text-secondary truncate max-w-[150px] font-medium">{label}</span>
-                  <button
-                    onClick={() => removeContextItem(index)}
-                    className="p-0.5 rounded-full hover:bg-red-500/20 text-text-muted hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              )
-            })}
-
-            {contextItems.length > 1 && (
-              <button
-                onClick={clearContextItems}
-                className="px-2 text-xs text-text-muted hover:text-text-primary transition-colors underline decoration-dotted"
-              >
-                Clear all
-              </button>
-            )}
-          </div>
-        </div>
+        <ContextPanel
+          contextItems={contextItems}
+          activeFilePath={activeFilePath}
+          onRemove={removeContextItem}
+          onClear={clearContextItems}
+          onAddCurrentFile={handleAddCurrentFile}
+        />
 
         {/* Input */}
         <ChatInput

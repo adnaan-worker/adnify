@@ -1742,7 +1742,7 @@ function ProblemsView() {
 
 // 大纲视图 - 显示当前文件的符号结构
 function OutlineView() {
-    const { activeFilePath, language } = useStore()
+    const { activeFilePath, language, isLspReady } = useStore()
     const [symbols, setSymbols] = useState<LspDocumentSymbol[]>([])
     const [expandedSymbols, setExpandedSymbols] = useState<Set<string>>(new Set())
     const [isLoading, setIsLoading] = useState(false)
@@ -1750,7 +1750,7 @@ function OutlineView() {
 
     // 加载符号
     useEffect(() => {
-        if (!activeFilePath) {
+        if (!activeFilePath || !isLspReady) {
             setSymbols([])
             return
         }
@@ -1772,7 +1772,7 @@ function OutlineView() {
         }
 
         loadSymbols()
-    }, [activeFilePath])
+    }, [activeFilePath, isLspReady])
 
     const toggleSymbol = (name: string, e: React.MouseEvent) => {
         e.stopPropagation()

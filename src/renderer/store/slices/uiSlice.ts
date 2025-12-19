@@ -40,11 +40,14 @@ export interface UISlice {
   setChatWidth: (width: number) => void
   setTerminalLayout: (layout: 'tabs' | 'split') => void
   setCursorPosition: (pos: { line: number; column: number }) => void
+  isLspReady: boolean
+  setIsLspReady: (ready: boolean) => void
   setToast: (toast: ((message: string, type?: 'success' | 'error' | 'info' | 'warning') => void) | null) => void
 }
 
 export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   isInitialized: false,
+  isLspReady: false,
   activeSidePanel: 'explorer',
   terminalVisible: false,
   chatVisible: true,
@@ -60,6 +63,7 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   toast: null,
 
   setIsInitialized: (initialized) => set({ isInitialized: initialized }),
+  setIsLspReady: (ready) => set({ isLspReady: ready }),
   setActiveSidePanel: (panel) => set({ activeSidePanel: panel }),
   setTerminalVisible: (visible) => set({ terminalVisible: visible }),
   setChatVisible: (visible) => set({ chatVisible: visible }),

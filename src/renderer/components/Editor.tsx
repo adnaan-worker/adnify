@@ -108,7 +108,7 @@ const getLanguage = (path: string): string => {
 }
 
 export default function Editor() {
-  const { openFiles, activeFilePath, setActiveFile, closeFile, updateFileContent, markFileSaved, language, activeDiff, setActiveDiff, setCursorPosition } = useStore()
+  const { openFiles, activeFilePath, setActiveFile, closeFile, updateFileContent, markFileSaved, language, activeDiff, setActiveDiff, setCursorPosition, setIsLspReady } = useStore()
   const { pendingChanges, acceptChange, undoChange } = useAgent()
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null)
@@ -256,6 +256,7 @@ export default function Editor() {
       startLspServer(workspacePath).then((success) => {
         if (success) {
           console.log('[Editor] LSP server started')
+          setIsLspReady(true)
           // 通知 LSP 当前文件已打开
           const currentFile = useStore.getState().openFiles.find(
             (f: { path: string }) => f.path === useStore.getState().activeFilePath

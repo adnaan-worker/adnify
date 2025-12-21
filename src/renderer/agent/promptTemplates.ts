@@ -167,32 +167,50 @@ const CORE_TOOLS = `## Available Tools
  */
 const WORKFLOW_GUIDELINES = `## Workflow Guidelines
 
-### Execution Flow
-1. **Understand**: Analyze the request and plan approach
-2. **Explore**: Read relevant files to understand current state
-3. **Execute**: Make changes using appropriate tools
-4. **Verify**: Check for errors and test changes
-5. **Summarize**: Briefly explain what was done
+### 1. 🧠 Think & Plan (Chain of Thought)
+Before taking action, briefly analyze:
+- **Goal**: What exactly needs to be done?
+- **Context**: What files do I need to read first?
+- **Strategy**: Which tools are best? (Prefer \`replace_file_content\` for edits)
 
-### File Editing Workflow
-\`\`\`
-1. read_file(path) - Understand current content
-2. edit_file(path, SEARCH/REPLACE blocks) - Make changes
-3. get_lint_errors(path) - Verify no issues (optional)
-\`\`\`
+### 2. 🔍 Explore & Understand (Read-before-Write)
+- **CRITICAL**: You MUST read the file content using \`read_file\` before editing it.
+- **NEVER** guess line numbers or content.
+- **NEVER** rely on memory of previous file states.
 
-### Error Handling
-- "Read-before-write required" → Use read_file first
-- "Matched N times" → SEARCH block not unique, add more context
-- "Search block not found" → Content doesn't match, re-read file
-- "File not found" → Check path, use list_directory to explore
+### 3. 🛠️ Execute (Tool Selection)
+- **For File Edits**:
+  - **Option A (Preferred)**: \`replace_file_content\`
+    - Use when you know the exact line numbers from a recent \`read_file\`.
+    - Best for precise, surgical edits.
+  - **Option B**: \`edit_file\` (Search/Replace)
+    - Use when line numbers might shift or for context-based changes.
+    - **WARNING**: Search block must match EXACTLY (whitespace, indentation).
+- **For New Files**: \`create_file_or_folder\`
 
-### Response Format
-- Be direct and concise
-- Skip preambles like "I'll help you..."
-- Skip postambles like "Let me know if..."
-- Use brief explanations before/after tool calls
-- Don't repeat what code does - focus on what changed
+### 4. ✅ Verify (Closed Loop)
+- After editing, ALWAYS verify:
+  - Did the file content change as expected? (Read it again if unsure)
+  - Are there lint errors? (Use \`get_lint_errors\`)
+  - Does the code compile/run?
+
+### 📝 Example: Using replace_file_content
+User: "Change the port to 8080 in config.ts"
+
+1. **Read**: \`read_file("src/config.ts")\`
+   Result:
+   \`\`\`typescript
+   10: export const config = {
+   11:   port: 3000,
+   12:   env: 'development'
+   13: }
+   \`\`\`
+
+2. **Think**: "I need to change line 11. The current content is '  port: 3000,'."
+
+3. **Edit**: \`replace_file_content("src/config.ts", 11, 11, "  port: 8080,")\`
+
+4. **Verify**: \`get_lint_errors("src/config.ts")\`
 
 ### Task Completion
 **STOP when:**

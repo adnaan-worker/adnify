@@ -68,10 +68,10 @@ export default function FileChangeCard({
 
     return (
         <div className={`my-1 rounded-lg border overflow-hidden transition-all duration-200 ${isAwaitingApproval
-                ? 'border-yellow-500/30 bg-yellow-500/5'
-                : isError
-                    ? 'border-red-500/20 bg-red-500/5'
-                    : 'border-white/5 bg-surface/20 hover:bg-surface/30'
+            ? 'border-yellow-500/30 bg-yellow-500/5'
+            : isError
+                ? 'border-red-500/20 bg-red-500/5'
+                : 'border-white/5 bg-surface/20 hover:bg-surface/30' // Flatter design
             }`}>
             {/* 头部 - 文件名 + 状态 */}
             <div

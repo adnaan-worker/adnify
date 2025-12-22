@@ -46,6 +46,15 @@ export interface ToolDefinition {
   }
 }
 
+export interface ToolExecutionResult {
+  success: boolean
+  result?: string
+  error?: string
+  content?: string
+  rejected?: boolean
+  meta?: Record<string, any>
+}
+
 // ===== 消息内容类型 =====
 
 export interface TextContent {

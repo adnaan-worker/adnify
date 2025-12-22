@@ -3,7 +3,7 @@
  * 负责工具的验证和执行
  */
 
-import { ToolDefinition, ToolApprovalType } from './types'
+import { ToolDefinition, ToolApprovalType, ToolExecutionResult } from './types'
 import { validatePath, isSensitivePath } from '@/renderer/utils/pathUtils'
 import { pathToLspUri } from '@/renderer/services/lspService'
 import {
@@ -436,20 +436,7 @@ function formatDirTree(nodes: DirTreeNode[], prefix = ''): string {
 
 // ===== 工具执行结果 =====
 
-export interface ToolExecutionResult {
-  success: boolean
-  result: string
-  error?: string
-  // 用于 UI 显示的元数据
-  meta?: {
-    filePath?: string
-    oldContent?: string
-    newContent?: string
-    linesAdded?: number
-    linesRemoved?: number
-    isNewFile?: boolean
-  }
-}
+
 
 // ===== 工具执行 =====
 
@@ -787,22 +774,50 @@ export async function executeTool(
         // 验证 cwd
         const validCwd = cwd ? resolvePath(cwd, true) : workspacePath
 
+        // 使用正则正确解析带引号的参数
+        const args: string[] = []
+        const regex = /[^\s"]+|"([^"]*)"/gi
+        let match
+
+        // 移除命令本身，只保留参数部分
+        const commandStr = command.trim()
+        const firstSpace = commandStr.indexOf(' ')
+
+        let cmdName = commandStr
+        let argsStr = ''
+
+        if (firstSpace > -1) {
+          cmdName = commandStr.substring(0, firstSpace)
+          argsStr = commandStr.substring(firstSpace + 1)
+        }
+
+        while ((match = regex.exec(argsStr)) !== null) {
+          // match[1] 是引号内的内容，match[0] 是整个匹配项
+          args.push(match[1] ? match[1] : match[0])
+        }
+
         const result = await window.electronAPI.executeSecureCommand({
-          command: command.split(' ')[0],
-          args: command.split(' ').slice(1),
+          command: cmdName,
+          args: args,
           cwd: validCwd,
           timeout: (timeout || 30) * 1000,
           requireConfirm: false
         })
 
+        // Always return success: true for run_command if we got output, so the UI shows a checkmark.
+        // The content will indicate if the command failed (e.g. exit code).
+        // This prevents the "Red X" confusion when running tests that fail.
         return {
-          success: result.success,
+          success: true,
           result: result.output || (result.success ? 'Command executed' : 'Command failed'),
+          meta: {
+            command: command,
+            cwd: validCwd,
+            exitCode: result.success ? 0 : 1 // We don't have exact exit code from executeSecureCommand yet, but this is a proxy
+          },
           error: result.error
         }
       }
-
-
 
       case 'get_lint_errors': {
         const path = resolvePath(validatedArgs.path, true)

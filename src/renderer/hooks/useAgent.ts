@@ -109,7 +109,8 @@ export function useAgent() {
         thinkingBudget: llmConfig.thinkingBudget,
       },
       workspacePath,
-      systemPrompt
+      systemPrompt,
+      chatMode
     )
   }, [llmConfig, workspacePath, chatMode, promptTemplateId, aiInstructions, openFiles, activeFilePath])
 

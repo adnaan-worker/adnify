@@ -93,6 +93,46 @@ export default function TerminalPanel() {
     const containerRefs = useRef<Map<string, HTMLDivElement>>(new Map())
     const outputBuffers = useRef<Map<string, string[]>>(new Map())
 
+    // Handle pending terminal commands from other components (e.g. Agent ToolCallCard)
+    const { pendingTerminalCommand, setPendingTerminalCommand } = useStore()
+
+    useEffect(() => {
+        if (pendingTerminalCommand && terminalVisible) {
+            // Ensure we have an active terminal
+            if (!activeId && terminals.length === 0) {
+                // Create a new terminal if none exists
+                // We'll need to wait for it to be created, so we might need a more robust way
+                // For now, let's just try to create one if we can access the create function
+                // or just rely on the user having one open.
+                // Ideally, we should trigger createTerminal here.
+            }
+
+            const targetId = activeId || (terminals.length > 0 ? terminals[0].id : null)
+
+            if (targetId) {
+                const term = terminalRefs.current.get(targetId)
+                if (term) {
+                    // If CWD is specified, we might want to cd into it first
+                    // But for now, let's just paste the command
+                    if (pendingTerminalCommand.command) {
+                        term.input(pendingTerminalCommand.command)
+                        // If autoRun is true, we could append \r, but let's let the user press enter for safety
+                        // unless explicitly requested.
+                        if (pendingTerminalCommand.autoRun) {
+                            term.input('\r')
+                        }
+                    }
+
+                    // Clear the pending command
+                    setPendingTerminalCommand(null)
+
+                    // Focus the terminal
+                    term.focus()
+                }
+            }
+        }
+    }, [pendingTerminalCommand, terminalVisible, activeId, terminals, setPendingTerminalCommand])
+
     const startResizing = useCallback((e: React.MouseEvent) => {
         e.preventDefault()
         setIsResizing(true)

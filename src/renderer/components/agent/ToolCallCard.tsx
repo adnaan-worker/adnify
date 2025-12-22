@@ -21,7 +21,7 @@ interface ToolCallCardProps {
   isAwaitingApproval?: boolean
   onApprove?: () => void
   onReject?: () => void
-  onApproveAll?: () => void  // 批量审批：本次会话自动批准同类工具
+  onApproveAll?: () => void
 }
 
 // 工具图标映射
@@ -34,7 +34,6 @@ const TOOL_ICONS: Record<string, React.ReactNode> = {
   create_file: <FileText className="w-3.5 h-3.5" />,
   edit_file: <Edit3 className="w-3.5 h-3.5" />,
   delete_file_or_folder: <Trash2 className="w-3.5 h-3.5" />,
-  // Phase 2 tools
   web_search: <Globe className="w-3.5 h-3.5" />,
   read_url: <Link2 className="w-3.5 h-3.5" />,
   ask_user: <MessageCircle className="w-3.5 h-3.5" />,
@@ -50,7 +49,6 @@ const TOOL_LABELS: Record<string, string> = {
   create_file: 'Create File',
   edit_file: 'Edit File',
   delete_file_or_folder: 'Delete',
-  // Phase 2 tools
   web_search: 'Web Search',
   read_url: 'Read URL',
   ask_user: 'Ask User',
@@ -66,13 +64,11 @@ const TOOL_COLORS: Record<string, string> = {
   create_file: 'text-emerald-400',
   edit_file: 'text-orange-400',
   delete_file_or_folder: 'text-red-400',
-  // Phase 2 tools
   web_search: 'text-sky-400',
   read_url: 'text-indigo-400',
   ask_user: 'text-pink-400',
 }
 
-// 使用 memo 优化，避免不必要的重渲染
 const ToolCallCard = memo(function ToolCallCard({
   toolCall,
   isAwaitingApproval,
@@ -81,7 +77,7 @@ const ToolCallCard = memo(function ToolCallCard({
   onApproveAll,
 }: ToolCallCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const { language } = useStore()
+  const { language, setTerminalVisible } = useStore()
 
   const args = toolCall.arguments as Record<string, unknown>
   const isStreaming = args._streaming === true
@@ -90,7 +86,7 @@ const ToolCallCard = memo(function ToolCallCard({
   const isError = toolCall.status === 'error'
   const isRejected = toolCall.status === 'rejected'
 
-  // 自动展开 logic: 当工具正在运行、流式传输中或刚成功，且是编辑类操作时，自动展开
+  // 自动展开 logic
   useEffect(() => {
     if ((isRunning || isStreaming || isSuccess) && (toolCall.name === 'edit_file' || toolCall.name === 'write_file' || toolCall.name === 'create_file')) {
       setIsExpanded(true)
@@ -132,7 +128,6 @@ const ToolCallCard = memo(function ToolCallCard({
       const path = args.path as string
       return path?.split(/[\\/]/).pop() || path
     }
-    // 修复: search_files 使用 pattern 而不是 query
     if (name === 'search_files') {
       const pattern = (args.pattern || args.query) as string
       return pattern ? `"${pattern}"` : ''
@@ -145,7 +140,6 @@ const ToolCallCard = memo(function ToolCallCard({
       const path = args.path as string
       return path?.split(/[\\/]/).pop() || path
     }
-    // Phase 2 tools
     if (name === 'web_search') {
       const query = args.query as string
       return query ? `"${query}"` : ''
@@ -161,14 +155,12 @@ const ToolCallCard = memo(function ToolCallCard({
     return ''
   }, [toolCall.name, args])
 
-  // 复制结果到剪贴板
   const handleCopyResult = () => {
     if (toolCall.result) {
       navigator.clipboard.writeText(toolCall.result)
     }
   }
 
-  // 状态指示器
   const StatusIndicator = () => {
     if (isStreaming) {
       return (
@@ -203,7 +195,7 @@ const ToolCallCard = memo(function ToolCallCard({
       ? 'border-yellow-500/30 bg-yellow-500/5 shadow-[0_0_20px_-5px_rgba(234,179,8,0.15)] ring-1 ring-yellow-500/20'
       : isError
         ? 'border-red-500/20 bg-red-500/5'
-        : 'border-white/5 bg-surface/30 backdrop-blur-md hover:bg-surface/50 shadow-sm hover:border-white/10'
+        : 'border-white/5 bg-surface/20 hover:bg-surface/30' // Flatter design
       }`}>
       {/* 头部 */}
       <div
@@ -230,6 +222,30 @@ const ToolCallCard = memo(function ToolCallCard({
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Open Terminal Button */}
+          {toolCall.name === 'run_command' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                const args = toolCall.arguments as any
+                const command = args.command || ''
+                const cwd = (toolCall as any).meta?.cwd || args.cwd
+
+                // Set pending command to be pasted into terminal
+                useStore.getState().setPendingTerminalCommand({
+                  command: command,
+                  cwd: cwd,
+                  autoRun: false // Don't auto-run, just paste it for the user
+                })
+                setTerminalVisible(true)
+              }}
+              className="p-1 hover:bg-white/10 rounded text-text-muted hover:text-accent transition-colors"
+              title="Open Terminal with Command"
+            >
+              <Terminal className="w-3.5 h-3.5" />
+            </button>
+          )}
+
           <StatusIndicator />
           <button className="p-1 hover:bg-white/10 rounded-md transition-colors text-text-muted/70 hover:text-text-primary">
             {isExpanded ? (

@@ -52,6 +52,8 @@ export interface UISlice {
   setSelectedCode: (code: string) => void
   setGitStatus: (status: GitStatus | null) => void
   setIsGitRepo: (isRepo: boolean) => void
+  pendingTerminalCommand: { command: string; cwd?: string; autoRun?: boolean } | null
+  setPendingTerminalCommand: (command: { command: string; cwd?: string; autoRun?: boolean } | null) => void
 }
 
 export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
@@ -74,6 +76,7 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   selectedCode: '',
   gitStatus: null,
   isGitRepo: false,
+  pendingTerminalCommand: null,
 
   setIsInitialized: (initialized) => set({ isInitialized: initialized }),
   setIsLspReady: (ready) => set({ isLspReady: ready }),
@@ -94,4 +97,5 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   setSelectedCode: (code) => set({ selectedCode: code }),
   setGitStatus: (status) => set({ gitStatus: status }),
   setIsGitRepo: (isRepo) => set({ isGitRepo: isRepo }),
+  setPendingTerminalCommand: (command) => set({ pendingTerminalCommand: command }),
 })

@@ -14,7 +14,7 @@ import { useAgentStore } from './AgentStore'
 import { useStore } from '../../store'  // 用于读取 autoApprove 配置
 import { executeTool, getToolDefinitions, getToolApprovalType, WRITE_TOOLS } from './ToolExecutor'
 import { buildOpenAIMessages, validateOpenAIMessages, OpenAIMessage } from './MessageConverter'
-import { MessageContent, ToolStatus, ContextItem, TextContent, UserMessage, AssistantMessage, ToolResultMessage } from './types'
+import { MessageContent, ToolStatus, ContextItem, TextContent, UserMessage, AssistantMessage, ToolResultMessage, ToolDefinition, ToolExecutionResult } from './types'
 import { LLMStreamChunk, LLMToolCall } from '@/renderer/types/electron'
 import { parsePartialJson, truncateToolResult } from '@/renderer/utils/partialJson'
 
@@ -190,7 +190,8 @@ class AgentServiceClass {
       thinkingBudget?: number
     },
     workspacePath: string | null,
-    systemPrompt: string
+    systemPrompt: string,
+    chatMode: 'chat' | 'agent' = 'agent'
   ): Promise<void> {
     // 防止重复执行
     if (this.isRunning) {
@@ -237,7 +238,7 @@ class AgentServiceClass {
       store.setStreamPhase('streaming')
 
       // 7. 执行 Agent 循环
-      await this.runAgentLoop(config, llmMessages, workspacePath)
+      await this.runAgentLoop(config, llmMessages, workspacePath, chatMode)
 
     } catch (error) {
       console.error('[Agent] Error:', error)
@@ -386,7 +387,8 @@ class AgentServiceClass {
   private async runAgentLoop(
     config: { provider: string; model: string; apiKey: string; baseUrl?: string },
     llmMessages: OpenAIMessage[],
-    workspacePath: string | null
+    workspacePath: string | null,
+    chatMode: 'chat' | 'agent'
   ): Promise<void> {
     const store = useAgentStore.getState()
     let loopCount = 0
@@ -408,7 +410,7 @@ class AgentServiceClass {
       await this.compressContext(llmMessages)
 
       // 调用 LLM（带自动重试）
-      const result = await this.callLLMWithRetry(config, llmMessages)
+      const result = await this.callLLMWithRetry(config, llmMessages, chatMode)
 
       if (this.abortController?.signal.aborted) break
 
@@ -589,7 +591,8 @@ class AgentServiceClass {
    */
   private async callLLMWithRetry(
     config: { provider: string; model: string; apiKey: string; baseUrl?: string },
-    messages: OpenAIMessage[]
+    messages: OpenAIMessage[],
+    chatMode: 'chat' | 'agent'
   ): Promise<{ content?: string; toolCalls?: LLMToolCall[]; error?: string }> {
     let lastError: string | undefined
     let delay = CONFIG.retryDelayMs
@@ -602,7 +605,7 @@ class AgentServiceClass {
         delay *= CONFIG.retryBackoffMultiplier
       }
 
-      const result = await this.callLLM(config, messages)
+      const result = await this.callLLM(config, messages, chatMode)
       if (!result.error) return result
 
       const isRetryable = RETRYABLE_ERROR_CODES.has(result.error) ||
@@ -622,7 +625,8 @@ class AgentServiceClass {
    */
   private async callLLM(
     config: { provider: string; model: string; apiKey: string; baseUrl?: string },
-    messages: OpenAIMessage[]
+    messages: OpenAIMessage[],
+    chatMode: 'chat' | 'agent'
   ): Promise<{ content?: string; toolCalls?: LLMToolCall[]; error?: string }> {
     const store = useAgentStore.getState()
 
@@ -642,7 +646,7 @@ class AgentServiceClass {
       const isValidToolName = (name: string) => {
         if (!/^[a-zA-Z0-9_-]+$/.test(name)) return false
         // 确保工具在定义中存在
-        return getToolDefinitions().some(t => t.name === name)
+        return getToolDefinitions().some((t: ToolDefinition) => t.name === name)
       }
 
       // 监听流式文本
@@ -698,11 +702,16 @@ class AgentServiceClass {
               if (this.currentAssistantId) {
                 const now = Date.now()
                 const lastUpdate = (this as any)._lastToolUpdate || 0
-                if (now - lastUpdate > 100) {
+                const lastLen = (this as any)._lastArgsLen || 0
+                const currentLen = currentToolCall.argsString.length
+
+                // Optimize throttle: update every 30ms OR if content grew significantly (> 50 chars)
+                if (now - lastUpdate > 30 || currentLen - lastLen > 50) {
                   store.updateToolCall(this.currentAssistantId, currentToolCall.id, {
                     arguments: { ...partialArgs, _streaming: true },
                   })
                     ; (this as any)._lastToolUpdate = now
+                    ; (this as any)._lastArgsLen = currentLen
                 }
               }
             }
@@ -810,7 +819,7 @@ class AgentServiceClass {
       window.electronAPI.sendMessage({
         config,
         messages: messages as any,
-        tools: getToolDefinitions(),
+        tools: chatMode === 'chat' ? [] : getToolDefinitions(),
         systemPrompt: '',
       }).catch((err) => {
         cleanupListeners()
@@ -831,7 +840,7 @@ class AgentServiceClass {
 
     const approvalType = getToolApprovalType(name)
     const { autoApprove } = useStore.getState()
-    const needsApproval = approvalType && !autoApprove[approvalType]
+    const needsApproval = approvalType && !(autoApprove as any)[approvalType]
 
     if (this.currentAssistantId) {
       store.updateToolCall(this.currentAssistantId, id, {
@@ -875,7 +884,7 @@ class AgentServiceClass {
       setTimeout(() => reject(new Error(`Tool execution timed out after ${timeoutMs / 1000}s`)), timeoutMs)
     )
 
-    let result: import('./ToolExecutor').ToolExecutionResult
+    let result: ToolExecutionResult
     try {
       result = await Promise.race([
         executeTool(name, args, workspacePath || undefined),
@@ -924,7 +933,7 @@ class AgentServiceClass {
       }
     }
 
-    const resultContent = result.success ? result.result : `Error: ${result.error}`
+    const resultContent = result.success ? (result.result || '') : `Error: ${result.error || 'Unknown error'}`
     const truncatedContent = truncateToolResult(resultContent, name, CONFIG.maxToolResultChars)
     const resultType = result.success ? 'success' : 'tool_error'
     store.addToolResult(id, name, truncatedContent, resultType, args as Record<string, unknown>)

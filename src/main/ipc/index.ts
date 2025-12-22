@@ -9,7 +9,7 @@ import Store from 'electron-store'
 import { registerWindowHandlers } from './window'
 import { registerSettingsHandlers } from './settings'
 import { registerSearchHandlers } from './search'
-import { registerLLMHandlers, updateLLMServiceWindow } from './llm'
+import { registerLLMHandlers, updateLLMServiceWindow, cleanupLLMService } from './llm'
 import { registerIndexingHandlers } from './indexing'
 import { registerLspHandlers } from './lsp'
 import { registerHttpHandlers } from './http'
@@ -30,6 +30,9 @@ export interface IPCContext {
   mainStore: Store
   bootstrapStore: Store
   setMainStore: (store: Store) => void
+  // 窗口-工作区管理（用于单项目单窗口模式）
+  findWindowByWorkspace?: (roots: string[]) => BrowserWindow | null
+  setWindowWorkspace?: (windowId: number, roots: string[]) => void
 }
 
 /**
@@ -47,6 +50,9 @@ export function registerAllHandlers(context: IPCContext) {
   // 文件操作（安全版）
   registerSecureFileHandlers(getMainWindow, mainStore, () => {
     return mainStore.get('lastWorkspaceSession') as { roots: string[] } | null
+  }, {
+    findWindowByWorkspace: context.findWindowByWorkspace,
+    setWindowWorkspace: context.setWindowWorkspace,
   })
 
   // 设置（传入安全模块引用）
@@ -88,5 +94,5 @@ export function cleanupAllHandlers() {
   console.log('[IPC] All handlers cleaned up')
 }
 
-export { updateLLMServiceWindow }
+export { updateLLMServiceWindow, cleanupLLMService }
 

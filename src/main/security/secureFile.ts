@@ -5,17 +5,11 @@ import { promises as fsPromises } from 'fs'
 import Store from 'electron-store'
 import { securityManager, OperationType } from './securityModule'
 
-const mainStore = new Store({ name: 'main' })
 let watcherSubscription: any = null
 
 interface FileWatcherEvent {
   event: 'create' | 'update' | 'delete'
   path: string
-}
-
-// 获取工作区会话 (New)
-const getWorkspaceSession = (): { configPath: string | null; roots: string[] } | null => {
-  return mainStore.get('lastWorkspaceSession', null) as { configPath: string | null; roots: string[] } | null
 }
 
 
@@ -50,10 +44,12 @@ async function readLargeFile(filePath: string, start: number, maxLength: number)
 }
 
 
-
 // 文件监听
-function setupFileWatcher(callback: (data: FileWatcherEvent) => void) {
-  const workspace = getWorkspaceSession()
+function setupFileWatcher(
+  getWorkspaceSessionFn: () => { roots: string[] } | null,
+  callback: (data: FileWatcherEvent) => void
+) {
+  const workspace = getWorkspaceSessionFn()
   if (!workspace || workspace.roots.length === 0) return
 
   const chokidar = require('chokidar')
@@ -72,19 +68,31 @@ function setupFileWatcher(callback: (data: FileWatcherEvent) => void) {
     ; (global as any).fileWatcher = watcher
 }
 
+// 窗口管理上下文类型
+interface WindowManagerContext {
+  findWindowByWorkspace?: (roots: string[]) => any
+  setWindowWorkspace?: (windowId: number, roots: string[]) => void
+}
+
 // 注册所有 IPC Handlers
 export function registerSecureFileHandlers(
   getMainWindowFn: () => any,
   store: any,
-  getWorkspaceSessionFn: () => { roots: string[] } | null
+  getWorkspaceSessionFn: () => { roots: string[] } | null,
+  windowManager?: WindowManagerContext
 ) {
   ; (global as any).mainWindow = getMainWindowFn()
-  if (store) {
-    const storeNew = new Store({ name: 'main' })
-    const lastPath = store.get('lastWorkspacePath')
-    if (lastPath !== undefined) {
-      storeNew.set('lastWorkspacePath', lastPath)
-    }
+
+  // 辅助函数：添加到最近工作区列表（存储到config store，支持自定义路径）
+  function addRecentWorkspace(path: string) {
+    const recent = store.get('recentWorkspaces', []) as string[]
+
+    // 移除重复项，添加到开头，最多保留10个
+    const filtered = recent.filter((p: string) => p.toLowerCase() !== path.toLowerCase())
+    const updated = [path, ...filtered].slice(0, 10)
+
+    store.set('recentWorkspaces', updated)
+    console.log('[SecureFile] Updated recent workspaces:', updated.length, 'items')
   }
 
   // ========== 文件操作处理器 ==========
@@ -117,7 +125,7 @@ export function registerSecureFileHandlers(
   })
 
   // 打开文件夹
-  ipcMain.handle('file:openFolder', async () => {
+  ipcMain.handle('file:openFolder', async (event) => {
     const mainWindow = getMainWindowFn()
     if (!mainWindow) return null
 
@@ -127,18 +135,42 @@ export function registerSecureFileHandlers(
 
     if (!result.canceled && result.filePaths[0]) {
       const folderPath = result.filePaths[0]
+
+      // 检查是否已有窗口打开了该项目（单项目单窗口模式）
+      if (windowManager?.findWindowByWorkspace) {
+        const existingWindow = windowManager.findWindowByWorkspace([folderPath])
+        if (existingWindow && existingWindow !== mainWindow) {
+          // 聚焦已有窗口
+          if (existingWindow.isMinimized()) {
+            existingWindow.restore()
+          }
+          existingWindow.focus()
+          console.log('[SecureFile] Project already open in another window, focusing:', folderPath)
+          // 返回特殊标记，告诉渲染进程项目已在其他窗口打开
+          return { redirected: true, path: folderPath }
+        }
+      }
+
+      // 记录当前窗口的工作区
+      const webContentsId = event.sender.id
+      if (windowManager?.setWindowWorkspace) {
+        windowManager.setWindowWorkspace(webContentsId, [folderPath])
+      }
+
       // Update legacy store
       const store = new Store({ name: 'main' })
       store.set('lastWorkspacePath', folderPath)
       // Update new store
       store.set('lastWorkspaceSession', { configPath: null, roots: [folderPath] })
+      // 添加到最近工作区
+      addRecentWorkspace(folderPath)
       return folderPath
     }
     return null
   })
 
   // 打开工作区 (多根支持)
-  ipcMain.handle('workspace:open', async () => {
+  ipcMain.handle('workspace:open', async (event) => {
     const mainWindow = getMainWindowFn()
     if (!mainWindow) return null
 
@@ -154,28 +186,49 @@ export function registerSecureFileHandlers(
       const targetPath = result.filePaths[0]
       const store = new Store({ name: 'main' })
 
+      let roots: string[] = []
+
       // Check if it's a workspace file
       if (targetPath.endsWith('.adnify-workspace')) {
         try {
           const content = await fsPromises.readFile(targetPath, 'utf-8')
           const config = JSON.parse(content)
-          const roots = config.folders.map((f: any) => f.path)
-          const session = { configPath: targetPath, roots }
-
-          store.set('lastWorkspaceSession', session)
-          store.set('lastWorkspacePath', roots[0]) // Legacy fallback
-          return session
+          roots = config.folders.map((f: any) => f.path)
         } catch (e) {
           console.error('Failed to parse workspace file', e)
           return null
         }
       } else {
         // It's a folder
-        const session = { configPath: null, roots: [targetPath] }
-        store.set('lastWorkspaceSession', session)
-        store.set('lastWorkspacePath', targetPath)
-        return session
+        roots = [targetPath]
       }
+
+      // 检查是否已有窗口打开了该项目（单项目单窗口模式）
+      if (windowManager?.findWindowByWorkspace && roots.length > 0) {
+        const existingWindow = windowManager.findWindowByWorkspace(roots)
+        if (existingWindow && existingWindow !== mainWindow) {
+          // 聚焦已有窗口
+          if (existingWindow.isMinimized()) {
+            existingWindow.restore()
+          }
+          existingWindow.focus()
+          console.log('[SecureFile] Workspace already open in another window, focusing:', roots)
+          return { redirected: true, roots }
+        }
+      }
+
+      // 记录当前窗口的工作区
+      const webContentsId = event.sender.id
+      if (windowManager?.setWindowWorkspace) {
+        windowManager.setWindowWorkspace(webContentsId, roots)
+      }
+
+      const session = { configPath: targetPath.endsWith('.adnify-workspace') ? targetPath : null, roots }
+      store.set('lastWorkspaceSession', session)
+      store.set('lastWorkspacePath', roots[0]) // Legacy fallback
+      // 添加到最近工作区
+      roots.forEach(r => addRecentWorkspace(r))
+      return session
     }
     return null
   })
@@ -225,12 +278,11 @@ export function registerSecureFileHandlers(
 
   // 恢复工作区
   ipcMain.handle('workspace:restore', async () => {
-    const store = new Store({ name: 'main' })
     const session = store.get('lastWorkspaceSession') as { configPath: string | null; roots: string[] } | null
 
     if (session) {
       // 自动启动文件监听
-      setupFileWatcher((data) => {
+      setupFileWatcher(getWorkspaceSessionFn, (data: FileWatcherEvent) => {
         const win = getMainWindowFn()
         if (win) {
           win.webContents.send('file:changed', data)
@@ -243,7 +295,7 @@ export function registerSecureFileHandlers(
     const legacyPath = store.get('lastWorkspacePath') as string | null
     if (legacyPath) {
       // 自动启动文件监听
-      setupFileWatcher((data) => {
+      setupFileWatcher(getWorkspaceSessionFn, (data: FileWatcherEvent) => {
         const win = getMainWindowFn()
         if (win) {
           win.webContents.send('file:changed', data)
@@ -617,7 +669,7 @@ export function registerSecureFileHandlers(
   // 文件监听
   ipcMain.handle('file:watch', (_, action: string) => {
     if (action === 'start') {
-      setupFileWatcher((data) => {
+      setupFileWatcher(getWorkspaceSessionFn, (data: FileWatcherEvent) => {
         const win = getMainWindowFn()
         if (win) {
           win.webContents.send('file:changed', data)
@@ -642,6 +694,19 @@ export function registerSecureFileHandlers(
     const store = new Store({ name: 'security' })
     store.delete('permissions')
     store.delete('audit')
+    return true
+  })
+
+  // ========== 最近工作区管理 ==========
+
+  // 获取最近打开的工作区列表（从config store读取，支持自定义路径）
+  ipcMain.handle('workspace:getRecent', () => {
+    return store.get('recentWorkspaces', []) as string[]
+  })
+
+  // 清除最近工作区
+  ipcMain.handle('workspace:clearRecent', () => {
+    store.set('recentWorkspaces', [])
     return true
   })
 }

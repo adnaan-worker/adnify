@@ -177,6 +177,7 @@ export interface ElectronAPI {
   close: () => void
   toggleDevTools: () => void
   newWindow: () => void
+  getWindowId: () => Promise<number>
 
   // File operations (安全 - 强制工作区边界)
   openFile: () => Promise<{ path: string; content: string } | null>
@@ -185,6 +186,8 @@ export interface ElectronAPI {
   addFolderToWorkspace: () => Promise<string | null>
   saveWorkspace: (configPath: string, roots: string[]) => Promise<boolean>
   restoreWorkspace: () => Promise<WorkspaceConfig | null>
+  getRecentWorkspaces: () => Promise<string[]>
+  clearRecentWorkspaces: () => Promise<boolean>
   readDir: (path: string) => Promise<FileItem[]>
   getFileTree: (path: string, maxDepth?: number) => Promise<string>
   readFile: (path: string) => Promise<string | null>

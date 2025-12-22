@@ -45,4 +45,9 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
       win.show()
     }
   })
+
+  // 获取当前窗口的唯一标识（webContents.id）
+  ipcMain.handle('window:getId', (event) => {
+    return event.sender.id
+  })
 }

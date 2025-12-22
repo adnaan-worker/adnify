@@ -21,7 +21,7 @@ import { ThemeManager } from './components/ThemeManager'
 import AboutDialog from './components/AboutDialog'
 import { adnifyDir } from './services/adnifyDirService'
 import { checkpointService } from './agent/checkpointService'
-import { useAgentStore } from './agent/core/AgentStore'
+import { useAgentStore, initializeAgentStore } from './agent/core/AgentStore'
 import { keybindingService } from './services/keybindingService'
 import { registerCoreCommands } from './config/commands'
 import { LAYOUT_LIMITS } from '../shared/constants'
@@ -85,6 +85,10 @@ function AppContent() {
         // 注册核心命令并初始化快捷键服务 (Move this up to ensure it runs)
         registerCoreCommands()
         await keybindingService.init()
+
+        // 初始化 AgentStore 窗口隔离（确保多窗口不会共享会话）
+        updateLoaderStatus('Initializing window...')
+        await initializeAgentStore()
 
         // 初始化编辑器配置和主题
         updateLoaderStatus('Loading configuration...')

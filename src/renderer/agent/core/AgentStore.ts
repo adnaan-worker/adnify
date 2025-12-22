@@ -193,6 +193,10 @@ class StreamingBuffer {
 
 const streamingBuffer = new StreamingBuffer()
 
+// ===== 存储配置 =====
+// 使用固定key，通过项目的.adnify目录实现隔离
+const STORE_NAME = 'adnify-agent-store'
+
 // ===== Store 实现 =====
 
 export const useAgentStore = create<AgentStore>()(
@@ -1154,3 +1158,22 @@ streamingBuffer.setFlushCallback((messageId: string, content: string) => {
   const store = useAgentStore.getState() as any
   store._doAppendToAssistant(messageId, content)
 })
+
+// ===== Store 初始化 =====
+/**
+ * 初始化 AgentStore，从项目的 .adnify/sessions.json 恢复会话数据
+ * 通过项目目录实现隔离，同项目多窗口共享会话
+ */
+export async function initializeAgentStore(): Promise<void> {
+  try {
+    // 触发数据恢复
+    const persistApi = (useAgentStore as any).persist
+    if (persistApi) {
+      await persistApi.rehydrate()
+      console.log('[AgentStore] Rehydrated from project storage:', STORE_NAME)
+    }
+  } catch (error) {
+    console.error('[AgentStore] Failed to initialize storage:', error)
+    // 降级到默认行为，不阻塞应用启动
+  }
+}

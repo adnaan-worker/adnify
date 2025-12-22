@@ -77,11 +77,44 @@ initStore()
 // ==========================================
 
 const windows = new Map<number, BrowserWindow>()
+const windowWorkspaces = new Map<number, string[]>()  // 窗口ID -> 项目根路径列表
 let lastActiveWindow: BrowserWindow | null = null
 let isQuitting = false
 
 function getMainWindow() {
   return lastActiveWindow || Array.from(windows.values())[0] || null
+}
+
+// 检查是否已有窗口打开了指定项目
+function findWindowByWorkspace(roots: string[]): BrowserWindow | null {
+  const normalizedRoots = roots.map(r => r.toLowerCase().replace(/\\/g, '/'))
+
+  for (const [windowId, workspaceRoots] of windowWorkspaces) {
+    const normalizedWindowRoots = workspaceRoots.map(r => r.toLowerCase().replace(/\\/g, '/'))
+
+    // 检查是否有相同的根路径
+    const hasMatch = normalizedRoots.some(root =>
+      normalizedWindowRoots.some(wr => wr === root)
+    )
+
+    if (hasMatch) {
+      const win = windows.get(windowId)
+      if (win && !win.isDestroyed()) {
+        return win
+      }
+    }
+  }
+  return null
+}
+
+// 设置窗口的工作区
+function setWindowWorkspace(windowId: number, roots: string[]) {
+  windowWorkspaces.set(windowId, roots)
+  console.log('[Main] Window workspace set:', windowId, roots)
+}
+// 清理窗口工作区
+function clearWindowWorkspace(windowId: number) {
+  windowWorkspaces.delete(windowId)
 }
 
 // 单例锁定
@@ -150,6 +183,7 @@ function createWindow(isEmpty: boolean = false) {
     } else {
       // 非最后一个窗口，直接移除引用
       windows.delete(windowId)
+      clearWindowWorkspace(windowId)  // 清理窗口-工作区映射
       if (lastActiveWindow === win) {
         lastActiveWindow = Array.from(windows.values())[0] || null
       }
@@ -218,6 +252,9 @@ app.whenReady().then(() => {
     setMainStore: (store) => {
       mainStore = store
     },
+    // 窗口-工作区管理函数
+    findWindowByWorkspace,
+    setWindowWorkspace,
   })
 
   // 创建应用菜单

@@ -140,6 +140,7 @@ export interface ElectronAPI {
   maximize: () => void
   close: () => void
   newWindow: () => void
+  getWindowId: () => Promise<number>
 
   // File operations
   openFile: () => Promise<{ path: string; content: string } | null>
@@ -148,6 +149,8 @@ export interface ElectronAPI {
   addFolderToWorkspace: () => Promise<string | null>
   saveWorkspace: (configPath: string, roots: string[]) => Promise<boolean>
   restoreWorkspace: () => Promise<{ configPath: string | null; roots: string[] } | null>
+  getRecentWorkspaces: () => Promise<string[]>
+  clearRecentWorkspaces: () => Promise<boolean>
   readDir: (path: string) => Promise<{ name: string; path: string; isDirectory: boolean }[]>
   getFileTree: (path: string, maxDepth?: number) => Promise<string>
   readFile: (path: string) => Promise<string | null>
@@ -288,6 +291,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   close: () => ipcRenderer.send('window:close'),
   toggleDevTools: () => ipcRenderer.send('window:toggleDevTools'),
   newWindow: () => ipcRenderer.invoke('window:new'),
+  getWindowId: () => ipcRenderer.invoke('window:getId'),
 
   openFile: () => ipcRenderer.invoke('file:open'),
   openFolder: () => ipcRenderer.invoke('file:openFolder'),
@@ -295,6 +299,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addFolderToWorkspace: () => ipcRenderer.invoke('workspace:addFolder'),
   saveWorkspace: (configPath: string, roots: string[]) => ipcRenderer.invoke('workspace:save', configPath, roots),
   restoreWorkspace: () => ipcRenderer.invoke('workspace:restore'),
+  getRecentWorkspaces: () => ipcRenderer.invoke('workspace:getRecent'),
+  clearRecentWorkspaces: () => ipcRenderer.invoke('workspace:clearRecent'),
   readDir: (path: string) => ipcRenderer.invoke('file:readDir', path),
   getFileTree: (path: string, maxDepth?: number) => ipcRenderer.invoke('file:getTree', path, maxDepth),
   readFile: (path: string) => ipcRenderer.invoke('file:read', path),

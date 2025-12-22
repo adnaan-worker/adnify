@@ -1,17 +1,22 @@
-import { Minus, Square, X, Search, Plus, HelpCircle } from 'lucide-react'
+import { Minus, Square, X, Search, HelpCircle } from 'lucide-react'
 import { useStore } from '../store'
 import { Logo } from './Logo'
 import { Button } from './ui'
+import WorkspaceDropdown from './WorkspaceDropdown'
 
 export default function TitleBar() {
   const { setShowQuickOpen, setShowAbout } = useStore()
   return (
     <div className="h-9 flex items-center justify-between px-3 drag-region select-none border-b border-border-subtle z-50 bg-background-secondary">
 
-      {/* Left Spacer / Logo */}
-      <div className="flex items-center gap-3 no-drag w-1/3 pl-2 opacity-80 hover:opacity-100 transition-opacity cursor-default">
-        <Logo className="w-4 h-4 text-accent" glow />
-        <span className="text-xs font-bold text-text-primary tracking-widest font-sans">ADNIFY</span>
+      {/* Left - Logo + Workspace Dropdown */}
+      <div className="flex items-center gap-2 no-drag w-1/3">
+        <div className="flex items-center gap-2 pl-2 opacity-80 hover:opacity-100 transition-opacity cursor-default">
+          <Logo className="w-4 h-4 text-accent" glow />
+          <span className="text-xs font-bold text-text-primary tracking-widest font-sans">ADNIFY</span>
+        </div>
+        <div className="h-4 w-[1px] bg-border-subtle mx-1" />
+        <WorkspaceDropdown />
       </div>
 
       {/* Center - Command Palette Trigger */}
@@ -28,7 +33,7 @@ export default function TitleBar() {
         </div>
       </div>
 
-      {/* Right Controls */}
+      {/* Right Controls - 仅保留帮助和窗口控制 */}
       <div className="flex items-center justify-end gap-1 no-drag w-1/3">
         <Button
           variant="icon"
@@ -38,15 +43,6 @@ export default function TitleBar() {
           title="About Adnify"
         >
           <HelpCircle className="w-3.5 h-3.5" />
-        </Button>
-        <Button
-          variant="icon"
-          size="icon"
-          onClick={() => window.electronAPI.newWindow()}
-          className="mr-1 w-7 h-7"
-          title="New Window (Ctrl+Shift+N)"
-        >
-          <Plus className="w-3.5 h-3.5" />
         </Button>
 
         <div className="h-4 w-[1px] bg-border-subtle mx-1" />

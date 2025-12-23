@@ -81,46 +81,61 @@ const CodeBlock = React.memo(({ language, children, fontSize }: { language: stri
 
 CodeBlock.displayName = 'CodeBlock'
 
+// 辅助函数：清理流式输出中的 XML 工具调用标签
+const cleanStreamingContent = (text: string): string => {
+  if (!text) return ''
+  // 匹配完整的 <tool_call>...</tool_call> 和 <function>...</function> 块并移除
+  let cleaned = text.replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '')
+  cleaned = cleaned.replace(/<function[\s\S]*?<\/function>/gi, '')
+  // 匹配以 <tool_call> 或 <function> 开头但未闭合的块（在字符串末尾）并移除
+  cleaned = cleaned.replace(/<tool_call>[\s\S]*$/gi, '')
+  cleaned = cleaned.replace(/<function[\s\S]*$/gi, '')
+  return cleaned.trim()
+}
+
 // Markdown 渲染组件 - 优化排版
-const MarkdownContent = React.memo(({ content, fontSize }: { content: string; fontSize: number }) => (
-  <div style={{ fontSize: `${fontSize}px` }} className="text-text-primary/90 leading-8 tracking-wide">
-    <ReactMarkdown
-      className="prose prose-invert max-w-none"
-      components={{
-        code({ className, children, node, ...props }) {
-          const match = /language-(\w+)/.exec(className || '')
-          const codeContent = String(children)
-          const isCodeBlock = match || node?.position?.start?.line !== node?.position?.end?.line
-          const isInline = !isCodeBlock && !codeContent.includes('\n')
+const MarkdownContent = React.memo(({ content, fontSize, isStreaming }: { content: string; fontSize: number; isStreaming?: boolean }) => {
+  const displayContent = isStreaming ? cleanStreamingContent(content) : content;
 
-          return isInline ? (
-            <code className="bg-white/10 px-1.5 py-0.5 rounded text-accent-light font-mono text-[0.9em]" {...props}>
-              {children}
-            </code>
-          ) : (
-            <CodeBlock language={match?.[1]} fontSize={fontSize}>{children}</CodeBlock>
-          )
-        },
-        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-        ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-1">{children}</ul>,
-        ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-1">{children}</ol>,
-        li: ({ children }) => <li className="">{children}</li>,
-        a: ({ href, children }) => (
-          <a href={href} target="_blank" className="text-accent hover:underline decoration-accent/50 underline-offset-2">{children}</a>
-        ),
-        blockquote: ({ children }) => (
-          <blockquote className="border-l-2 border-accent/40 pl-4 my-2 text-text-muted italic bg-white/5 py-1 rounded-r">{children}</blockquote>
-        ),
-        h1: ({ children }) => <h1 className="text-lg font-bold mb-2 mt-4 first:mt-0 text-text-primary">{children}</h1>,
-        h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0 text-text-primary">{children}</h2>,
-        h3: ({ children }) => <h3 className="text-sm font-semibold mb-1 mt-2 first:mt-0 text-text-primary">{children}</h3>,
-      }}
-    >
-      {content}
-    </ReactMarkdown>
-  </div>
-))
+  return (
+    <div style={{ fontSize: `${fontSize}px` }} className="text-text-primary/90 leading-8 tracking-wide">
+      <ReactMarkdown
+        className="prose prose-invert max-w-none"
+        components={{
+          code({ className, children, node, ...props }) {
+            const match = /language-(\w+)/.exec(className || '')
+            const codeContent = String(children)
+            const isCodeBlock = match || node?.position?.start?.line !== node?.position?.end?.line
+            const isInline = !isCodeBlock && !codeContent.includes('\n')
 
+            return isInline ? (
+              <code className="bg-white/10 px-1.5 py-0.5 rounded text-accent-light font-mono text-[0.9em]" {...props}>
+                {children}
+              </code>
+            ) : (
+              <CodeBlock language={match?.[1]} fontSize={fontSize}>{children}</CodeBlock>
+            )
+          },
+          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+          ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-1">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-1">{children}</ol>,
+          li: ({ children }) => <li className="">{children}</li>,
+          a: ({ href, children }) => (
+            <a href={href} target="_blank" className="text-accent hover:underline decoration-accent/50 underline-offset-2">{children}</a>
+          ),
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-2 border-accent/40 pl-4 my-2 text-text-muted italic bg-white/5 py-1 rounded-r">{children}</blockquote>
+          ),
+          h1: ({ children }) => <h1 className="text-lg font-bold mb-2 mt-4 first:mt-0 text-text-primary">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0 text-text-primary">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-sm font-semibold mb-1 mt-2 first:mt-0 text-text-primary">{children}</h3>,
+        }}
+      >
+        {displayContent}
+      </ReactMarkdown>
+    </div>
+  )
+})
 MarkdownContent.displayName = 'MarkdownContent'
 
 // 渲染单个 Part
@@ -132,6 +147,7 @@ const RenderPart = React.memo(({
   onRejectTool,
   onOpenDiff,
   fontSize,
+  isStreaming,
 }: {
   part: AssistantPart
   index: number
@@ -140,10 +156,11 @@ const RenderPart = React.memo(({
   onRejectTool?: () => void
   onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
   fontSize: number
+  isStreaming?: boolean
 }) => {
   if (isTextPart(part)) {
     if (!part.content.trim()) return null
-    return <MarkdownContent key={`text-${index}`} content={part.content} fontSize={fontSize} />
+    return <MarkdownContent key={`text-${index}`} content={part.content} fontSize={fontSize} isStreaming={isStreaming} />
   }
 
   if (isToolCallPart(part)) {
@@ -373,6 +390,7 @@ const ChatMessage = React.memo(({
                               onRejectTool={onRejectTool}
                               onOpenDiff={onOpenDiff}
                               fontSize={fontSize}
+                              isStreaming={message.isStreaming}
                             />
                           )
                         } else {
@@ -388,6 +406,7 @@ const ChatMessage = React.memo(({
                                 onRejectTool={onRejectTool}
                                 onOpenDiff={onOpenDiff}
                                 fontSize={fontSize}
+                                isStreaming={message.isStreaming}
                               />
                             )
                           }

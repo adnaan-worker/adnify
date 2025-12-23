@@ -490,6 +490,22 @@ class AgentServiceClass {
         break
       }
 
+      // Update store with cleaned content (remove XML artifacts from UI)
+      if (this.currentAssistantId && result.content !== undefined) {
+        const currentMsg = store.getMessages().find(m => m.id === this.currentAssistantId)
+        if (currentMsg && currentMsg.role === 'assistant' && currentMsg.content !== result.content) {
+          // Update parts to reflect cleaned content
+          const newParts = currentMsg.parts.map(p => 
+            p.type === 'text' ? { ...p, content: result.content! } : p
+          )
+          
+          store.updateMessage(this.currentAssistantId, { 
+            content: result.content,
+            parts: newParts
+          })
+        }
+      }
+
       // 如果没有工具调用，LLM 认为任务完成，结束循环
       if (!result.toolCalls || result.toolCalls.length === 0) {
         // [Plan Mode Reminder] 如果在计划模式下，且本轮执行了写操作但未更新计划，则注入提醒

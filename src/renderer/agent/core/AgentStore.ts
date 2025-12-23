@@ -67,6 +67,7 @@ interface AgentActions {
   addAssistantMessage: (content?: string) => string
   appendToAssistant: (messageId: string, content: string) => void
   finalizeAssistant: (messageId: string) => void
+  updateMessage: (messageId: string, updates: Partial<ChatMessage>) => void
   addToolResult: (toolCallId: string, name: string, content: string, type: ToolResultType, rawParams?: Record<string, unknown>) => string
   addCheckpoint: (type: 'user_message' | 'tool_edit', fileSnapshots: Record<string, FileSnapshot>) => string
   clearMessages: () => void
@@ -392,6 +393,31 @@ export const useAgentStore = create<AgentStore>()(
                 messages,
                 state: { ...thread.state, isStreaming: false },
               },
+            },
+          }
+        })
+      },
+
+      updateMessage: (messageId, updates) => {
+        const state = get()
+        const threadId = state.currentThreadId
+        if (!threadId) return
+
+        set(state => {
+          const thread = state.threads[threadId]
+          if (!thread) return state
+
+          const messages = thread.messages.map(msg => {
+            if (msg.id === messageId) {
+              return { ...msg, ...updates }
+            }
+            return msg
+          })
+
+          return {
+            threads: {
+              ...state.threads,
+              [threadId]: { ...thread, messages, lastModified: Date.now() },
             },
           }
         })

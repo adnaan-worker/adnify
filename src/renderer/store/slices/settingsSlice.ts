@@ -1,38 +1,41 @@
 /**
  * 设置相关状态切片
+ * 统一管理所有应用设置
+ * 
+ * 注意：类型定义和默认值从 settingsService 导入
  */
 import { StateCreator } from 'zustand'
-import {
-  SECURITY_DEFAULTS,
-  AGENT_DEFAULTS,
-} from '@/shared/constants'
-import { saveEditorConfig, getEditorConfig } from '../../config/editorConfig'
-import { defaultEditorConfig } from '../../config/editorConfig'
+import { SECURITY_DEFAULTS, AGENT_DEFAULTS } from '@/shared/constants'
+import { saveEditorConfig, getEditorConfig, defaultEditorConfig } from '../../config/editorConfig'
 import { ProviderModelConfig } from '../../types/provider'
+import { PROVIDERS, getAdapterConfig, type ProviderType as UnifiedProviderType } from '@/shared/config/providers'
+import {
+  settingsService,
+  type LLMConfig as ServiceLLMConfig,
+  type LLMParameters,
+  type AutoApproveSettings as ServiceAutoApprove,
+  type AgentConfig as ServiceAgentConfig,
+  defaultLLMConfig as serviceDefaultLLMConfig,
+  defaultAutoApprove as serviceDefaultAutoApprove,
+  defaultAgentConfig as serviceDefaultAgentConfig,
+} from '../../services/settingsService'
 
-export type ProviderType = 'openai' | 'anthropic' | 'gemini' | 'deepseek' | 'groq' | 'mistral' | 'ollama' | 'custom'
+// ============ 导出类型 ============
 
-// 适配器配置已统一使用 @/shared/types/llmAdapter 中的 LLMAdapterConfig
+export type ProviderType = UnifiedProviderType
 
-export interface LLMConfig {
+// 重新导出 settingsService 的类型
+export type { LLMParameters }
+
+// LLMConfig 扩展 ServiceLLMConfig，确保 provider 类型更精确
+export interface LLMConfig extends Omit<ServiceLLMConfig, 'provider'> {
   provider: ProviderType
-  model: string
-  apiKey: string
-  baseUrl?: string
-  timeout?: number
-  maxTokens?: number
-  // 完整适配器配置（包含请求体和响应解析）
-  adapterId?: string
-  adapterConfig?: import('@/shared/types/llmAdapter').LLMAdapterConfig
+  parameters: LLMParameters  // 确保 parameters 是必需的
 }
 
-export interface AutoApproveSettings {
-  terminal: boolean    // 终端命令（run_command）
-  dangerous: boolean   // 危险操作（delete_file_or_folder）
-}
+export type AutoApproveSettings = ServiceAutoApprove
 
-// ProviderModelConfig 已移至 ../types/provider.ts
-
+// 安全设置（特定于此 slice）
 export interface SecuritySettings {
   enablePermissionConfirm: boolean
   enableAuditLog: boolean
@@ -41,20 +44,10 @@ export interface SecuritySettings {
   showSecurityWarnings?: boolean
 }
 
-// Agent 执行配置
-export interface AgentConfig {
-  maxToolLoops: number          // 最大工具调用循环次数
-  maxHistoryMessages: number    // 历史消息最大数量
-  maxToolResultChars: number    // 工具结果最大字符数
-  maxFileContentChars: number   // 单个文件内容最大字符数
-  maxTotalContextChars: number  // 总上下文最大字符数
-  enableAutoFix: boolean        // 是否启用自动检查和修复
-  // 上下文限制（从 editorConfig.ai 迁移）
-  maxContextFiles: number       // 最大上下文文件数
-  maxSemanticResults: number    // 语义搜索最大结果数
-  maxTerminalChars: number      // 终端输出最大字符数
-  maxSingleFileChars: number    // 单文件最大字符数
-}
+// Agent 配置（扩展 ServiceAgentConfig）
+export interface AgentConfig extends ServiceAgentConfig { }
+
+// ============ Slice 接口 ============
 
 export interface SettingsSlice {
   llmConfig: LLMConfig
@@ -85,34 +78,35 @@ export interface SettingsSlice {
   loadSettings: (isEmptyWindow?: boolean) => Promise<void>
 }
 
-import { BUILTIN_ADAPTERS } from '@/shared/types/llmAdapter'
+// ============ 默认值（从 settingsService 派生） ============
 
 const defaultLLMConfig: LLMConfig = {
+  ...serviceDefaultLLMConfig,
   provider: 'openai',
-  model: 'gpt-4o',
-  apiKey: '',
-  baseUrl: '',
+  parameters: serviceDefaultLLMConfig.parameters!,
   adapterId: 'openai',
-  adapterConfig: BUILTIN_ADAPTERS.openai,
+  adapterConfig: getAdapterConfig('openai'),
 }
 
-const defaultAutoApprove: AutoApproveSettings = {
-  terminal: false,
-  dangerous: false,
+const defaultAutoApprove = serviceDefaultAutoApprove
+
+// 从统一配置生成默认 Provider 配置
+function generateDefaultProviderConfigs(): Record<string, ProviderModelConfig> {
+  const configs: Record<string, ProviderModelConfig> = {}
+  for (const [id, provider] of Object.entries(PROVIDERS)) {
+    configs[id] = {
+      customModels: [],
+      adapterId: provider.adapter.id,
+      adapterConfig: provider.adapter,
+      model: provider.models.recommended || provider.models.default[0] || '',
+      baseUrl: provider.endpoint.default,
+    }
+  }
+  return configs
 }
 
-const defaultProviderConfigs: Record<string, ProviderModelConfig> = {
-  openai: { customModels: [], adapterId: 'openai', adapterConfig: BUILTIN_ADAPTERS.openai, model: 'gpt-4o' },
-  anthropic: { customModels: [], adapterId: 'anthropic', adapterConfig: BUILTIN_ADAPTERS.anthropic, model: 'claude-3-5-sonnet-20241022' },
-  gemini: { customModels: [], adapterId: 'gemini', adapterConfig: BUILTIN_ADAPTERS.gemini, model: 'gemini-1.5-pro' },
-  deepseek: { customModels: [], adapterId: 'openai', adapterConfig: BUILTIN_ADAPTERS.openai, model: 'deepseek-chat', baseUrl: 'https://api.deepseek.com' },
-  groq: { customModels: [], adapterId: 'openai', adapterConfig: BUILTIN_ADAPTERS.openai, model: 'llama-3.3-70b-versatile', baseUrl: 'https://api.groq.com/openai/v1' },
-  mistral: { customModels: [], adapterId: 'openai', adapterConfig: BUILTIN_ADAPTERS.openai, model: 'mistral-large-latest', baseUrl: 'https://api.mistral.ai/v1' },
-  ollama: { customModels: [], adapterId: 'ollama', adapterConfig: BUILTIN_ADAPTERS.ollama, model: 'llama3.2', baseUrl: 'http://localhost:11434' },
-  custom: { customModels: [], adapterId: 'openai', adapterConfig: BUILTIN_ADAPTERS.openai, model: '' },
-}
+const defaultProviderConfigs = generateDefaultProviderConfigs()
 
-// 使用共享常量作为默认安全设置
 const defaultSecuritySettings: SecuritySettings = {
   enablePermissionConfirm: true,
   enableAuditLog: true,
@@ -121,20 +115,13 @@ const defaultSecuritySettings: SecuritySettings = {
   showSecurityWarnings: true,
 }
 
-// 默认 Agent 配置（使用 AGENT_DEFAULTS 作为默认值来源）
 const defaultAgentConfig: AgentConfig = {
+  ...serviceDefaultAgentConfig,
   maxToolLoops: AGENT_DEFAULTS.MAX_TOOL_LOOPS,
-  maxHistoryMessages: 50,
-  maxToolResultChars: 10000,
   maxFileContentChars: AGENT_DEFAULTS.MAX_FILE_CONTENT_CHARS,
-  maxTotalContextChars: 50000,
-  enableAutoFix: true,
-  // 上下文限制
-  maxContextFiles: 6,
-  maxSemanticResults: 5,
-  maxTerminalChars: 3000,
-  maxSingleFileChars: 6000,
 }
+
+// ============ Slice 创建 ============
 
 export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSlice> = (set, get) => ({
   llmConfig: defaultLLMConfig,
@@ -145,7 +132,7 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
   securitySettings: defaultSecuritySettings,
   agentConfig: defaultAgentConfig,
   editorConfig: defaultEditorConfig,
-  onboardingCompleted: true, // 默认 true，加载后更新
+  onboardingCompleted: true,
   hasExistingConfig: true,
   aiInstructions: '',
 
@@ -174,28 +161,24 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
   addCustomModel: (providerId, model) =>
     set((state) => {
       const current = state.providerConfigs[providerId] || { customModels: [] }
-      if (current.customModels.includes(model)) return state
+      const customModels = [...(current.customModels || []), model]
       return {
         providerConfigs: {
           ...state.providerConfigs,
-          [providerId]: {
-            ...current,
-            customModels: [...current.customModels, model],
-          },
+          [providerId]: { ...current, customModels },
         },
       }
     }),
 
   removeCustomModel: (providerId, model) =>
     set((state) => {
-      const current = state.providerConfigs[providerId] || { customModels: [] }
+      const current = state.providerConfigs[providerId]
+      if (!current) return state
+      const customModels = (current.customModels || []).filter((m) => m !== model)
       return {
         providerConfigs: {
           ...state.providerConfigs,
-          [providerId]: {
-            ...current,
-            customModels: current.customModels.filter((m) => m !== model),
-          },
+          [providerId]: { ...current, customModels },
         },
       }
     }),
@@ -210,12 +193,11 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
       agentConfig: { ...state.agentConfig, ...config },
     })),
 
-  setEditorConfig: (config) =>
-    set((state) => {
-      const newConfig = { ...state.editorConfig, ...config }
-      saveEditorConfig(newConfig)
-      return { editorConfig: newConfig }
-    }),
+  setEditorConfig: (config) => {
+    const newConfig = { ...get().editorConfig, ...config }
+    saveEditorConfig(newConfig)
+    set({ editorConfig: newConfig })
+  },
 
   setOnboardingCompleted: (completed) => set({ onboardingCompleted: completed }),
   setHasExistingConfig: (hasConfig) => set({ hasExistingConfig: hasConfig }),
@@ -223,53 +205,57 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
 
   loadSettings: async (isEmptyWindow = false) => {
     try {
-      // 从统一的 key 加载所有设置
-      const settings = await window.electronAPI.getSetting('app-settings') as any
+      // 使用统一的 settingsService 加载设置
+      const settings = await settingsService.loadAll()
 
-      if (settings) {
-        // 确保 llmConfig 与默认值合并，adapterConfig 有默认值
-        const loadedLLMConfig = settings.llmConfig
-          ? { ...defaultLLMConfig, ...settings.llmConfig }
-          : defaultLLMConfig
-
-        // 如果没有 adapterConfig 但有 adapterId，使用对应的内置预设
-        if (!loadedLLMConfig.adapterConfig && loadedLLMConfig.adapterId) {
-          const preset = BUILTIN_ADAPTERS[loadedLLMConfig.adapterId as keyof typeof BUILTIN_ADAPTERS]
-          if (preset) {
-            loadedLLMConfig.adapterConfig = preset
-          }
-        }
-
-        console.log('[SettingsSlice] loadSettings - llmConfig loaded:', {
-          hasAdapterConfig: !!loadedLLMConfig.adapterConfig,
-          adapterId: loadedLLMConfig.adapterId,
-          provider: loadedLLMConfig.provider,
-        })
-
-        const mergedProviderConfigs = { ...defaultProviderConfigs }
-        if (settings.providerConfigs) {
-          for (const [id, config] of Object.entries(settings.providerConfigs)) {
-            mergedProviderConfigs[id] = {
-              ...defaultProviderConfigs[id],
-              ...(config as any)
-            }
-          }
-        }
-
-        set({
-          llmConfig: loadedLLMConfig,
-          language: settings.language || 'en',
-          autoApprove: settings.autoApprove || defaultAutoApprove,
-          providerConfigs: mergedProviderConfigs,
-          agentConfig: settings.agentConfig ? { ...defaultAgentConfig, ...settings.agentConfig } : defaultAgentConfig,
-          onboardingCompleted: settings.onboardingCompleted ?? !!settings.llmConfig?.apiKey,
-          hasExistingConfig: !!settings.llmConfig?.apiKey,
-          aiInstructions: settings.aiInstructions || '',
-          editorConfig: getEditorConfig(),
-        })
-      } else {
-        set({ onboardingCompleted: false, hasExistingConfig: false })
+      // 确保 parameters 存在
+      const llmConfig: LLMConfig = {
+        ...defaultLLMConfig,
+        ...settings.llmConfig,
+        provider: (settings.llmConfig?.provider as ProviderType) || 'openai',
+        parameters: {
+          ...defaultLLMConfig.parameters,
+          ...settings.llmConfig?.parameters,
+        },
       }
+
+      // 如果没有 adapterConfig 但有 adapterId，使用内置预设
+      if (!llmConfig.adapterConfig && llmConfig.adapterId) {
+        const preset = getAdapterConfig(llmConfig.adapterId)
+        if (preset) {
+          llmConfig.adapterConfig = preset
+        }
+      }
+
+      console.log('[SettingsSlice] loadSettings via settingsService:', {
+        hasAdapterConfig: !!llmConfig.adapterConfig,
+        adapterId: llmConfig.adapterId,
+        provider: llmConfig.provider,
+      })
+
+      // 合并 Provider 配置
+      const mergedProviderConfigs = { ...defaultProviderConfigs }
+      if (settings.providerConfigs) {
+        for (const [id, config] of Object.entries(settings.providerConfigs)) {
+          mergedProviderConfigs[id] = {
+            ...defaultProviderConfigs[id],
+            ...config
+          }
+        }
+      }
+
+      set({
+        llmConfig,
+        language: (settings.language as 'en' | 'zh') || 'en',
+        autoApprove: { ...defaultAutoApprove, ...settings.autoApprove },
+        providerConfigs: mergedProviderConfigs,
+        agentConfig: { ...defaultAgentConfig, ...settings.agentConfig },
+        promptTemplateId: settings.promptTemplateId || 'default',
+        onboardingCompleted: settings.onboardingCompleted ?? !!settings.llmConfig?.apiKey,
+        hasExistingConfig: !!settings.llmConfig?.apiKey,
+        aiInstructions: settings.aiInstructions || '',
+        editorConfig: getEditorConfig(),
+      })
 
       if (!isEmptyWindow) {
         const workspace = await window.electronAPI.restoreWorkspace()
@@ -278,7 +264,7 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
         }
       }
     } catch (e) {
-      console.error('Failed to load settings:', e)
+      console.error('[SettingsSlice] Failed to load settings:', e)
     }
   },
 })

@@ -95,39 +95,16 @@ function AppContent() {
         await initEditorConfig()
         await themeManager.init()
 
-        // 检查是否首次使用
-        const savedSettings = await window.electronAPI.getSetting('app-settings') as any
-        const onboardingCompleted = savedSettings?.onboardingCompleted
-        const hasExistingConfig = !!savedSettings?.llmConfig?.apiKey
-
+        // 使用 Store 的 loadSettings 加载所有设置
         updateLoaderStatus('Loading settings...')
+        const params = new URLSearchParams(window.location.search)
+        const isEmptyWindow = params.get('empty') === '1'
 
-        // 从统一的 app-settings 加载设置
-        if (savedSettings) {
-          if (savedSettings.llmConfig) setLLMConfig(savedSettings.llmConfig)
-          if (savedSettings.language) setLanguage(savedSettings.language as 'en' | 'zh')
-          if (savedSettings.autoApprove) setAutoApprove(savedSettings.autoApprove)
-          if (savedSettings.promptTemplateId) setPromptTemplateId(savedSettings.promptTemplateId as string)
-          if (savedSettings.agentConfig) {
-            const { setAgentConfig } = useStore.getState()
-            setAgentConfig(savedSettings.agentConfig)
-          }
-        } else {
-          // 向后兼容：从旧的独立 key 加载
-          const savedConfig = await window.electronAPI.getSetting('llmConfig')
-          if (savedConfig) setLLMConfig(savedConfig)
-          const savedLanguage = await window.electronAPI.getSetting('language')
-          if (savedLanguage) setLanguage(savedLanguage as 'en' | 'zh')
-          const savedAutoApprove = await window.electronAPI.getSetting('autoApprove')
-          if (savedAutoApprove) setAutoApprove(savedAutoApprove)
-          const savedPromptTemplateId = await window.electronAPI.getSetting('promptTemplateId')
-          if (savedPromptTemplateId) setPromptTemplateId(savedPromptTemplateId as string)
-          const savedAgentConfig = await window.electronAPI.getSetting('agentConfig')
-          if (savedAgentConfig) {
-            const { setAgentConfig } = useStore.getState()
-            setAgentConfig(savedAgentConfig as any)
-          }
-        }
+        const { loadSettings } = useStore.getState()
+        await loadSettings(isEmptyWindow)
+
+        // 检查是否需要显示引导
+        const { onboardingCompleted, hasExistingConfig } = useStore.getState()
 
         // 加载保存的主题
         const savedTheme = await window.electronAPI.getSetting('currentTheme')
@@ -137,9 +114,6 @@ function AppContent() {
         }
 
         // Auto-restore workspace (only if not an empty window)
-        const params = new URLSearchParams(window.location.search)
-        const isEmptyWindow = params.get('empty') === '1'
-
         if (!isEmptyWindow) {
           updateLoaderStatus('Restoring workspace...')
           const workspaceConfig = await window.electronAPI.restoreWorkspace()

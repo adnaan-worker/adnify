@@ -106,7 +106,7 @@ export function useAgent() {
         apiKey: llmConfig.apiKey,
         baseUrl: llmConfig.baseUrl,
         timeout: llmConfig.timeout,
-        maxTokens: llmConfig.maxTokens,
+        maxTokens: llmConfig.parameters?.maxTokens,
         adapterId: llmConfig.adapterId,
         adapterConfig: llmConfig.adapterConfig,
       },

@@ -7,7 +7,7 @@ import { BrowserWindow } from 'electron'
 import { OpenAIProvider } from './providers/openai'
 import { AnthropicProvider } from './providers/anthropic'
 import { GeminiProvider } from './providers/gemini'
-import { LLMProvider, LLMMessage, LLMConfig, ToolDefinition, LLMError, LLMErrorCode } from './types'
+import { LLMProvider, LLMMessage, LLMConfig, ToolDefinition, LLMErrorCode } from './types'
 
 export class LLMService {
   private window: BrowserWindow
@@ -20,59 +20,34 @@ export class LLMService {
 
   /**
    * 获取或创建 Provider 实例
+   * 根据 adapter 类型选择实现：
+   * - anthropic → AnthropicProvider
+   * - gemini → GeminiProvider
+   * - 其他（openai, deepseek, qwen, zhipu, groq, mistral, ollama, custom）→ OpenAIProvider
    */
   private getProvider(config: LLMConfig): LLMProvider {
-    const adapterKey = config.adapterConfig?.id || config.adapterId || 'default'
+    const adapterKey = config.adapterConfig?.id || config.adapterId || config.provider
     const key = `${config.provider}-${config.apiKey}-${config.baseUrl || 'default'}-${config.timeout || 'default'}-${adapterKey}`
 
     if (!this.providers.has(key)) {
-      console.log('[LLMService] Creating new provider:', config.provider, 'timeout:', config.timeout)
+      console.log('[LLMService] Creating new provider:', config.provider, 'adapter:', adapterKey, 'timeout:', config.timeout)
 
-      switch (config.provider) {
-        case 'openai':
-        case 'custom':
-          this.providers.set(key, new OpenAIProvider(config.apiKey, config.baseUrl, config.timeout))
-          break
+      // 根据 adapter 类型选择实现
+      switch (adapterKey) {
         case 'anthropic':
           this.providers.set(key, new AnthropicProvider(config.apiKey, config.baseUrl, config.timeout))
           break
         case 'gemini':
           this.providers.set(key, new GeminiProvider(config.apiKey, config.baseUrl, config.timeout))
           break
-        // OpenAI 兼容的 providers
-        case 'deepseek':
-          this.providers.set(key, new OpenAIProvider(
-            config.apiKey,
-            config.baseUrl || 'https://api.deepseek.com',
-            config.timeout
-          ))
-          break
-        case 'groq':
-          this.providers.set(key, new OpenAIProvider(
-            config.apiKey,
-            config.baseUrl || 'https://api.groq.com/openai/v1',
-            config.timeout
-          ))
-          break
-        case 'mistral':
-          this.providers.set(key, new OpenAIProvider(
-            config.apiKey,
-            config.baseUrl || 'https://api.mistral.ai/v1',
-            config.timeout
-          ))
-          break
-        case 'ollama':
+        default:
+          // 所有 OpenAI 兼容的 provider：openai, deepseek, qwen, zhipu, groq, mistral, ollama, custom 等
           this.providers.set(key, new OpenAIProvider(
             config.apiKey || 'ollama', // Ollama 不需要 API key
-            config.baseUrl || 'http://localhost:11434/v1',
+            config.baseUrl,
             config.timeout
           ))
           break
-        default:
-          throw new LLMError(
-            `Unknown provider: ${config.provider}`,
-            LLMErrorCode.INVALID_REQUEST
-          )
       }
     }
 

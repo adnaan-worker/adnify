@@ -12,7 +12,8 @@ import {
 import { useStore, LLMConfig, AutoApproveSettings, SecuritySettings } from '../store'
 import { Language } from '../i18n'
 import { themeManager, Theme } from '../config/themeConfig'
-import { BUILTIN_PROVIDERS, BuiltinProviderName } from '../types/provider'
+import { PROVIDERS } from '@/shared/config/providers'
+import { LLM_DEFAULTS } from '@/shared/constants'
 import { Logo } from './Logo'
 import { adnifyDir } from '../services/adnifyDirService'
 import { Button, Input, Select, Switch } from './ui'
@@ -46,6 +47,11 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
     provider: 'openai',
     model: 'gpt-4o',
     apiKey: '',
+    parameters: {
+      temperature: LLM_DEFAULTS.TEMPERATURE,
+      topP: LLM_DEFAULTS.TOP_P,
+      maxTokens: LLM_DEFAULTS.MAX_TOKENS,
+    },
   })
   const [showApiKey, setShowApiKey] = useState(false)
   const [isTransitioning, setIsTransitioning] = useState(false)
@@ -90,7 +96,10 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
   }
 
   const handleComplete = async () => {
-    // 保存所有设置
+    // 使用统一的 settingsService 保存
+    const { settingsService, defaultAgentConfig, defaultEditorSettings } = await import('../services/settingsService')
+
+    // 更新 Store 状态
     setLanguage(selectedLanguage)
     setLLMConfig(providerConfig)
     setAutoApprove(localAutoApprove)
@@ -101,11 +110,18 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
       useStore.getState().setHasExistingConfig(true)
     }
 
-    await window.electronAPI.setSetting('language', selectedLanguage)
-    await window.electronAPI.setSetting('llmConfig', providerConfig)
-    await window.electronAPI.setSetting('autoApprove', localAutoApprove)
-    await window.electronAPI.setSetting('securitySettings', localSecurity)
-    await window.electronAPI.setSetting('onboardingCompleted', true)
+    // 使用 settingsService 统一保存（自动清理冗余数据）
+    await settingsService.saveAll({
+      llmConfig: providerConfig as any,
+      language: selectedLanguage,
+      autoApprove: localAutoApprove,
+      agentConfig: defaultAgentConfig,
+      providerConfigs: {},
+      editorSettings: defaultEditorSettings,
+      aiInstructions: '',
+      onboardingCompleted: true,
+      securitySettings: localSecurity as any,
+    })
 
     onComplete()
   }
@@ -468,8 +484,8 @@ function ProviderStep({
   showApiKey: boolean
   setShowApiKey: (show: boolean) => void
 }) {
-  const providers = Object.values(BUILTIN_PROVIDERS)
-  const selectedProvider = BUILTIN_PROVIDERS[config.provider as BuiltinProviderName]
+  const providers = Object.values(PROVIDERS).filter(p => p.id !== 'custom')
+  const selectedProvider = PROVIDERS[config.provider]
 
   return (
     <div className="px-8 py-10">
@@ -496,14 +512,14 @@ function ProviderStep({
           <div className="grid grid-cols-4 gap-2">
             {providers.map(p => (
               <button
-                key={p.name}
+                key={p.id}
                 onClick={() => setConfig({
                   ...config,
-                  provider: p.name as any,
-                  model: p.defaultModels[0],
+                  provider: p.id as any,
+                  model: p.models.default[0],
                   baseUrl: undefined
                 })}
-                className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${config.provider === p.name
+                className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${config.provider === p.id
                   ? 'border-accent bg-accent/10 text-accent shadow-glow-sm'
                   : 'border-border-subtle hover:border-text-muted text-text-muted bg-surface/30'
                   }`}
@@ -532,7 +548,7 @@ function ProviderStep({
             <Select
               value={config.model}
               onChange={(value) => setConfig({ ...config, model: value })}
-              options={selectedProvider.defaultModels.map(m => ({ value: m, label: m }))}
+              options={selectedProvider.models.default.map(m => ({ value: m, label: m }))}
               className="w-full"
             />
           </div>
@@ -551,7 +567,7 @@ function ProviderStep({
               type={showApiKey ? 'text' : 'password'}
               value={config.apiKey}
               onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
-              placeholder={selectedProvider?.apiKeyPlaceholder || 'sk-...'}
+              placeholder={selectedProvider?.auth.placeholder || 'sk-...'}
               className="w-full pr-10"
             />
             <button
@@ -562,9 +578,9 @@ function ProviderStep({
               {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
-          {selectedProvider?.apiKeyUrl && (
+          {selectedProvider?.auth.helpUrl && (
             <a
-              href={selectedProvider.apiKeyUrl}
+              href={selectedProvider.auth.helpUrl}
               target="_blank"
               rel="noreferrer"
               className="text-xs text-accent hover:underline mt-2.5 inline-flex items-center gap-1"

@@ -8,11 +8,13 @@ import {
   Cpu, Check, Eye, EyeOff,
   AlertTriangle, Settings2, Code, Keyboard, Plus, Trash, HardDrive,
   Monitor, Shield, Terminal, Sparkles, Layout, Type, Database,
-  Search, Copy, ChevronRight
+  Search, Copy, ChevronRight, Sliders
 } from 'lucide-react'
 import { useStore, LLMConfig, AutoApproveSettings } from '../store'
 import { t, Language } from '../i18n'
-import { BUILTIN_PROVIDERS, BuiltinProviderName, ProviderModelConfig } from '../types/provider'
+import { ProviderModelConfig } from '../types/provider'
+import { PROVIDERS, getAdapterConfig } from '@/shared/config/providers'
+import { LLM_DEFAULTS } from '@/shared/constants'
 import { getEditorConfig, saveEditorConfig, EditorConfig } from '../config/editorConfig'
 import { themes } from './ThemeManager'
 import { toast } from './ToastProvider'
@@ -20,7 +22,6 @@ import { getPromptTemplates, getPromptTemplateById, getPromptTemplatePreview, ge
 import { completionService } from '../services/completionService'
 import KeybindingPanel from './KeybindingPanel'
 import LLMAdapterConfigEditor from './LLMAdapterConfigEditor'
-import { BUILTIN_ADAPTERS } from '@/shared/types/llmAdapter'
 import { Button, Input, Modal, Select, Switch } from './ui'
 
 type SettingsTab = 'provider' | 'editor' | 'agent' | 'keybindings' | 'indexing' | 'security' | 'system'
@@ -62,21 +63,45 @@ export default function SettingsModal() {
     bracketPairColorization: true,
     formatOnSave: true,
     autoSave: 'off' as 'off' | 'afterDelay' | 'onFocusChange',
-    theme: 'vs-dark',
+    theme: 'adnify-dark',
     // AI 代码补全设置
     completionEnabled: editorConfig.ai.completionEnabled,
     completionDebounceMs: editorConfig.performance.completionDebounceMs,
     completionMaxTokens: editorConfig.ai.completionMaxTokens,
   })
 
-  // AI 指令已移至 Store
+  // 同步 Store 状态到本地状态（当 Store 更新时，确保本地状态也更新）
+  useEffect(() => {
+    setLocalConfig(llmConfig)
+  }, [llmConfig])
 
-  // 移除导致循环重置的 useEffect，状态由 Store 统一管理并在 handleSave 时持久化
+  useEffect(() => {
+    setLocalProviderConfigs(providerConfigs)
+  }, [providerConfigs])
+
+  useEffect(() => {
+    setLocalLanguage(language)
+  }, [language])
+
+  useEffect(() => {
+    setLocalAutoApprove(autoApprove)
+  }, [autoApprove])
+
+  useEffect(() => {
+    setLocalAgentConfig(agentConfig)
+  }, [agentConfig])
+
+  useEffect(() => {
+    setLocalAiInstructions(aiInstructions)
+  }, [aiInstructions])
 
 
   const handleSave = async () => {
-    // 1. 先将当前的 localConfig 同步到 localProviderConfigs，确保当前活动 Provider 的修改也被捕获
-    const finalProviderConfigs = {
+    // 使用统一的 settingsService 保存
+    const { settingsService } = await import('../services/settingsService')
+
+    // 1. 同步当前 Provider 配置到 providerConfigs
+    const updatedProviderConfigs = {
       ...localProviderConfigs,
       [localConfig.provider]: {
         ...localProviderConfigs[localConfig.provider],
@@ -86,9 +111,9 @@ export default function SettingsModal() {
         adapterId: localConfig.adapterId,
         adapterConfig: localConfig.adapterConfig,
         model: localConfig.model,
+        customModels: localProviderConfigs[localConfig.provider]?.customModels || [],
       }
     }
-    setLocalProviderConfigs(finalProviderConfigs)
 
     // 2. 更新 Store 状态
     setLLMConfig(localConfig)
@@ -98,25 +123,24 @@ export default function SettingsModal() {
     setAgentConfig(localAgentConfig)
     setAiInstructions(localAiInstructions)
 
-    // 更新所有 Provider 配置
-    Object.entries(finalProviderConfigs).forEach(([id, config]) => {
+    Object.entries(updatedProviderConfigs).forEach(([id, config]) => {
       setProviderConfig(id, config)
     })
 
-    // 3. 统一保存所有设置到 app-settings (即 config.json)
-    await window.electronAPI.setSetting('app-settings', {
-      llmConfig: localConfig,
+    // 3. 使用 settingsService 统一保存（自动清理冗余数据）
+    await settingsService.saveAll({
+      llmConfig: localConfig as any,
       language: localLanguage,
       autoApprove: localAutoApprove,
       promptTemplateId: localPromptTemplateId,
-      agentConfig: localAgentConfig,
-      providerConfigs: finalProviderConfigs,
-      editorSettings: editorSettings,
+      agentConfig: localAgentConfig as any,
+      providerConfigs: updatedProviderConfigs as any,
+      editorSettings: editorSettings as any,
       aiInstructions: localAiInstructions,
       onboardingCompleted: true,
     })
 
-    // 保存编辑器配置（localStorage + 文件双重存储）
+    // 4. 保存编辑器配置（localStorage + 文件双重存储）
     saveEditorConfig({
       fontSize: editorSettings.fontSize,
       tabSize: editorSettings.tabSize,
@@ -133,7 +157,7 @@ export default function SettingsModal() {
       },
     })
 
-    // 立即应用补全设置
+    // 5. 立即应用补全设置
     completionService.configure({
       enabled: editorSettings.completionEnabled,
       debounceMs: editorSettings.completionDebounceMs,
@@ -146,16 +170,11 @@ export default function SettingsModal() {
 
   // 计算当前的 PROVIDERS 列表
   const currentProviders = [
-    ...Object.values(BUILTIN_PROVIDERS).map(p => ({
-      id: p.name,
+    ...Object.values(PROVIDERS).map(p => ({
+      id: p.id,
       name: p.displayName,
-      models: [...p.defaultModels, ...(providerConfigs[p.name]?.customModels || [])]
-    })),
-    {
-      id: 'custom',
-      name: 'Custom',
-      models: providerConfigs['custom']?.customModels || []
-    }
+      models: [...p.models.default, ...(providerConfigs[p.id]?.customModels || [])]
+    }))
   ]
 
   const selectedProvider = currentProviders.find(p => p.id === localConfig.provider)
@@ -399,16 +418,6 @@ function TestConnectionButton({ localConfig, language }: { localConfig: LLMConfi
 interface ProviderSettingsProps {
   localConfig: LLMConfig
   setLocalConfig: React.Dispatch<React.SetStateAction<LLMConfig>>
-  showApiKey: boolean
-  setShowApiKey: (show: boolean) => void
-  selectedProvider: { id: string; name: string; models: string[] } | undefined
-  providers: { id: string; name: string; models: string[] }[]
-  language: Language
-}
-
-interface ProviderSettingsProps {
-  localConfig: LLMConfig
-  setLocalConfig: React.Dispatch<React.SetStateAction<LLMConfig>>
   localProviderConfigs: Record<string, ProviderModelConfig>
   setLocalProviderConfigs: React.Dispatch<React.SetStateAction<Record<string, ProviderModelConfig>>>
   showApiKey: boolean
@@ -460,14 +469,15 @@ function ProviderSettings({
 
                 // 2. 加载新 Provider 的配置
                 const nextConfig = updatedConfigs[p.id] || {}
+                const providerInfo = PROVIDERS[p.id]
                 setLocalConfig({
                   ...localConfig,
                   provider: p.id as any,
                   apiKey: nextConfig.apiKey || '',
-                  baseUrl: nextConfig.baseUrl || '',
-                  timeout: nextConfig.timeout || 120000,
+                  baseUrl: nextConfig.baseUrl || providerInfo?.endpoint.default || '',
+                  timeout: nextConfig.timeout || providerInfo?.defaults.timeout || 120000,
                   adapterId: nextConfig.adapterId || p.id,
-                  adapterConfig: nextConfig.adapterConfig || (BUILTIN_ADAPTERS as any)[p.id] || BUILTIN_ADAPTERS.openai,
+                  adapterConfig: nextConfig.adapterConfig || getAdapterConfig(p.id),
                   model: nextConfig.model || p.models[0] || '',
                 })
               }}
@@ -555,7 +565,7 @@ function ProviderSettings({
               type={showApiKey ? "text" : "password"}
               value={localConfig.apiKey}
               onChange={(e) => setLocalConfig({ ...localConfig, apiKey: e.target.value })}
-              placeholder={(BUILTIN_PROVIDERS[localConfig.provider as BuiltinProviderName] as any)?.apiKeyPlaceholder || 'Enter API Key'}
+              placeholder={PROVIDERS[localConfig.provider]?.auth.placeholder || 'Enter API Key'}
               rightIcon={
                 <button
                   onClick={() => setShowApiKey(!showApiKey)}
@@ -566,10 +576,10 @@ function ProviderSettings({
               }
             />
           </div>
-          {localConfig.provider !== 'custom' && localConfig.provider !== 'ollama' && (
+          {localConfig.provider !== 'custom' && localConfig.provider !== 'ollama' && PROVIDERS[localConfig.provider]?.auth.helpUrl && (
             <div className="flex justify-end">
               <a
-                href={(BUILTIN_PROVIDERS[localConfig.provider as BuiltinProviderName] as any)?.apiKeyUrl}
+                href={PROVIDERS[localConfig.provider]?.auth.helpUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="text-xs text-accent hover:text-accent-hover hover:underline"
@@ -588,7 +598,7 @@ function ProviderSettings({
           <details className="group">
             <summary className="flex items-center gap-2 text-xs font-medium text-text-muted cursor-pointer hover:text-text-primary transition-colors select-none">
               <span className="group-open:rotate-90 transition-transform">▶</span>
-              {language === 'zh' ? '高级设置 (端点 & 超时)' : 'Advanced Settings (Endpoint & Timeout)'}
+              {language === 'zh' ? '高级设置 (端点、超时、参数)' : 'Advanced Settings (Endpoint, Timeout, Parameters)'}
             </summary>
             <div className="mt-4 space-y-4 pl-4 border-l border-border-subtle">
               <div>
@@ -611,6 +621,93 @@ function ProviderSettings({
                   step={30}
                   className="w-32 text-sm"
                 />
+              </div>
+
+              {/* LLM 参数配置 */}
+              <div className="pt-3 border-t border-border-subtle">
+                <div className="flex items-center gap-2 mb-3">
+                  <Sliders className="w-4 h-4 text-accent" />
+                  <span className="text-xs font-medium text-text-secondary">
+                    {language === 'zh' ? 'LLM 参数' : 'LLM Parameters'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-text-secondary mb-1.5 block">
+                      {language === 'zh' ? '温度 (Temperature)' : 'Temperature'}
+                    </label>
+                    <Input
+                      type="number"
+                      value={localConfig.parameters?.temperature ?? LLM_DEFAULTS.TEMPERATURE}
+                      onChange={(e) => setLocalConfig({
+                        ...localConfig,
+                        parameters: {
+                          ...localConfig.parameters,
+                          temperature: parseFloat(e.target.value) || LLM_DEFAULTS.TEMPERATURE,
+                          topP: localConfig.parameters?.topP ?? LLM_DEFAULTS.TOP_P,
+                          maxTokens: localConfig.parameters?.maxTokens ?? LLM_DEFAULTS.MAX_TOKENS,
+                        }
+                      })}
+                      min={0}
+                      max={2}
+                      step={0.1}
+                      className="w-full text-sm"
+                    />
+                    <p className="text-[10px] text-text-muted mt-1">
+                      {language === 'zh' ? '控制输出随机性 (0-2)' : 'Controls randomness (0-2)'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-text-secondary mb-1.5 block">
+                      Top P
+                    </label>
+                    <Input
+                      type="number"
+                      value={localConfig.parameters?.topP ?? LLM_DEFAULTS.TOP_P}
+                      onChange={(e) => setLocalConfig({
+                        ...localConfig,
+                        parameters: {
+                          ...localConfig.parameters,
+                          temperature: localConfig.parameters?.temperature ?? LLM_DEFAULTS.TEMPERATURE,
+                          topP: parseFloat(e.target.value) || LLM_DEFAULTS.TOP_P,
+                          maxTokens: localConfig.parameters?.maxTokens ?? LLM_DEFAULTS.MAX_TOKENS,
+                        }
+                      })}
+                      min={0}
+                      max={1}
+                      step={0.1}
+                      className="w-full text-sm"
+                    />
+                    <p className="text-[10px] text-text-muted mt-1">
+                      {language === 'zh' ? '核采样概率 (0-1)' : 'Nucleus sampling (0-1)'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-text-secondary mb-1.5 block">
+                      {language === 'zh' ? '最大 Token' : 'Max Tokens'}
+                    </label>
+                    <Input
+                      type="number"
+                      value={localConfig.parameters?.maxTokens ?? LLM_DEFAULTS.MAX_TOKENS}
+                      onChange={(e) => setLocalConfig({
+                        ...localConfig,
+                        parameters: {
+                          ...localConfig.parameters,
+                          temperature: localConfig.parameters?.temperature ?? LLM_DEFAULTS.TEMPERATURE,
+                          topP: localConfig.parameters?.topP ?? LLM_DEFAULTS.TOP_P,
+                          maxTokens: parseInt(e.target.value) || LLM_DEFAULTS.MAX_TOKENS,
+                        }
+                      })}
+                      min={256}
+                      max={32768}
+                      step={256}
+                      className="w-full text-sm"
+                    />
+                    <p className="text-[10px] text-text-muted mt-1">
+                      {language === 'zh' ? '最大输出长度' : 'Max output length'}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </details>

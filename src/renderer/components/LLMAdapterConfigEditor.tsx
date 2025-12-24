@@ -3,18 +3,19 @@
  * 全可视化的 LLM 适配器配置编辑器
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-    Settings2, Code2, Sparkles, RotateCcw, Check,
+    Code2, Sparkles, RotateCcw,
     ChevronDown, ChevronRight, AlertTriangle, HelpCircle,
-    Copy, FileJson, Zap
+    FileJson, Zap
 } from 'lucide-react'
-import { Select, Switch, Input, Button } from './ui'
+import { Switch, Input } from './ui'
 import {
-    LLMAdapterConfig,
-    BUILTIN_ADAPTERS,
+    type LLMAdapterConfig,
     getBuiltinAdapter,
-} from '@/shared/types/llmAdapter'
+    getBuiltinAdapters,
+    getAdapterConfig,
+} from '@/shared/config/providers'
 
 interface LLMAdapterConfigEditorProps {
     adapterId: string
@@ -32,8 +33,11 @@ export default function LLMAdapterConfigEditor({
     language,
     hasConfiguredAI = false,
 }: LLMAdapterConfigEditorProps) {
+    // 获取所有内置适配器（memoized）
+    const builtinAdapters = useMemo(() => getBuiltinAdapters(), [])
+
     // 确保总是有有效的配置
-    const defaultAdapter = BUILTIN_ADAPTERS.openai
+    const defaultAdapter = getAdapterConfig('openai')
     const [localConfig, setLocalConfig] = useState<LLMAdapterConfig>(
         () => config || getBuiltinAdapter(adapterId) || defaultAdapter
     )
@@ -41,7 +45,6 @@ export default function LLMAdapterConfigEditor({
     const [showResponseDetails, setShowResponseDetails] = useState(false)
     const [bodyJsonText, setBodyJsonText] = useState('')
     const [jsonError, setJsonError] = useState<string | null>(null)
-    const [saved, setSaved] = useState(false)
 
     // 当 adapterId 或外部 config 变化时同步状态
     useEffect(() => {
@@ -61,13 +64,6 @@ export default function LLMAdapterConfigEditor({
             }
         }
     }, [adapterId, config])
-
-    // 保存变更
-    const handleSave = useCallback(() => {
-        onChange(localConfig.id, localConfig)
-        setSaved(true)
-        setTimeout(() => setSaved(false), 1500)
-    }, [localConfig, onChange])
 
     // 更新请求配置
     const updateRequest = useCallback((updates: Partial<LLMAdapterConfig['request']>) => {
@@ -107,12 +103,12 @@ export default function LLMAdapterConfigEditor({
 
     // 重置为预设
     const handleReset = useCallback(() => {
-        const preset = getBuiltinAdapter(adapterId) || BUILTIN_ADAPTERS.openai
+        const preset = getBuiltinAdapter(adapterId) || defaultAdapter
         setLocalConfig(preset)
         setBodyJsonText(JSON.stringify(preset.request.bodyTemplate, null, 2))
         setJsonError(null)
         onChange(preset.id, preset)
-    }, [adapterId, onChange])
+    }, [adapterId, onChange, defaultAdapter])
 
     // 选择预设
     const handlePresetSelect = useCallback((presetId: string) => {
@@ -134,13 +130,13 @@ export default function LLMAdapterConfigEditor({
                     {language === 'zh' ? '适配器预设' : 'Adapter Preset'}
                 </label>
                 <div className="grid grid-cols-4 gap-2">
-                    {Object.entries(BUILTIN_ADAPTERS).map(([id, adapter]) => (
+                    {builtinAdapters.map((adapter) => (
                         <button
-                            key={id}
-                            onClick={() => handlePresetSelect(id)}
+                            key={adapter.id}
+                            onClick={() => handlePresetSelect(adapter.id)}
                             className={`
                 relative flex flex-col items-center justify-center p-2.5 rounded-lg border text-center transition-all duration-200
-                ${adapterId === id
+                ${adapterId === adapter.id
                                     ? 'border-accent bg-accent/10 text-accent shadow-sm'
                                     : 'border-border-subtle bg-surface/30 text-text-muted hover:bg-surface hover:border-border hover:text-text-primary'
                                 }
@@ -148,7 +144,7 @@ export default function LLMAdapterConfigEditor({
                         >
                             <span className="text-xs font-medium">{adapter.name}</span>
                             <span className="text-[9px] text-text-muted mt-0.5 truncate w-full">{adapter.description}</span>
-                            {adapterId === id && (
+                            {adapterId === adapter.id && (
                                 <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-accent" />
                             )}
                         </button>

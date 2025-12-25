@@ -126,10 +126,22 @@ export class OpenAIProvider extends BaseProvider {
         requestBody = JSON.parse(JSON.stringify(adapterConfig.request.bodyTemplate))
 
         // 替换占位符
+        const keysToDelete: string[] = []
         for (const [key, value] of Object.entries(requestBody)) {
           if (value === '{{model}}') requestBody[key] = model
           else if (value === '{{messages}}') requestBody[key] = openaiMessages
-          else if (value === '{{tools}}' && convertedTools?.length) requestBody[key] = convertedTools
+          else if (value === '{{tools}}') {
+            if (convertedTools?.length) {
+              requestBody[key] = convertedTools
+            } else {
+              // 无工具时删除该字段
+              keysToDelete.push(key)
+            }
+          }
+        }
+        // 删除未替换的占位符字段
+        for (const key of keysToDelete) {
+          delete requestBody[key]
         }
 
         // 确保核心字段存在

@@ -14,7 +14,10 @@ import { useAgentStore } from './AgentStore'
 import { useModeStore } from '@/renderer/modes'
 import { useStore, ChatMode } from '../../store'  // 用于读取 autoApprove 配置和记录日志
 import { executeTool, getToolDefinitions, getToolApprovalType } from './ToolExecutor'
-import { buildOpenAIMessages, validateOpenAIMessages, OpenAIMessage } from './MessageConverter'
+import { OpenAIMessage } from './MessageConverter'
+// XMLToolParser模块已验证可用
+import { parseXMLToolCalls } from './XMLToolParser'
+import { buildContextContent, buildLLMMessages } from './MessageBuilder'
 import {
   UserMessage,
   AssistantMessage,
@@ -28,6 +31,7 @@ import {
 } from './types'
 import { LLMStreamChunk, LLMToolCall } from '@/renderer/types/electron'
 import { parsePartialJson, truncateToolResult } from '@/renderer/utils/partialJson'
+import { logger } from '@/renderer/utils/Logger'
 import { AGENT_DEFAULTS, READ_ONLY_TOOLS, isFileModifyingTool } from '@/shared/constants'
 
 export interface LLMCallConfig {
@@ -171,7 +175,7 @@ class AgentServiceClass {
   markFileAsRead(filePath: string): void {
     const normalizedPath = filePath.replace(/\\/g, '/').toLowerCase()
     this.readFilesInSession.add(normalizedPath)
-    console.log(`[Agent] File marked as read: ${filePath}`)
+    logger.agent.debug('File marked as read', { filePath })
   }
 
   /**
@@ -179,7 +183,7 @@ class AgentServiceClass {
    */
   clearSession(): void {
     this.readFilesInSession.clear()
-    console.log('[Agent] Session cleared')
+    logger.agent.info('Session cleared')
   }
 
   /**
@@ -268,7 +272,7 @@ class AgentServiceClass {
   ): Promise<void> {
     // 防止重复执行
     if (this.isRunning) {
-      console.warn('[Agent] Already running, ignoring new request')
+      logger.agent.warn('Already running, ignoring new request')
       return
     }
 
@@ -291,7 +295,7 @@ class AgentServiceClass {
       const userQuery = typeof userMessage === 'string' ? userMessage :
         (Array.isArray(userMessage) ? userMessage.filter(p => p.type === 'text').map(p => (p as TextContent).text).join('') : '')
 
-      const contextContent = await this.buildContextContent(contextItems, userQuery)
+      const contextContent = await buildContextContent(contextItems, workspacePath, userQuery)
 
       // 3. 添加用户消息到 store
       const userMessageId = store.addUserMessage(userMessage, contextItems)
@@ -304,7 +308,7 @@ class AgentServiceClass {
       await store.createMessageCheckpoint(userMessageId, messageText)
 
       // 5. 构建 LLM 消息历史
-      const llmMessages = await this.buildLLMMessages(userMessage, contextContent, systemPrompt)
+      const llmMessages = await buildLLMMessages(userMessage, contextContent, systemPrompt)
 
       // 6. 创建助手消息占位
       this.currentAssistantId = store.addAssistantMessage()
@@ -314,7 +318,7 @@ class AgentServiceClass {
       await this.runAgentLoop(config, llmMessages, workspacePath, chatMode)
 
     } catch (error) {
-      console.error('[Agent] Error:', error)
+      logger.agent.error('Error in sendMessage', { error })
       this.showError(error instanceof Error ? error.message : 'Unknown error occurred')
     } finally {
       this.cleanup()
@@ -353,7 +357,7 @@ class AgentServiceClass {
       if (approvalType) {
         // 临时开启该类型的自动审批
         useStore.getState().setAutoApprove({ [approvalType]: true })
-        console.log(`[Agent] Auto-approve enabled for type: ${approvalType}`)
+        logger.agent.info('Auto-approve enabled for type', { approvalType })
       }
     }
     // 批准当前工具
@@ -419,7 +423,7 @@ class AgentServiceClass {
 
     if (totalChars <= MAX_CHARS) return
 
-    console.log(`[Agent] Context size ${totalChars} exceeds limit ${MAX_CHARS}, compressing...`)
+    logger.agent.info('Context size exceeds limit, compressing', { totalChars, MAX_CHARS })
 
     // 保留最后 3 轮对话 (User + Assistant + Tools)
     // 倒序寻找第 3 个 User 消息的位置
@@ -480,7 +484,7 @@ class AgentServiceClass {
       loopCount++
       shouldContinue = false
 
-      console.log(`[Agent] Loop iteration ${loopCount}`)
+      logger.agent.info('Loop iteration', { iteration: loopCount })
 
       // 压缩上下文
       await this.compressContext(llmMessages)
@@ -518,7 +522,7 @@ class AgentServiceClass {
         const hasUpdatePlan = llmMessages.some(m => m.role === 'assistant' && m.tool_calls?.some((tc: any) => tc.function.name === 'update_plan'))
 
         if (store.plan && hasWriteOps && !hasUpdatePlan && loopCount < agentLoopConfig.maxToolLoops) {
-          console.log('[Agent] Plan mode detected: Reminding AI to update plan status')
+          logger.agent.info('Plan mode detected: Reminding AI to update plan status')
           llmMessages.push({
             role: 'user' as const,
             content: 'Reminder: You have performed some actions. Please use `update_plan` to update the plan status (e.g., mark the current step as completed) before finishing your response.',
@@ -527,7 +531,7 @@ class AgentServiceClass {
           continue
         }
 
-        console.log('[Agent] No tool calls, task complete')
+        logger.agent.info('No tool calls, task complete')
         break
       }
 
@@ -562,10 +566,10 @@ class AgentServiceClass {
 
       if (recentToolCalls.includes(currentCallSignature)) {
         consecutiveRepeats++
-        console.warn(`[Agent] Detected repeated tool call (${consecutiveRepeats}/${MAX_CONSECUTIVE_REPEATS}):`, currentCallSignature.slice(0, 100))
+        logger.agent.warn('Detected repeated tool call', { consecutiveRepeats, maxRepeats: MAX_CONSECUTIVE_REPEATS })
 
         if (consecutiveRepeats >= MAX_CONSECUTIVE_REPEATS) {
-          console.error('[Agent] Too many repeated calls, stopping loop')
+          logger.agent.error('Too many repeated calls, stopping loop')
           store.appendToAssistant(this.currentAssistantId!, '\n\n⚠️ Detected repeated operations. Stopping to prevent infinite loop.')
           break
         }
@@ -596,7 +600,7 @@ class AgentServiceClass {
       // 执行所有工具调用（只读工具并行，写入工具串行）
       let userRejected = false
 
-      console.log(`[Agent] Executing ${result.toolCalls.length} tool calls`)
+      logger.agent.info('Executing tool calls', { count: result.toolCalls.length })
 
       // 分离只读工具和写入工具
       const readToolCalls = result.toolCalls.filter(tc => READ_TOOLS.includes(tc.name))
@@ -604,15 +608,15 @@ class AgentServiceClass {
 
       // 并行执行只读工具
       if (readToolCalls.length > 0 && !this.abortController?.signal.aborted) {
-        console.log(`[Agent] Executing ${readToolCalls.length} read tools in parallel`)
+        logger.agent.info('Executing read tools in parallel', { count: readToolCalls.length })
         const readResults = await Promise.all(
           readToolCalls.map(async (toolCall) => {
-            console.log(`[Agent] Executing read tool: ${toolCall.name}`, toolCall.arguments)
+            logger.tool.debug('Executing read tool', { name: toolCall.name, arguments: toolCall.arguments })
             try {
               const toolResult = await this.executeToolCall(toolCall, workspacePath)
               return { toolCall, toolResult }
             } catch (error: any) {
-              console.error(`[Agent] Error executing read tool ${toolCall.name}:`, error)
+              logger.tool.error('Error executing read tool', { name: toolCall.name, error })
               return {
                 toolCall,
                 toolResult: { success: false, content: `Error executing tool: ${error.message}`, rejected: false }
@@ -640,12 +644,12 @@ class AgentServiceClass {
         // 微任务断点：让出主线程，保持 UI 响应
         await new Promise(resolve => setTimeout(resolve, 0))
 
-        console.log(`[Agent] Executing write tool: ${toolCall.name}`, toolCall.arguments)
+        logger.tool.debug('Executing write tool', { name: toolCall.name, arguments: toolCall.arguments })
         let toolResult
         try {
           toolResult = await this.executeToolCall(toolCall, workspacePath)
         } catch (error: any) {
-          console.error(`[Agent] Error executing write tool ${toolCall.name}:`, error)
+          logger.tool.error('Error executing write tool', { name: toolCall.name, error })
           toolResult = { success: false, content: `Error executing tool: ${error.message}`, rejected: false }
         }
 
@@ -776,14 +780,13 @@ class AgentServiceClass {
 
           // 🔍 详细日志：观察流式工具调用行为
           if (chunk.type !== 'text') {
-            console.log(`%c[Stream #${chunkCount}] ${chunk.type} @ ${elapsed}ms (+${delta}ms)`,
-              'color: #00ff00; font-weight: bold',
-              {
-                toolName: chunk.toolCallDelta?.name || chunk.toolCall?.name,
-                hasArgs: !!(chunk.toolCallDelta?.args || chunk.toolCall?.arguments),
-                argsPreview: (chunk.toolCallDelta?.args || '').slice(0, 50) || undefined
-              }
-            )
+            logger.llm.debug('Stream chunk received', {
+              chunkCount,
+              type: chunk.type,
+              elapsed,
+              delta,
+              toolName: chunk.toolCallDelta?.name || chunk.toolCall?.name,
+            })
           }
 
           // 如果当前正在思考，但收到了非思考内容，则关闭思考标签
@@ -807,7 +810,7 @@ class AgentServiceClass {
 
           // 处理 reasoning/thinking 内容
           if (chunk.type === 'reasoning' && chunk.content) {
-            console.log(`%c[Agent] 🧠 Reasoning: +${chunk.content.length} chars`, 'color: #ff00ff')
+            logger.llm.debug('Reasoning content received', { length: chunk.content.length })
 
             if (this.currentAssistantId) {
               // 如果是第一次进入思考模式，添加开始标签
@@ -830,10 +833,10 @@ class AgentServiceClass {
             const toolName = chunk.toolCallDelta.name || 'unknown'
 
             // 记录调试日志
-            console.log(`%c[Agent] ✅ Tool call START: ${toolName} (${toolId})`, 'color: #00ff00; font-weight: bold')
+            logger.tool.info('Tool call START', { toolName, toolId })
 
             if (toolName !== 'unknown' && !isValidToolName(toolName)) {
-              console.warn(`[Agent] Invalid tool name detected: ${toolName}`)
+              logger.agent.warn('Invalid tool name detected', { toolName })
               return
             }
 
@@ -850,7 +853,7 @@ class AgentServiceClass {
 
           // 流式工具调用参数
           if (chunk.type === 'tool_call_delta' && chunk.toolCallDelta && currentToolCall) {
-            console.log(`%c[Agent] 📝 Tool call DELTA: +${chunk.toolCallDelta.args?.length || 0} chars`, 'color: #ffff00')
+            logger.tool.debug('Tool call DELTA', { argsLength: chunk.toolCallDelta.args?.length || 0 })
 
             if (chunk.toolCallDelta.name) {
               const newName = chunk.toolCallDelta.name
@@ -886,7 +889,7 @@ class AgentServiceClass {
 
           // 流式工具调用结束
           if (chunk.type === 'tool_call_end' && currentToolCall) {
-            console.log(`%c[Agent] 🏁 Tool call END: ${currentToolCall.name} (total args: ${currentToolCall.argsString.length} chars)`, 'color: #ff6600; font-weight: bold')
+            logger.tool.info('Tool call END', { name: currentToolCall.name, argsLength: currentToolCall.argsString.length })
             try {
               const args = JSON.parse(currentToolCall.argsString || '{}')
               toolCalls.push({ id: currentToolCall.id, name: currentToolCall.name, arguments: args })
@@ -897,7 +900,7 @@ class AgentServiceClass {
                 })
               }
             } catch (e) {
-              console.error(`[Agent] Failed to parse tool args for ${currentToolCall.name}:`, e)
+              logger.tool.error('Failed to parse tool args', { name: currentToolCall.name, error: e })
               toolCalls.push({ id: currentToolCall.id, name: currentToolCall.name, arguments: { _parseError: true, _rawArgs: currentToolCall.argsString } })
             }
             currentToolCall = null
@@ -905,7 +908,7 @@ class AgentServiceClass {
 
           // 完整工具调用（非流式，一次性到达）
           if (chunk.type === 'tool_call' && chunk.toolCall) {
-            console.log(`%c[Agent] ⚡ FULL tool call (non-streaming): ${chunk.toolCall.name}`, 'color: #ff0000; font-weight: bold')
+            logger.tool.info('FULL tool call (non-streaming)', { name: chunk.toolCall.name })
             if (!isValidToolName(chunk.toolCall.name)) return
             if (!toolCalls.find(tc => tc.id === chunk.toolCall!.id)) {
               toolCalls.push(chunk.toolCall)
@@ -957,7 +960,7 @@ class AgentServiceClass {
           // 始终尝试从内容中解析 XML 格式的工具调用（支持混合模式）
           let finalContent = content || result.content || ''
           if (finalContent) {
-            const xmlToolCalls = this.parseXMLToolCalls(finalContent)
+            const xmlToolCalls = parseXMLToolCalls(finalContent)
             if (xmlToolCalls.length > 0) {
               // 移除 XML 工具调用字符串
               finalContent = finalContent.replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '').trim()
@@ -1111,7 +1114,7 @@ class AgentServiceClass {
 
         // 只对特定可恢复错误重试
         if (attempt < maxRetries && this.isRetryableError(lastError)) {
-          console.log(`[AgentService] Tool ${name} failed (attempt ${attempt}/${maxRetries}), retrying...`)
+          logger.tool.info('Tool failed, retrying', { name, attempt, maxRetries })
           await new Promise(resolve => setTimeout(resolve, retryDelayMs * attempt))
         } else {
           break
@@ -1119,7 +1122,7 @@ class AgentServiceClass {
       } catch (error: any) {
         lastError = error.message
         if (attempt < maxRetries && this.isRetryableError(lastError)) {
-          console.log(`[AgentService] Tool ${name} error (attempt ${attempt}/${maxRetries}): ${lastError}, retrying...`)
+          logger.tool.warn('Tool error, retrying', { name, attempt, maxRetries, lastError })
           await new Promise(resolve => setTimeout(resolve, retryDelayMs * attempt))
         } else {
           result = { success: false, result: '', error: lastError }
@@ -1177,7 +1180,7 @@ class AgentServiceClass {
           toolCallId: id,
         })
       } catch (e) {
-        console.warn('[Agent] Failed to add to composer:', e)
+        logger.agent.warn('Failed to add to composer', { error: e })
       }
     }
 
@@ -1188,334 +1191,6 @@ class AgentServiceClass {
     store.addToolResult(id, name, truncatedContent, resultType, args as Record<string, unknown>)
 
     return { success: result.success, content: truncatedContent, rejected: false }
-  }
-
-  // ===== 私有方法：消息构建 =====
-
-  private async buildLLMMessages(
-    currentMessage: MessageContent,
-    contextContent: string,
-    systemPrompt: string
-  ): Promise<OpenAIMessage[]> {
-    const store = useAgentStore.getState()
-    const historyMessages = store.getMessages()
-
-    // 导入压缩模块
-    const { shouldCompactContext, prepareMessagesForCompact, createCompactedSystemMessage } = await import('./ContextCompressor')
-
-    // 检查是否需要压缩上下文
-    // 使用类型断言：过滤后的消息不包含 checkpoint 类型
-    type NonCheckpointMessage = Exclude<typeof historyMessages[number], { role: 'checkpoint' }>
-    let filteredMessages: NonCheckpointMessage[] = historyMessages.filter(
-      (m): m is NonCheckpointMessage => m.role !== 'checkpoint'
-    )
-    let compactedSummary: string | null = null
-
-    const llmConfig = getConfig()
-
-    if (shouldCompactContext(filteredMessages)) {
-      console.log('[Agent] Context exceeds threshold, compacting...')
-
-      // 如果已有压缩摘要，直接使用
-      const existingSummary = (store as any).contextSummary
-      if (existingSummary) {
-        compactedSummary = existingSummary
-        // 只保留最近的消息
-        const { recentMessages } = prepareMessagesForCompact(filteredMessages as any)
-        filteredMessages = recentMessages as NonCheckpointMessage[]
-      } else {
-        // 这里只做准备，实际压缩需要在会话开始时或定期执行
-        // 为了不阻塞当前请求，先截断消息
-        filteredMessages = filteredMessages.slice(-llmConfig.maxHistoryMessages)
-      }
-    } else {
-      filteredMessages = filteredMessages.slice(-llmConfig.maxHistoryMessages)
-    }
-
-    // 构建系统提示词（可能包含压缩摘要）
-    const effectiveSystemPrompt = compactedSummary
-      ? `${systemPrompt}\n\n${createCompactedSystemMessage(compactedSummary)}`
-      : systemPrompt
-
-    // 类型断言：过滤后的消息不包含 checkpoint
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const openaiMessages = buildOpenAIMessages(filteredMessages as any, effectiveSystemPrompt)
-
-    for (const msg of openaiMessages) {
-      if (msg.role === 'tool' && typeof msg.content === 'string') {
-        if (msg.content.length > llmConfig.maxToolResultChars) {
-          msg.content = truncateToolResult(msg.content, 'default', llmConfig.maxToolResultChars)
-        }
-      }
-    }
-
-    const userContent = this.buildUserContent(currentMessage, contextContent)
-    openaiMessages.push({ role: 'user', content: userContent })
-
-    const validation = validateOpenAIMessages(openaiMessages)
-    if (!validation.valid) console.warn('[Agent] Message validation warning:', validation.error)
-
-    return openaiMessages
-  }
-
-  private async buildContextContent(contextItems: ContextItem[], userQuery?: string): Promise<string> {
-    if (!contextItems || contextItems.length === 0) return ''
-    const parts: string[] = []
-    let totalChars = 0
-    const contextConfig = getConfig()
-
-    // Get workspace path from store
-    const workspacePath = useStore.getState().workspacePath
-
-    for (const item of contextItems) {
-      if (totalChars >= contextConfig.maxTotalContextChars) {
-        parts.push('\n[Additional context truncated]')
-        break
-      }
-
-      if (item.type === 'File') {
-        const filePath = (item as { uri: string }).uri
-        try {
-          const content = await window.electronAPI.readFile(filePath)
-          if (content) {
-            const truncated = content.length > contextConfig.maxFileContentChars
-              ? content.slice(0, contextConfig.maxFileContentChars) + '\n...(file truncated)'
-              : content
-            const fileBlock = `\n### File: ${filePath}\n\`\`\`\n${truncated}\n\`\`\`\n`
-            parts.push(fileBlock)
-            totalChars += fileBlock.length
-          }
-        } catch (e) { }
-      } else if (item.type === 'Codebase' && workspacePath && userQuery) {
-        try {
-          parts.push('\n[Searching codebase...]\n')
-          // Strip @codebase from query for better results
-          const cleanQuery = userQuery.replace(/@codebase\s*/i, '').trim() || userQuery
-          const results = await window.electronAPI.indexSearch(workspacePath, cleanQuery, 20)
-          if (results && results.length > 0) {
-            const searchBlock = `\n### Codebase Search Results for "${cleanQuery}":\n` +
-              results.map(r => `#### ${r.relativePath} (Score: ${r.score.toFixed(2)})\n\`\`\`${r.language}\n${r.content}\n\`\`\``).join('\n\n') + '\n'
-            parts.push(searchBlock)
-            totalChars += searchBlock.length
-          } else {
-            parts.push('\n[No relevant codebase results found]\n')
-          }
-        } catch (e) {
-          console.error('[Agent] Codebase search failed:', e)
-          parts.push('\n[Codebase search failed]\n')
-        }
-      } else if (item.type === 'Web' && userQuery) {
-        try {
-          parts.push('\n[Searching web...]\n')
-          // Strip @web from query
-          const cleanQuery = userQuery.replace(/@web\s*/i, '').trim() || userQuery
-          const searchResult = await executeTool('web_search', { query: cleanQuery }, workspacePath || undefined)
-
-          if (searchResult.success) {
-            const searchBlock = `\n### Web Search Results for "${cleanQuery}":\n${searchResult.result}\n`
-            parts.push(searchBlock)
-            totalChars += searchBlock.length
-          } else {
-            parts.push(`\n[Web search failed: ${searchResult.error}]\n`)
-          }
-        } catch (e) {
-          console.error('[Agent] Web search failed:', e)
-          parts.push('\n[Web search failed]\n')
-        }
-      } else if (item.type === 'Git' && workspacePath) {
-        // @git context - Get git status and recent changes
-        try {
-          parts.push('\n[Getting Git info...]\n')
-          const gitStatus = await executeTool('run_command', {
-            command: 'git status --short && git log --oneline -5',
-            cwd: workspacePath,
-            timeout: 10
-          }, workspacePath)
-
-          if (gitStatus.success) {
-            const gitBlock = `\n### Git Status:\n\`\`\`\n${gitStatus.result}\n\`\`\`\n`
-            parts.push(gitBlock)
-            totalChars += gitBlock.length
-          } else {
-            parts.push('\n[Git info not available]\n')
-          }
-        } catch (e) {
-          console.error('[Agent] Git context failed:', e)
-          parts.push('\n[Git info failed]\n')
-        }
-      } else if (item.type === 'Terminal') {
-        // @terminal context - Get recent terminal output
-        try {
-          parts.push('\n[Getting Terminal output...]\n')
-          const terminalOutput = await executeTool('get_terminal_output', {
-            terminal_id: 'default',
-            lines: 50
-          }, workspacePath || undefined)
-
-          if (terminalOutput.success && terminalOutput.result) {
-            const terminalBlock = `\n### Recent Terminal Output:\n\`\`\`\n${terminalOutput.result}\n\`\`\`\n`
-            parts.push(terminalBlock)
-            totalChars += terminalBlock.length
-          } else {
-            parts.push('\n[No terminal output available]\n')
-          }
-        } catch (e) {
-          console.error('[Agent] Terminal context failed:', e)
-          parts.push('\n[Terminal output failed]\n')
-        }
-      } else if (item.type === 'Symbols' && workspacePath) {
-        // @symbols context - Get symbols from current/recent files
-        try {
-          parts.push('\n[Getting Document Symbols...]\n')
-          const currentFile = useStore.getState().activeFilePath
-
-          if (currentFile) {
-            const symbols = await executeTool('get_document_symbols', {
-              path: currentFile
-            }, workspacePath)
-
-            if (symbols.success && symbols.result) {
-              const symbolsBlock = `\n### Symbols in ${currentFile}:\n\`\`\`\n${symbols.result}\n\`\`\`\n`
-              parts.push(symbolsBlock)
-              totalChars += symbolsBlock.length
-            } else {
-              parts.push('\n[No symbols found]\n')
-            }
-          } else {
-            parts.push('\n[No active file for symbols]\n')
-          }
-        } catch (e) {
-          console.error('[Agent] Symbols context failed:', e)
-          parts.push('\n[Symbols retrieval failed]\n')
-        }
-      }
-    }
-
-    // 更新上下文统计信息（使用 AgentStore 的消息计数）
-    const agentMessages = useAgentStore.getState().getMessages()
-    const fileCount = contextItems.filter(item => item.type === 'File').length
-    const semanticResultCount = contextItems.filter(item => item.type === 'Codebase').length
-
-    useStore.getState().setContextStats({
-      totalChars,
-      maxChars: contextConfig.maxTotalContextChars,
-      fileCount,
-      maxFiles: 10, // 假设最多支持 10 个文件
-      messageCount: agentMessages.length,
-      maxMessages: contextConfig.maxHistoryMessages,
-      semanticResultCount,
-      terminalChars: 0
-    })
-
-    return parts.join('')
-  }
-
-  private buildUserContent(message: MessageContent, contextContent: string): MessageContent {
-    if (!contextContent) return message
-
-    const contextPart: TextContent = {
-      type: 'text',
-      text: `## Referenced Context\n${contextContent}\n\n## User Request\n`
-    }
-
-    if (typeof message === 'string') {
-      return [contextPart, { type: 'text', text: message }]
-    } else {
-      return [contextPart, ...message]
-    }
-  }
-
-  /**
-   * 解析 XML 格式的工具调用
-   * 支持格式如：<tool_call><function=tool_name><parameter=param>value</parameter></function></tool_call>
-   */
-  private parseXMLToolCalls(content: string): LLMToolCall[] {
-    const toolCalls: LLMToolCall[] = []
-
-    // 匹配 <tool_call>...</tool_call> 块
-    const toolCallRegex = /<tool_call>([\s\S]*?)<\/tool_call>/gi
-    let toolCallMatch
-
-    while ((toolCallMatch = toolCallRegex.exec(content)) !== null) {
-      const toolCallContent = toolCallMatch[1]
-
-      // 匹配 <function=name>...</function> 或 <function name="...">...</function>
-      const funcRegex = /<function[=\s]+["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\/function>/gi
-      let funcMatch
-
-      while ((funcMatch = funcRegex.exec(toolCallContent)) !== null) {
-        const toolName = funcMatch[1]
-        const paramsContent = funcMatch[2]
-
-        // 解析参数
-        const args: Record<string, unknown> = {}
-
-        // 匹配 <parameter=name>value</parameter> 或 <parameter name="...">value</parameter>
-        const paramRegex = /<parameter[=\s]+["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\/parameter>/gi
-        let paramMatch
-
-        while ((paramMatch = paramRegex.exec(paramsContent)) !== null) {
-          const paramName = paramMatch[1]
-          let paramValue: unknown = paramMatch[2].trim()
-
-          // 尝试解析 JSON 值
-          try {
-            paramValue = JSON.parse(paramValue as string)
-          } catch {
-            // 保持字符串格式
-          }
-
-          args[paramName] = paramValue
-        }
-
-        toolCalls.push({
-          id: `xml-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          name: toolName,
-          arguments: args
-        })
-      }
-    }
-
-    // 同时也支持直接的 <function> 标签（不被 <tool_call> 包裹）
-    // 首先收集所有 tool_call 块的位置范围
-    const toolCallRanges: Array<{ start: number; end: number }> = []
-    const toolCallBlockRegex = /<tool_call>[\s\S]*?<\/tool_call>/gi
-    let blockMatch
-    while ((blockMatch = toolCallBlockRegex.exec(content)) !== null) {
-      toolCallRanges.push({ start: blockMatch.index, end: blockMatch.index + blockMatch[0].length })
-    }
-
-    const standaloneFuncRegex = /<function[=\s]+["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\/function>/gi
-    let standaloneMatch
-    while ((standaloneMatch = standaloneFuncRegex.exec(content)) !== null) {
-      // 检查当前匹配位置是否在任何 tool_call 块内
-      const matchPos = standaloneMatch.index
-      const isInsideToolCall = toolCallRanges.some(range => matchPos >= range.start && matchPos < range.end)
-      if (isInsideToolCall) continue
-
-      const toolName = standaloneMatch[1]
-      const paramsContent = standaloneMatch[2]
-      const args: Record<string, unknown> = {}
-
-      const paramRegex = /<parameter[=\s]+["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\/parameter>/gi
-      let paramMatch
-      while ((paramMatch = paramRegex.exec(paramsContent)) !== null) {
-        const paramName = paramMatch[1]
-        let paramValue: unknown = paramMatch[2].trim()
-        try {
-          paramValue = JSON.parse(paramValue as string)
-        } catch { }
-        args[paramName] = paramValue
-      }
-
-      toolCalls.push({
-        id: `xml-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        name: toolName,
-        arguments: args
-      })
-    }
-
-    return toolCalls
   }
 
   /**

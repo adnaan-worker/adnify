@@ -72,6 +72,7 @@ export abstract class BaseProvider implements LLMProvider {
             false
           )
         case 400:
+          console.error('[BaseProvider] 400 Error details:', message)
           if (message.includes('context') || message.includes('token')) {
             return new LLMError(
               'Context length exceeded. Try reducing the conversation history.',

@@ -7,6 +7,7 @@ import { GoogleGenerativeAI, SchemaType, Content } from '@google/generative-ai'
 import { BaseProvider } from './base'
 import { ChatParams, ToolDefinition, ToolCall, LLMError, LLMErrorCode } from '../types'
 import { adapterService } from '../adapterService'
+import { AGENT_DEFAULTS } from '@shared/constants'
 
 export class GeminiProvider extends BaseProvider {
   private client: GoogleGenerativeAI
@@ -15,7 +16,7 @@ export class GeminiProvider extends BaseProvider {
 
   constructor(apiKey: string, baseUrl?: string, timeout?: number) {
     super('Gemini')
-    this.timeout = timeout || 120000
+    this.timeout = timeout || AGENT_DEFAULTS.DEFAULT_LLM_TIMEOUT
     this.baseUrl = baseUrl
     this.log('info', 'Initializing', { timeout: this.timeout, baseUrl: baseUrl || 'default' })
     this.client = new GoogleGenerativeAI(apiKey)

@@ -166,6 +166,16 @@ export const AGENT_DEFAULTS = {
     MAX_CONSECUTIVE_REPEATS: 2,
     /** 单个文件内容最大长度 (用于上下文) */
     MAX_FILE_CONTENT_CHARS: 100000,
+    /** 最大历史消息数 */
+    MAX_HISTORY_MESSAGES: 50,
+    /** 工具结果最大字符数 */
+    MAX_TOOL_RESULT_CHARS: 10000,
+    /** 总上下文最大字符数 */
+    MAX_TOTAL_CONTEXT_CHARS: 50000,
+    /** LLM 默认最大 tokens */
+    DEFAULT_MAX_TOKENS: 8192,
+    /** LLM 默认超时 (ms) */
+    DEFAULT_LLM_TIMEOUT: 120000,
 } as const
 
 // ==========================================

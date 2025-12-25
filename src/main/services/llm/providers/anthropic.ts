@@ -8,13 +8,14 @@ import Anthropic from '@anthropic-ai/sdk'
 import { BaseProvider } from './base'
 import { ChatParams, ToolDefinition, ToolCall, MessageContent } from '../types'
 import { adapterService } from '../adapterService'
+import { AGENT_DEFAULTS } from '@shared/constants'
 
 export class AnthropicProvider extends BaseProvider {
   private client: Anthropic
 
   constructor(apiKey: string, baseUrl?: string, timeout?: number) {
     super('Anthropic')
-    const timeoutMs = timeout || 120000
+    const timeoutMs = timeout || AGENT_DEFAULTS.DEFAULT_LLM_TIMEOUT
     this.log('info', 'Initializing', { baseUrl: baseUrl || 'default', timeout: timeoutMs })
     this.client = new Anthropic({
       apiKey,

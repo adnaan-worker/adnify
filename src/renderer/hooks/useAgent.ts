@@ -18,6 +18,7 @@ import {
 import { AgentService } from '@/renderer/agent/core/AgentService'
 import { MessageContent, ChatThread, ToolCall } from '@/renderer/agent/core/types'
 import { buildSystemPrompt } from '@/renderer/agent/prompts'
+import { AGENT_DEFAULTS } from '@/shared/constants'
 
 export function useAgent() {
   // 从主 store 获取配置
@@ -141,8 +142,8 @@ export function useAgent() {
 
     // 从用户配置读取阈值，警告阈值设为配置值的 80%
     const { agentConfig } = useStore.getState()
-    const WARN_MESSAGE_THRESHOLD = Math.floor((agentConfig.maxHistoryMessages ?? 50) * 0.8)
-    const WARN_CHAR_THRESHOLD = Math.floor((agentConfig.maxTotalContextChars ?? 50000) * 0.8)
+    const WARN_MESSAGE_THRESHOLD = Math.floor((agentConfig.maxHistoryMessages ?? AGENT_DEFAULTS.MAX_HISTORY_MESSAGES) * 0.8)
+    const WARN_CHAR_THRESHOLD = Math.floor((agentConfig.maxTotalContextChars ?? AGENT_DEFAULTS.MAX_TOTAL_CONTEXT_CHARS) * 0.8)
 
     return {
       needsCompact: userAssistantMessages.length > WARN_MESSAGE_THRESHOLD || charCount > WARN_CHAR_THRESHOLD,

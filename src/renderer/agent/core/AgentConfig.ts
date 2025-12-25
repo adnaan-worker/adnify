@@ -34,12 +34,12 @@ export interface AgentRuntimeConfig {
 export function getAgentConfig(): AgentRuntimeConfig {
   const agentConfig = useStore.getState().agentConfig || {}
   return {
-    // 用户可配置的值
+    // 用户可配置的值（优先使用 store 中的配置，否则使用统一默认值）
     maxToolLoops: agentConfig.maxToolLoops ?? AGENT_DEFAULTS.MAX_TOOL_LOOPS,
-    maxHistoryMessages: agentConfig.maxHistoryMessages ?? 50,
-    maxToolResultChars: agentConfig.maxToolResultChars ?? 10000,
+    maxHistoryMessages: agentConfig.maxHistoryMessages ?? AGENT_DEFAULTS.MAX_HISTORY_MESSAGES,
+    maxToolResultChars: agentConfig.maxToolResultChars ?? AGENT_DEFAULTS.MAX_TOOL_RESULT_CHARS,
     maxFileContentChars: agentConfig.maxFileContentChars ?? AGENT_DEFAULTS.MAX_FILE_CONTENT_CHARS,
-    maxTotalContextChars: agentConfig.maxTotalContextChars ?? 50000,
+    maxTotalContextChars: agentConfig.maxTotalContextChars ?? AGENT_DEFAULTS.MAX_TOTAL_CONTEXT_CHARS,
     // 重试配置
     maxRetries: AGENT_DEFAULTS.MAX_RETRIES,
     retryDelayMs: AGENT_DEFAULTS.RETRY_DELAY_MS,

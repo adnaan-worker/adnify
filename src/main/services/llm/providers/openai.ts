@@ -7,13 +7,14 @@ import OpenAI from 'openai'
 import { BaseProvider } from './base'
 import { ChatParams, ToolDefinition, ToolCall, MessageContent } from '../types'
 import { adapterService } from '../adapterService'
+import { AGENT_DEFAULTS } from '@shared/constants'
 
 export class OpenAIProvider extends BaseProvider {
   private client: OpenAI
 
   constructor(apiKey: string, baseUrl?: string, timeout?: number) {
     super('OpenAI')
-    const timeoutMs = timeout || 120000
+    const timeoutMs = timeout || AGENT_DEFAULTS.DEFAULT_LLM_TIMEOUT
     this.log('info', 'Initializing', { baseUrl: baseUrl || 'default', timeout: timeoutMs })
     this.client = new OpenAI({
       apiKey,
@@ -124,7 +125,7 @@ export class OpenAIProvider extends BaseProvider {
         messages: openaiMessages,
         stream: true,
         stream_options: { include_usage: true }, // 请求返回 usage 信息
-        max_tokens: maxTokens || 8192,
+        max_tokens: maxTokens || AGENT_DEFAULTS.DEFAULT_MAX_TOKENS,
       }
 
       if (convertedTools && convertedTools.length > 0) {

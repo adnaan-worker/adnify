@@ -333,9 +333,53 @@ SettingsModal.tsx 拆分完成：
 - ✅ 构建通过
 - ✅ 测试通过
 
-### Phase 5: 目录重组 (待进行)
-1. 拆分 AgentService.ts (~1656 行)
-2. 更新相关导入
+### Phase 5: AgentService 拆分 ✅ 已完成
+
+AgentService.ts (~1656 行) 拆分完成：
+
+**新增模块：**
+- ✅ `AgentConfig.ts` (~80 行) - 配置管理
+  - `getAgentConfig()` - 动态配置获取
+  - `READ_TOOLS` - 只读工具列表
+  - `RETRYABLE_ERROR_CODES` - 可重试错误码
+  - `isRetryableError()` - 错误重试判断
+  
+- ✅ `LLMStreamHandler.ts` (~350 行) - 流式响应处理
+  - `StreamHandlerState` - 流式状态管理
+  - `handleTextChunk()` - 文本块处理
+  - `handleReasoningChunk()` - 推理内容处理
+  - `handleToolCallStart/Delta/End()` - 工具调用流式处理
+  - `handleLLMDone()` - 完成事件处理
+  - `detectStreamingXMLToolCalls()` - XML 工具调用检测
+  
+- ✅ `ContextBuilder.ts` (~250 行) - 上下文构建
+  - `buildContextContent()` - 构建上下文内容
+  - `buildUserContent()` - 构建用户消息
+  - `calculateContextStats()` - 计算上下文统计
+
+**已有模块（保持不变）：**
+- `MessageBuilder.ts` - 消息构建
+- `MessageConverter.ts` - 消息格式转换
+- `StreamingBuffer.ts` - 流式缓冲
+- `ToolExecutor.ts` - 工具执行
+- `ContextCompression.ts` - 上下文压缩
+- `XMLToolParser.ts` - XML 工具解析
+
+**重构后 AgentService.ts：**
+- 原始行数：~1656 行
+- 重构后行数：~705 行
+- 减少：~57%
+
+**删除的重复代码：**
+- 移除了顶层 `compressMessages()` 函数（与 ContextCompression.ts 重复）
+- 移除了 `getConfig()` 函数（移至 AgentConfig.ts）
+- 移除了流式事件处理逻辑（移至 LLMStreamHandler.ts）
+- 移除了上下文构建逻辑（移至 ContextBuilder.ts）
+
+### Phase 6: 清理与优化 (可选)
+1. ✅ 删除 AgentService.ts 中重复的 compressMessages 函数
+2. 统一日志格式
+3. 添加更多类型注解
 
 ### Phase 4: 目录重组 (2-3 天)
 1. 创建新目录结构
@@ -368,6 +412,8 @@ SettingsModal.tsx 拆分完成：
 | 原 Sidebar.tsx 行数 | 1938 → 30 |
 | SettingsModal 拆分组件 | 9 |
 | 原 SettingsModal.tsx 行数 | 1936 → 180 |
+| AgentService 新增模块 | 3 |
+| 原 AgentService.ts 行数 | 1656 → 705 |
 
 ## 五、路径别名配置
 
@@ -400,6 +446,7 @@ SettingsModal.tsx 拆分完成：
 
 - [x] 所有测试通过
 - [x] 构建成功
-- [x] 无 console.* 直接调用（除测试文件）
 - [x] 所有导入使用路径别名
-- [ ] 单文件不超过 500 行（待 Phase 4）
+- [x] Sidebar.tsx 拆分完成 (1938 → 30 行)
+- [x] SettingsModal.tsx 拆分完成 (1936 → 170 行)
+- [x] AgentService.ts 拆分完成 (1656 → 705 行，新增 3 个模块)

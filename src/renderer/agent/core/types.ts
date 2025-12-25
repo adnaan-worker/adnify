@@ -160,17 +160,32 @@ export interface InterruptedToolMessage {
 
 // ===== Plan Mode 类型 =====
 
+export enum PlanItemStatus {
+  Pending = 'pending',
+  InProgress = 'in_progress',
+  Completed = 'completed',
+  Failed = 'failed',
+  Skipped = 'skipped'
+}
+
+export enum PlanStatus {
+  Draft = 'draft',
+  Active = 'active',
+  Completed = 'completed',
+  Failed = 'failed'
+}
+
 export interface PlanItem {
   id: string
   title: string
   description?: string
-  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped'
+  status: PlanItemStatus
 }
 
 export interface Plan {
   id: string
   items: PlanItem[]
-  status: 'draft' | 'active' | 'completed' | 'failed'
+  status: PlanStatus
   currentStepId: string | null
   createdAt: number
   updatedAt: number

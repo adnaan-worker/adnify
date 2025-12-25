@@ -10,8 +10,6 @@
  * 5. 支持中英文双语提示
  */
 
-import { logger } from '@utils/Logger'
-
 export interface PromptTemplate {
   id: string
   name: string

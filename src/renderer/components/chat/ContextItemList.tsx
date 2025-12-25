@@ -3,7 +3,7 @@
  * 显示当前对话中的所有上下文项，支持移除操作
  */
 import { X, FileText, Code, Folder, Database, GitBranch, Terminal, Tag } from 'lucide-react'
-import { ContextItem } from '../../agent/core/types'
+import { ContextItem } from '@renderer/agent/core/types'
 
 interface ContextItemListProps {
     items: ContextItem[]

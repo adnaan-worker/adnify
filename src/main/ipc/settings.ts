@@ -2,6 +2,7 @@
  * 设置 IPC handlers
  */
 
+import { logger } from '@shared/utils/Logger'
 import { ipcMain, BrowserWindow } from 'electron'
 import * as fs from 'fs'
 import Store from 'electron-store'
@@ -106,7 +107,7 @@ export function registerSettingsHandlers(
 
       return true
     } catch (err) {
-      console.error('[Settings] Failed to set config path:', err)
+      logger.ipc.error('[Settings] Failed to set config path:', err)
       return false
     }
   })

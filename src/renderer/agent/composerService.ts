@@ -10,6 +10,8 @@
  */
 
 // ============ Types ============
+import { logger } from '@utils/Logger'
+
 
 export interface FileChange {
   filePath: string
@@ -103,7 +105,7 @@ class ComposerServiceClass {
    */
   addChange(change: Omit<FileChange, 'status'>): void {
     if (!this.state.currentSession) {
-      console.warn('[Composer] No active session')
+      logger.agent.warn('[Composer] No active session')
       return
     }
     
@@ -155,7 +157,7 @@ class ComposerServiceClass {
       this.notify()
       return true
     } catch (error) {
-      console.error('[Composer] Failed to accept change:', error)
+      logger.agent.error('[Composer] Failed to accept change:', error)
       return false
     }
   }
@@ -174,7 +176,7 @@ class ComposerServiceClass {
       try {
         await window.electronAPI.writeFile(filePath, change.oldContent)
       } catch (error) {
-        console.error('[Composer] Failed to restore file:', error)
+        logger.agent.error('[Composer] Failed to restore file:', error)
       }
     }
     

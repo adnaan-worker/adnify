@@ -10,9 +10,10 @@
  * - Context-aware completion ranking
  */
 
-import { useStore } from '../store'
-import { getEditorConfig } from '../config/editorConfig'
-import { FIM_CAPABLE_MODELS, getLanguageFromPath as sharedGetLanguageFromPath } from '../../shared/languages'
+import { logger } from '@utils/Logger'
+import { useStore } from '@store'
+import { getEditorConfig } from '@renderer/config/editorConfig'
+import { FIM_CAPABLE_MODELS, getLanguageFromPath as sharedGetLanguageFromPath } from '@shared/languages'
 
 // ============ Interfaces ============
 
@@ -194,9 +195,9 @@ function debounce<T extends (...args: Parameters<T>) => ReturnType<T>>(
     if (timeoutId) {
       clearTimeout(timeoutId)
     }
-    console.log(`[Debounce] Scheduling execution in ${delay}ms`)
+    logger.completion.info(`[Debounce] Scheduling execution in ${delay}ms`)
     timeoutId = setTimeout(() => {
-      console.log('[Debounce] Timer fired, executing callback')
+      logger.completion.info('[Debounce] Timer fired, executing callback')
       fn(...args)
       timeoutId = null
     }, delay)
@@ -405,10 +406,10 @@ class CompletionService {
    */
   requestCompletion(context: CompletionContext): void {
     if (!this.options.enabled) {
-      console.log('[Completion] Skipped: disabled')
+      logger.completion.info('[Completion] Skipped: disabled')
       return
     }
-    console.log('[Completion] Request queued', context.cursorPosition)
+    logger.completion.info('[Completion] Request queued', context.cursorPosition)
     this.debouncedRequest?.(context)
   }
 
@@ -416,7 +417,7 @@ class CompletionService {
    * Cancel current request
    */
   cancel(): void {
-    console.log('[Completion] Cancel called')
+    logger.completion.info('[Completion] Cancel called')
     this.debouncedRequest?.cancel()
     if (this.currentAbortController) {
       this.currentAbortController.abort()
@@ -429,7 +430,7 @@ class CompletionService {
    */
   shouldTrigger(char: string): boolean {
     const should = this.options.enabled && this.options.triggerCharacters.includes(char)
-    if (should) console.log('[Completion] Triggered by char:', char)
+    if (should) logger.completion.info('[Completion] Triggered by char:', char)
     return should
   }
 
@@ -501,12 +502,12 @@ class CompletionService {
    * Enhanced with caching and multi-candidate support
    */
   private async executeRequest(context: CompletionContext): Promise<void> {
-    console.log('[Completion] Executing request...')
+    logger.completion.info('[Completion] Executing request...')
     // Check cache first (Cursor-style optimization)
     if (this.options.cacheEnabled) {
       const cached = this.cache.get(context)
       if (cached) {
-        console.log('[Completion] Cache hit')
+        logger.completion.info('[Completion] Cache hit')
         this.currentCandidates = cached.suggestions
         this.currentCandidateIndex = 0
 
@@ -517,7 +518,7 @@ class CompletionService {
       // Try prefix-based cache lookup
       const prefixCached = this.cache.getByPrefix(context)
       if (prefixCached) {
-        console.log('[Completion] Prefix cache hit')
+        logger.completion.info('[Completion] Prefix cache hit')
         this.currentCandidates = prefixCached.suggestions
         this.currentCandidateIndex = 0
 
@@ -615,7 +616,7 @@ class CompletionService {
         cleanup()
         if (isAborted) return
 
-        console.log('[Completion] LLM Done. Text:', completionText)
+        logger.completion.info('[Completion] LLM Done. Text:', completionText)
 
         if (!completionText) {
           resolve({ suggestions: [], cached: false })

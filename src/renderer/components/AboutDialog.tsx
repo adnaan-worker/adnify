@@ -3,10 +3,11 @@
  * 显示应用信息、版本、链接等
  */
 
+import { logger } from '@utils/Logger'
 import { useState, useEffect } from 'react'
 import { X, Github, ExternalLink, Code2, Sparkles } from 'lucide-react'
 import { Logo } from './Logo'
-import { useStore } from '../store'
+import { useStore } from '@store'
 import { Modal } from './ui'
 
 
@@ -24,7 +25,7 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
                 const appVersion = await window.electronAPI?.getAppVersion?.()
                 if (appVersion) setVersion(appVersion)
             } catch (e) {
-                console.error('Failed to get app version:', e)
+                logger.ui.error('Failed to get app version:', e)
             }
         }
         loadVersions()

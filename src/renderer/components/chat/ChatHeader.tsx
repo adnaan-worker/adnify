@@ -2,8 +2,8 @@
  * 聊天面板头部组件
  */
 import { History, Trash2 } from 'lucide-react'
-import { useStore, ChatMode } from '../../store'
-import { t } from '../../i18n'
+import { useStore, ChatMode } from '@store'
+import { t } from '@renderer/i18n'
 
 interface ChatHeaderProps {
   chatMode: ChatMode

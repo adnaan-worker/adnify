@@ -1,3 +1,4 @@
+import { logger } from '@utils/Logger'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
 import {
@@ -252,7 +253,7 @@ export default function ChatPanel() {
         const suggestions = await MentionParser.getSuggestions(parseResult.query, workspacePath)
         setMentionCandidates(suggestions)
       } catch (err) {
-        console.error('Error fetching suggestions:', err)
+        logger.agent.error('Error fetching suggestions:', err)
       } finally {
         setMentionLoading(false)
       }

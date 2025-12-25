@@ -4,7 +4,7 @@
  */
 
 import { useAgentStore } from './AgentStore'
-import { useStore } from '../../store'
+import { useStore } from '@store'
 import { buildOpenAIMessages, validateOpenAIMessages, OpenAIMessage } from './MessageConverter'
 import { truncateToolResult } from '@/renderer/utils/partialJson'
 import { logger } from '@/renderer/utils/Logger'

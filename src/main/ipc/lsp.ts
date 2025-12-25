@@ -2,6 +2,7 @@
  * LSP IPC 处理器
  */
 
+import { logger } from '@shared/utils/Logger'
 import { ipcMain } from 'electron'
 import { lspManager, LanguageId } from '../lspManager'
 
@@ -281,5 +282,5 @@ export function registerLspHandlers(): void {
     return lspManager.getDiagnostics(uri)
   })
 
-  console.log('[LSP IPC] Handlers registered')
+  logger.lsp.info('[LSP IPC] Handlers registered')
 }

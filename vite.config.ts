@@ -10,6 +10,13 @@ export default defineConfig({
 			{
 				entry: 'src/main/main.ts',
 				vite: {
+					resolve: {
+						alias: {
+							'@': path.resolve(__dirname, './src'),
+							'@shared': path.resolve(__dirname, './src/shared'),
+							'@main': path.resolve(__dirname, './src/main'),
+						}
+					},
 					build: {
 						outDir: 'dist/main',
 						rollupOptions: {
@@ -42,6 +49,13 @@ export default defineConfig({
 				// Worker 文件需要单独编译到与 main.js 相同的目录
 				entry: 'src/main/indexing/indexer.worker.ts',
 				vite: {
+					resolve: {
+						alias: {
+							'@': path.resolve(__dirname, './src'),
+							'@shared': path.resolve(__dirname, './src/shared'),
+							'@main': path.resolve(__dirname, './src/main'),
+						}
+					},
 					build: {
 						outDir: 'dist/main',
 						lib: {
@@ -76,6 +90,16 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			'@': path.resolve(__dirname, './src'),
+			'@main': path.resolve(__dirname, './src/main'),
+			'@renderer': path.resolve(__dirname, './src/renderer'),
+			'@shared': path.resolve(__dirname, './src/shared'),
+			'@components': path.resolve(__dirname, './src/renderer/components'),
+			'@features': path.resolve(__dirname, './src/renderer/features'),
+			'@services': path.resolve(__dirname, './src/renderer/services'),
+			'@store': path.resolve(__dirname, './src/renderer/store'),
+			'@hooks': path.resolve(__dirname, './src/renderer/hooks'),
+			'@utils': path.resolve(__dirname, './src/renderer/utils'),
+			'@app-types': path.resolve(__dirname, './src/renderer/types'),
 			// Monaco 编辑器国际化：将 vscode-nls 指向 monaco-editor-nls
 			'vscode-nls': path.resolve(__dirname, './node_modules/monaco-editor-nls')
 		}

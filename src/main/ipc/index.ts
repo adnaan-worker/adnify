@@ -3,6 +3,7 @@
  * 所有高危操作都已经过安全重构
  */
 
+import { logger } from '@shared/utils/Logger'
 import { BrowserWindow } from 'electron'
 import Store from 'electron-store'
 
@@ -83,16 +84,16 @@ export function registerAllHandlers(context: IPCContext) {
   // HTTP 请求（用于 web_search / read_url）
   registerHttpHandlers()
 
-  console.log('[Security] 所有安全IPC处理器已注册')
+  logger.ipc.info('[Security] 所有安全IPC处理器已注册')
 }
 
 /**
  * 清理所有资源
  */
 export function cleanupAllHandlers() {
-  console.log('[IPC] Cleaning up all handlers...')
+  logger.ipc.info('[IPC] Cleaning up all handlers...')
   cleanupSecureFileWatcher()
-  console.log('[IPC] All handlers cleaned up')
+  logger.ipc.info('[IPC] All handlers cleaned up')
 }
 
 export { updateLLMServiceWindow, cleanupLLMService }

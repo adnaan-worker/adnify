@@ -10,9 +10,10 @@
  * 5. 流式响应实时更新 UI
  */
 
+import { logger } from '@utils/Logger'
 import { useAgentStore } from './AgentStore'
 import { useModeStore } from '@/renderer/modes'
-import { useStore, ChatMode } from '../../store'  // 用于读取 autoApprove 配置和记录日志
+import { useStore, ChatMode } from '@store'  // 用于读取 autoApprove 配置和记录日志
 import { executeTool, getToolDefinitions, getToolApprovalType } from './ToolExecutor'
 import { buildOpenAIMessages, validateOpenAIMessages, OpenAIMessage } from './MessageConverter'
 import {
@@ -171,7 +172,7 @@ class AgentServiceClass {
   markFileAsRead(filePath: string): void {
     const normalizedPath = filePath.replace(/\\/g, '/').toLowerCase()
     this.readFilesInSession.add(normalizedPath)
-    console.log(`[Agent] File marked as read: ${filePath}`)
+    logger.agent.info(`[Agent] File marked as read: ${filePath}`)
   }
 
   /**
@@ -179,7 +180,7 @@ class AgentServiceClass {
    */
   clearSession(): void {
     this.readFilesInSession.clear()
-    console.log('[Agent] Session cleared')
+    logger.agent.info('[Agent] Session cleared')
   }
 
   /**
@@ -268,7 +269,7 @@ class AgentServiceClass {
   ): Promise<void> {
     // 防止重复执行
     if (this.isRunning) {
-      console.warn('[Agent] Already running, ignoring new request')
+      logger.agent.warn('[Agent] Already running, ignoring new request')
       return
     }
 
@@ -314,7 +315,7 @@ class AgentServiceClass {
       await this.runAgentLoop(config, llmMessages, workspacePath, chatMode)
 
     } catch (error) {
-      console.error('[Agent] Error:', error)
+      logger.agent.error('[Agent] Error:', error)
       this.showError(error instanceof Error ? error.message : 'Unknown error occurred')
     } finally {
       this.cleanup()
@@ -353,7 +354,7 @@ class AgentServiceClass {
       if (approvalType) {
         // 临时开启该类型的自动审批
         useStore.getState().setAutoApprove({ [approvalType]: true })
-        console.log(`[Agent] Auto-approve enabled for type: ${approvalType}`)
+        logger.agent.info(`[Agent] Auto-approve enabled for type: ${approvalType}`)
       }
     }
     // 批准当前工具
@@ -419,7 +420,7 @@ class AgentServiceClass {
 
     if (totalChars <= MAX_CHARS) return
 
-    console.log(`[Agent] Context size ${totalChars} exceeds limit ${MAX_CHARS}, compressing...`)
+    logger.agent.info(`[Agent] Context size ${totalChars} exceeds limit ${MAX_CHARS}, compressing...`)
 
     // 保留最后 3 轮对话 (User + Assistant + Tools)
     // 倒序寻找第 3 个 User 消息的位置
@@ -480,7 +481,7 @@ class AgentServiceClass {
       loopCount++
       shouldContinue = false
 
-      console.log(`[Agent] Loop iteration ${loopCount}`)
+      logger.agent.info(`[Agent] Loop iteration ${loopCount}`)
 
       // 压缩上下文
       await this.compressContext(llmMessages)
@@ -518,7 +519,7 @@ class AgentServiceClass {
         const hasUpdatePlan = llmMessages.some(m => m.role === 'assistant' && m.tool_calls?.some((tc: any) => tc.function.name === 'update_plan'))
 
         if (store.plan && hasWriteOps && !hasUpdatePlan && loopCount < agentLoopConfig.maxToolLoops) {
-          console.log('[Agent] Plan mode detected: Reminding AI to update plan status')
+          logger.agent.info('[Agent] Plan mode detected: Reminding AI to update plan status')
           llmMessages.push({
             role: 'user' as const,
             content: 'Reminder: You have performed some actions. Please use `update_plan` to update the plan status (e.g., mark the current step as completed) before finishing your response.',
@@ -527,7 +528,7 @@ class AgentServiceClass {
           continue
         }
 
-        console.log('[Agent] No tool calls, task complete')
+        logger.agent.info('[Agent] No tool calls, task complete')
         break
       }
 
@@ -562,10 +563,10 @@ class AgentServiceClass {
 
       if (recentToolCalls.includes(currentCallSignature)) {
         consecutiveRepeats++
-        console.warn(`[Agent] Detected repeated tool call (${consecutiveRepeats}/${MAX_CONSECUTIVE_REPEATS}):`, currentCallSignature.slice(0, 100))
+        logger.agent.warn(`[Agent] Detected repeated tool call (${consecutiveRepeats}/${MAX_CONSECUTIVE_REPEATS}):`, currentCallSignature.slice(0, 100))
 
         if (consecutiveRepeats >= MAX_CONSECUTIVE_REPEATS) {
-          console.error('[Agent] Too many repeated calls, stopping loop')
+          logger.agent.error('[Agent] Too many repeated calls, stopping loop')
           store.appendToAssistant(this.currentAssistantId!, '\n\n⚠️ Detected repeated operations. Stopping to prevent infinite loop.')
           break
         }
@@ -596,7 +597,7 @@ class AgentServiceClass {
       // 执行所有工具调用（只读工具并行，写入工具串行）
       let userRejected = false
 
-      console.log(`[Agent] Executing ${result.toolCalls.length} tool calls`)
+      logger.agent.info(`[Agent] Executing ${result.toolCalls.length} tool calls`)
 
       // 分离只读工具和写入工具
       const readToolCalls = result.toolCalls.filter(tc => READ_TOOLS.includes(tc.name))
@@ -604,15 +605,15 @@ class AgentServiceClass {
 
       // 并行执行只读工具
       if (readToolCalls.length > 0 && !this.abortController?.signal.aborted) {
-        console.log(`[Agent] Executing ${readToolCalls.length} read tools in parallel`)
+        logger.agent.info(`[Agent] Executing ${readToolCalls.length} read tools in parallel`)
         const readResults = await Promise.all(
           readToolCalls.map(async (toolCall) => {
-            console.log(`[Agent] Executing read tool: ${toolCall.name}`, toolCall.arguments)
+            logger.agent.info(`[Agent] Executing read tool: ${toolCall.name}`, toolCall.arguments)
             try {
               const toolResult = await this.executeToolCall(toolCall, workspacePath)
               return { toolCall, toolResult }
             } catch (error: any) {
-              console.error(`[Agent] Error executing read tool ${toolCall.name}:`, error)
+              logger.agent.error(`[Agent] Error executing read tool ${toolCall.name}:`, error)
               return {
                 toolCall,
                 toolResult: { success: false, content: `Error executing tool: ${error.message}`, rejected: false }
@@ -640,12 +641,12 @@ class AgentServiceClass {
         // 微任务断点：让出主线程，保持 UI 响应
         await new Promise(resolve => setTimeout(resolve, 0))
 
-        console.log(`[Agent] Executing write tool: ${toolCall.name}`, toolCall.arguments)
+        logger.agent.info(`[Agent] Executing write tool: ${toolCall.name}`, toolCall.arguments)
         let toolResult
         try {
           toolResult = await this.executeToolCall(toolCall, workspacePath)
         } catch (error: any) {
-          console.error(`[Agent] Error executing write tool ${toolCall.name}:`, error)
+          logger.agent.error(`[Agent] Error executing write tool ${toolCall.name}:`, error)
           toolResult = { success: false, content: `Error executing tool: ${error.message}`, rejected: false }
         }
 
@@ -776,7 +777,7 @@ class AgentServiceClass {
 
           // 🔍 详细日志：观察流式工具调用行为
           if (chunk.type !== 'text') {
-            console.log(`%c[Stream #${chunkCount}] ${chunk.type} @ ${elapsed}ms (+${delta}ms)`,
+            logger.agent.info(`%c[Stream #${chunkCount}] ${chunk.type} @ ${elapsed}ms (+${delta}ms)`,
               'color: #00ff00; font-weight: bold',
               {
                 toolName: chunk.toolCallDelta?.name || chunk.toolCall?.name,
@@ -807,7 +808,7 @@ class AgentServiceClass {
 
           // 处理 reasoning/thinking 内容
           if (chunk.type === 'reasoning' && chunk.content) {
-            console.log(`%c[Agent] 🧠 Reasoning: +${chunk.content.length} chars`, 'color: #ff00ff')
+            logger.agent.info(`%c[Agent] 🧠 Reasoning: +${chunk.content.length} chars`, 'color: #ff00ff')
 
             if (this.currentAssistantId) {
               // 如果是第一次进入思考模式，添加开始标签
@@ -830,10 +831,10 @@ class AgentServiceClass {
             const toolName = chunk.toolCallDelta.name || 'unknown'
 
             // 记录调试日志
-            console.log(`%c[Agent] ✅ Tool call START: ${toolName} (${toolId})`, 'color: #00ff00; font-weight: bold')
+            logger.agent.info(`%c[Agent] ✅ Tool call START: ${toolName} (${toolId})`, 'color: #00ff00; font-weight: bold')
 
             if (toolName !== 'unknown' && !isValidToolName(toolName)) {
-              console.warn(`[Agent] Invalid tool name detected: ${toolName}`)
+              logger.agent.warn(`[Agent] Invalid tool name detected: ${toolName}`)
               return
             }
 
@@ -850,7 +851,7 @@ class AgentServiceClass {
 
           // 流式工具调用参数
           if (chunk.type === 'tool_call_delta' && chunk.toolCallDelta && currentToolCall) {
-            console.log(`%c[Agent] 📝 Tool call DELTA: +${chunk.toolCallDelta.args?.length || 0} chars`, 'color: #ffff00')
+            logger.agent.info(`%c[Agent] 📝 Tool call DELTA: +${chunk.toolCallDelta.args?.length || 0} chars`, 'color: #ffff00')
 
             if (chunk.toolCallDelta.name) {
               const newName = chunk.toolCallDelta.name
@@ -886,7 +887,7 @@ class AgentServiceClass {
 
           // 流式工具调用结束
           if (chunk.type === 'tool_call_end' && currentToolCall) {
-            console.log(`%c[Agent] 🏁 Tool call END: ${currentToolCall.name} (total args: ${currentToolCall.argsString.length} chars)`, 'color: #ff6600; font-weight: bold')
+            logger.agent.info(`%c[Agent] 🏁 Tool call END: ${currentToolCall.name} (total args: ${currentToolCall.argsString.length} chars)`, 'color: #ff6600; font-weight: bold')
             try {
               const args = JSON.parse(currentToolCall.argsString || '{}')
               toolCalls.push({ id: currentToolCall.id, name: currentToolCall.name, arguments: args })
@@ -897,7 +898,7 @@ class AgentServiceClass {
                 })
               }
             } catch (e) {
-              console.error(`[Agent] Failed to parse tool args for ${currentToolCall.name}:`, e)
+              logger.agent.error(`[Agent] Failed to parse tool args for ${currentToolCall.name}:`, e)
               toolCalls.push({ id: currentToolCall.id, name: currentToolCall.name, arguments: { _parseError: true, _rawArgs: currentToolCall.argsString } })
             }
             currentToolCall = null
@@ -905,7 +906,7 @@ class AgentServiceClass {
 
           // 完整工具调用（非流式，一次性到达）
           if (chunk.type === 'tool_call' && chunk.toolCall) {
-            console.log(`%c[Agent] ⚡ FULL tool call (non-streaming): ${chunk.toolCall.name}`, 'color: #ff0000; font-weight: bold')
+            logger.agent.info(`%c[Agent] ⚡ FULL tool call (non-streaming): ${chunk.toolCall.name}`, 'color: #ff0000; font-weight: bold')
             if (!isValidToolName(chunk.toolCall.name)) return
             if (!toolCalls.find(tc => tc.id === chunk.toolCall!.id)) {
               toolCalls.push(chunk.toolCall)
@@ -1111,7 +1112,7 @@ class AgentServiceClass {
 
         // 只对特定可恢复错误重试
         if (attempt < maxRetries && this.isRetryableError(lastError)) {
-          console.log(`[AgentService] Tool ${name} failed (attempt ${attempt}/${maxRetries}), retrying...`)
+          logger.agent.info(`[AgentService] Tool ${name} failed (attempt ${attempt}/${maxRetries}), retrying...`)
           await new Promise(resolve => setTimeout(resolve, retryDelayMs * attempt))
         } else {
           break
@@ -1119,7 +1120,7 @@ class AgentServiceClass {
       } catch (error: any) {
         lastError = error.message
         if (attempt < maxRetries && this.isRetryableError(lastError)) {
-          console.log(`[AgentService] Tool ${name} error (attempt ${attempt}/${maxRetries}): ${lastError}, retrying...`)
+          logger.agent.info(`[AgentService] Tool ${name} error (attempt ${attempt}/${maxRetries}): ${lastError}, retrying...`)
           await new Promise(resolve => setTimeout(resolve, retryDelayMs * attempt))
         } else {
           result = { success: false, result: '', error: lastError }
@@ -1177,7 +1178,7 @@ class AgentServiceClass {
           toolCallId: id,
         })
       } catch (e) {
-        console.warn('[Agent] Failed to add to composer:', e)
+        logger.agent.warn('[Agent] Failed to add to composer:', e)
       }
     }
 
@@ -1214,7 +1215,7 @@ class AgentServiceClass {
     const llmConfig = getConfig()
 
     if (shouldCompactContext(filteredMessages)) {
-      console.log('[Agent] Context exceeds threshold, compacting...')
+      logger.agent.info('[Agent] Context exceeds threshold, compacting...')
 
       // 如果已有压缩摘要，直接使用
       const existingSummary = (store as any).contextSummary
@@ -1253,7 +1254,7 @@ class AgentServiceClass {
     openaiMessages.push({ role: 'user', content: userContent })
 
     const validation = validateOpenAIMessages(openaiMessages)
-    if (!validation.valid) console.warn('[Agent] Message validation warning:', validation.error)
+    if (!validation.valid) logger.agent.warn('[Agent] Message validation warning:', validation.error)
 
     return openaiMessages
   }
@@ -1301,7 +1302,7 @@ class AgentServiceClass {
             parts.push('\n[No relevant codebase results found]\n')
           }
         } catch (e) {
-          console.error('[Agent] Codebase search failed:', e)
+          logger.agent.error('[Agent] Codebase search failed:', e)
           parts.push('\n[Codebase search failed]\n')
         }
       } else if (item.type === 'Web' && userQuery) {
@@ -1319,7 +1320,7 @@ class AgentServiceClass {
             parts.push(`\n[Web search failed: ${searchResult.error}]\n`)
           }
         } catch (e) {
-          console.error('[Agent] Web search failed:', e)
+          logger.agent.error('[Agent] Web search failed:', e)
           parts.push('\n[Web search failed]\n')
         }
       } else if (item.type === 'Git' && workspacePath) {
@@ -1340,7 +1341,7 @@ class AgentServiceClass {
             parts.push('\n[Git info not available]\n')
           }
         } catch (e) {
-          console.error('[Agent] Git context failed:', e)
+          logger.agent.error('[Agent] Git context failed:', e)
           parts.push('\n[Git info failed]\n')
         }
       } else if (item.type === 'Terminal') {
@@ -1360,7 +1361,7 @@ class AgentServiceClass {
             parts.push('\n[No terminal output available]\n')
           }
         } catch (e) {
-          console.error('[Agent] Terminal context failed:', e)
+          logger.agent.error('[Agent] Terminal context failed:', e)
           parts.push('\n[Terminal output failed]\n')
         }
       } else if (item.type === 'Symbols' && workspacePath) {
@@ -1385,7 +1386,7 @@ class AgentServiceClass {
             parts.push('\n[No active file for symbols]\n')
           }
         } catch (e) {
-          console.error('[Agent] Symbols context failed:', e)
+          logger.agent.error('[Agent] Symbols context failed:', e)
           parts.push('\n[Symbols retrieval failed]\n')
         }
       }

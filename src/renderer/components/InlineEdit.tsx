@@ -5,8 +5,8 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { X, Sparkles, Check, Loader2, RefreshCw } from 'lucide-react'
-import { useStore } from '../store'
-import { t } from '../i18n'
+import { useStore } from '@store'
+import { t } from '@renderer/i18n'
 import DiffViewer from './DiffViewer'
 
 interface InlineEditProps {

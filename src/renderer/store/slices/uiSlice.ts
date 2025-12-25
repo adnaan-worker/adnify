@@ -2,7 +2,7 @@
  * UI 相关状态切片
  */
 import { StateCreator } from 'zustand'
-import { GitStatus } from '../../agent/gitService'
+import { GitStatus } from '@renderer/agent/gitService'
 
 export type SidePanel = 'explorer' | 'search' | 'git' | 'problems' | 'outline' | 'history' | 'extensions' | null
 

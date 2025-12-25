@@ -47,7 +47,7 @@ export type {
   LspFoldingRange,
   LspInlayHint,
   LspPrepareRename,
-} from '../../shared/types'
+} from '@shared/types'
 
 // Provider 类型
 export type ProviderType = 'openai' | 'anthropic' | 'gemini' | 'custom'

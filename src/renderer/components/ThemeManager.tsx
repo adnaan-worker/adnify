@@ -1,6 +1,6 @@
 import React, { useEffect, ReactNode } from 'react';
-import { useStore } from '../store';
-import { ThemeName } from '../store/slices/themeSlice';
+import { useStore } from '@store';
+import { ThemeName } from '@store/slices/themeSlice';
 
 // Theme definitions
 export const themes: Record<ThemeName, Record<string, string>> = {

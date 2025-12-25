@@ -4,7 +4,8 @@
  * 使用 chatThreadService 的消息格式
  */
 
-import { ChatMode, LLMConfig } from '../store'
+import { logger } from '@utils/Logger'
+import { ChatMode, LLMConfig } from '@store'
 import { ChatMessage, ChatThread, getMessageText as getMsgText, isUserMessage } from './core/types'
 import { useAgentStore } from './core/AgentStore'
 
@@ -347,7 +348,7 @@ class SessionService {
 			}
 		})
 		
-		console.log('[SessionService] Loaded session:', sessionId, 'messages:', session.messages.length)
+		logger.agent.info('[SessionService] Loaded session:', sessionId, 'messages:', session.messages.length)
 		return true
 	}
 }

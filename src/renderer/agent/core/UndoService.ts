@@ -7,6 +7,7 @@
  * - UndoService 提供实际的撤销操作
  */
 
+import { logger } from '@utils/Logger'
 import { useAgentStore } from './AgentStore'
 import { isCheckpointMessage, FileSnapshot } from './types'
 
@@ -137,7 +138,7 @@ class UndoServiceClass {
     // 在当前实现中，我们不需要做任何事情
     // 因为 checkpoint 消息会随着新的对话而被覆盖
     // 如果需要更复杂的逻辑，可以在这里添加
-    console.log('[UndoService] Checkpoints cleared (changes kept)')
+    logger.agent.info('[UndoService] Checkpoints cleared (changes kept)')
   }
 
   /**

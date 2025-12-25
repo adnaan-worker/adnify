@@ -19,12 +19,12 @@ import {
   AssistantPart,
   isTextPart,
   isToolCallPart,
-} from '../../agent/core/types'
+} from '@renderer/agent/core/types'
 import FileChangeCard from './FileChangeCard'
 import ToolCallCard from './ToolCallCard'
 import ToolCallGroup from './ToolCallGroup'
-import { WRITE_TOOLS } from '../../agent/core/ToolExecutor'
-import { useStore } from '../../store'
+import { WRITE_TOOLS } from '@renderer/agent/core/ToolExecutor'
+import { useStore } from '@store'
 
 interface ChatMessageProps {
   message: ChatMessageType

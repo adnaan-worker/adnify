@@ -3,7 +3,8 @@
  * Manages the background indexing via Electron IPC
  */
 
-import type { IndexStatus } from '../types/electron'
+import { logger } from '@utils/Logger'
+import type { IndexStatus } from '@app-types/electron'
 
 // ============ Types ============
 
@@ -46,9 +47,9 @@ class IndexWorkerService {
       })
       
       this.isInitialized = true
-      console.log('[IndexWorkerService] Initialized (IPC)')
+      logger.index.info('[IndexWorkerService] Initialized (IPC)')
     } catch (error) {
-      console.error('[IndexWorkerService] Failed to initialize:', error)
+      logger.index.error('[IndexWorkerService] Failed to initialize:', error)
     }
   }
 
@@ -72,7 +73,7 @@ class IndexWorkerService {
    */
   stopIndexing(): void {
     // No-op for now unless we add cancel to backend
-    console.warn('[IndexWorkerService] Stop not fully implemented in backend')
+    logger.index.warn('[IndexWorkerService] Stop not fully implemented in backend')
   }
 
   /**

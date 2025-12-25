@@ -4,10 +4,11 @@
  * 
  * 注意：类型定义和默认值从 settingsService 导入
  */
+import { logger } from '@utils/Logger'
 import { StateCreator } from 'zustand'
 import { SECURITY_DEFAULTS, AGENT_DEFAULTS } from '@/shared/constants'
-import { saveEditorConfig, getEditorConfig, defaultEditorConfig } from '../../config/editorConfig'
-import { ProviderModelConfig } from '../../types/provider'
+import { saveEditorConfig, getEditorConfig, defaultEditorConfig } from '@renderer/config/editorConfig'
+import { ProviderModelConfig } from '@app-types/provider'
 import { PROVIDERS, getAdapterConfig, type ProviderType as UnifiedProviderType } from '@/shared/config/providers'
 import {
   settingsService,
@@ -18,7 +19,7 @@ import {
   defaultLLMConfig as serviceDefaultLLMConfig,
   defaultAutoApprove as serviceDefaultAutoApprove,
   defaultAgentConfig as serviceDefaultAgentConfig,
-} from '../../services/settingsService'
+} from '@services/settingsService'
 
 // ============ 导出类型 ============
 
@@ -227,7 +228,7 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
         }
       }
 
-      console.log('[SettingsSlice] loadSettings via settingsService:', {
+      logger.settings.info('[SettingsSlice] loadSettings via settingsService:', {
         hasAdapterConfig: !!llmConfig.adapterConfig,
         adapterId: llmConfig.adapterId,
         provider: llmConfig.provider,
@@ -264,7 +265,7 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
         }
       }
     } catch (e) {
-      console.error('[SettingsSlice] Failed to load settings:', e)
+      logger.settings.error('[SettingsSlice] Failed to load settings:', e)
     }
   },
 })

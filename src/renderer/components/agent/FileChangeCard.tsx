@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { Check, X, ChevronDown, ChevronRight, ExternalLink, Loader2, FileCode } from 'lucide-react'
-import { ToolCall } from '../../agent/core/types'
+import { ToolCall } from '@renderer/agent/core/types'
 import InlineDiffPreview, { getDiffStats } from './InlineDiffPreview'
 
 interface FileChangeCardProps {

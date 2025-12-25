@@ -3,6 +3,7 @@
  * 集中管理所有应用设置的加载、保存和清理
  */
 
+import { logger } from '@utils/Logger'
 import { LLM_DEFAULTS } from '@/shared/constants'
 import { PROVIDERS, getAdapterConfig, type LLMAdapterConfig } from '@/shared/config/providers'
 
@@ -270,7 +271,7 @@ class SettingsService {
             this.cache = merged
             return merged
         } catch (e) {
-            console.error('[SettingsService] Failed to load settings:', e)
+            logger.settings.error('[SettingsService] Failed to load settings:', e)
             return this.getDefaultSettings()
         }
     }
@@ -291,9 +292,9 @@ class SettingsService {
             await window.electronAPI.setSetting('app-settings', cleaned)
             this.cache = cleaned
 
-            console.log('[SettingsService] Settings saved successfully')
+            logger.settings.info('[SettingsService] Settings saved successfully')
         } catch (e) {
-            console.error('[SettingsService] Failed to save settings:', e)
+            logger.settings.error('[SettingsService] Failed to save settings:', e)
             throw e
         }
     }

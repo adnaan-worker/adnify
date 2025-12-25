@@ -1,7 +1,7 @@
 import { Files, Search, GitBranch, Settings, Sparkles, AlertCircle, ListTree, History } from 'lucide-react'
 import { Tooltip } from './ui/Tooltip'
-import { useStore } from '../store'
-import { t } from '../i18n'
+import { useStore } from '@store'
+import { t } from '@renderer/i18n'
 
 export default function ActivityBar() {
   const { activeSidePanel, setActiveSidePanel, language, setShowSettings, setShowComposer } = useStore()

@@ -16,8 +16,8 @@ import {
   ClipboardList,
   Plus
 } from 'lucide-react'
-import { useStore, ChatMode } from '../../store'
-import { t } from '../../i18n'
+import { useStore, ChatMode } from '@store'
+import { t } from '@renderer/i18n'
 import { Button } from '../ui'
 
 import { ContextItem, FileContext } from '@/renderer/agent/core/types'

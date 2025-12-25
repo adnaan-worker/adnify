@@ -3,6 +3,7 @@
  * 支持多窗口隔离：每个窗口有独立的 LLM 服务实例
  */
 
+import { logger } from '@shared/utils/Logger'
 import { ipcMain, BrowserWindow } from 'electron'
 import { LLMService } from '../services/llm'
 
@@ -21,7 +22,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
 
     // 按窗口 ID 获取或创建 LLM 服务
     if (!llmServices.has(webContentsId)) {
-      console.log('[LLMService] Creating new service for window:', webContentsId)
+      logger.ipc.info('[LLMService] Creating new service for window:', webContentsId)
       llmServices.set(webContentsId, new LLMService(window))
     }
 
@@ -42,7 +43,7 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
 // 清理指定窗口的 LLM 服务（窗口关闭时调用）
 export function cleanupLLMService(webContentsId: number) {
   if (llmServices.has(webContentsId)) {
-    console.log('[LLMService] Cleaning up service for window:', webContentsId)
+    logger.ipc.info('[LLMService] Cleaning up service for window:', webContentsId)
     llmServices.delete(webContentsId)
   }
 }
@@ -50,5 +51,5 @@ export function cleanupLLMService(webContentsId: number) {
 // 保留旧接口以兼容，但实际不再需要
 export function updateLLMServiceWindow(_mainWindow: BrowserWindow) {
   // 不再需要，每个窗口有独立服务
-  console.log('[LLMService] updateLLMServiceWindow called but no longer needed')
+  logger.ipc.info('[LLMService] updateLLMServiceWindow called but no longer needed')
 }

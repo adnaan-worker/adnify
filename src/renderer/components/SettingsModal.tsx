@@ -3,6 +3,7 @@
  * 支持多 Provider、自定义模型、编辑器设置等
  */
 
+import { logger } from '@utils/Logger'
 import React, { useState, useEffect } from 'react'
 import {
   Cpu, Check, Eye, EyeOff,
@@ -10,16 +11,16 @@ import {
   Monitor, Shield, Terminal, Sparkles, Layout, Type, Database,
   Search, Copy, ChevronRight, Sliders
 } from 'lucide-react'
-import { useStore, LLMConfig, AutoApproveSettings } from '../store'
-import { t, Language } from '../i18n'
-import { ProviderModelConfig } from '../types/provider'
+import { useStore, LLMConfig, AutoApproveSettings } from '@store'
+import { t, Language } from '@renderer/i18n'
+import { ProviderModelConfig } from '@app-types/provider'
 import { PROVIDERS, getAdapterConfig } from '@/shared/config/providers'
 import { LLM_DEFAULTS } from '@/shared/constants'
-import { getEditorConfig, saveEditorConfig, EditorConfig } from '../config/editorConfig'
+import { getEditorConfig, saveEditorConfig, EditorConfig } from '@renderer/config/editorConfig'
 import { themes } from './ThemeManager'
 import { toast } from './ToastProvider'
-import { getPromptTemplates, getPromptTemplateById, getPromptTemplatePreview, getPromptTemplateSummary } from '../agent/promptTemplates'
-import { completionService } from '../services/completionService'
+import { getPromptTemplates, getPromptTemplateById, getPromptTemplatePreview, getPromptTemplateSummary } from '@renderer/agent/promptTemplates'
+import { completionService } from '@services/completionService'
 import KeybindingPanel from './KeybindingPanel'
 import LLMAdapterConfigEditor from './LLMAdapterConfigEditor'
 import { Button, Input, Modal, Select, Switch } from './ui'
@@ -1679,7 +1680,7 @@ function IndexSettings({ language }: { language: Language }) {
       await window.electronAPI.indexStart(workspacePath)
       toast.success(language === 'zh' ? '索引已开始，后台运行中...' : 'Indexing started, running in background...')
     } catch (error) {
-      console.error('[IndexSettings] Start indexing failed:', error)
+      logger.settings.error('[IndexSettings] Start indexing failed:', error)
       toast.error(language === 'zh' ? '启动索引失败' : 'Failed to start indexing')
     } finally {
       setIsIndexing(false)
@@ -1826,7 +1827,7 @@ function SystemSettings({ language }: { language: Language }) {
       await window.electronAPI.setSetting('editorConfig', undefined)
       toast.success(language === 'zh' ? '缓存已清除' : 'Cache cleared')
     } catch (error) {
-      console.error('Failed to clear cache:', error)
+      logger.settings.error('Failed to clear cache:', error)
       toast.error(language === 'zh' ? '清除缓存失败' : 'Failed to clear cache')
     } finally {
       setIsClearing(false)

@@ -1,3 +1,4 @@
+import { logger } from '@shared/utils/Logger'
 import { ipcMain, dialog, shell } from 'electron'
 
 import * as path from 'path'
@@ -63,7 +64,7 @@ function setupFileWatcher(
     .on('add', (path: string) => callback({ event: 'create', path }))
     .on('change', (path: string) => callback({ event: 'update', path }))
     .on('unlink', (path: string) => callback({ event: 'delete', path }))
-    .on('error', (error: Error) => console.error('[Watcher] Error:', error))
+    .on('error', (error: Error) => logger.security.error('[Watcher] Error:', error))
 
     ; (global as any).fileWatcher = watcher
 }
@@ -92,7 +93,7 @@ export function registerSecureFileHandlers(
     const updated = [path, ...filtered].slice(0, 10)
 
     store.set('recentWorkspaces', updated)
-    console.log('[SecureFile] Updated recent workspaces:', updated.length, 'items')
+    logger.security.info('[SecureFile] Updated recent workspaces:', updated.length, 'items')
   }
 
   // ========== 文件操作处理器 ==========
@@ -145,7 +146,7 @@ export function registerSecureFileHandlers(
             existingWindow.restore()
           }
           existingWindow.focus()
-          console.log('[SecureFile] Project already open in another window, focusing:', folderPath)
+          logger.security.info('[SecureFile] Project already open in another window, focusing:', folderPath)
           // 返回特殊标记，告诉渲染进程项目已在其他窗口打开
           return { redirected: true, path: folderPath }
         }
@@ -192,7 +193,7 @@ export function registerSecureFileHandlers(
           const config = JSON.parse(content)
           roots = config.folders.map((f: any) => f.path)
         } catch (e) {
-          console.error('Failed to parse workspace file', e)
+          logger.security.error('Failed to parse workspace file', e)
           return null
         }
       } else {
@@ -209,7 +210,7 @@ export function registerSecureFileHandlers(
             existingWindow.restore()
           }
           existingWindow.focus()
-          console.log('[SecureFile] Workspace already open in another window, focusing:', roots)
+          logger.security.info('[SecureFile] Workspace already open in another window, focusing:', roots)
           return { redirected: true, roots }
         }
       }
@@ -268,7 +269,7 @@ export function registerSecureFileHandlers(
       await fsPromises.writeFile(targetPath, content, 'utf-8')
       return true
     } catch (e) {
-      console.error('Failed to save workspace', e)
+      logger.security.error('Failed to save workspace', e)
       return false
     }
   })
@@ -331,7 +332,7 @@ export function registerSecureFileHandlers(
     // 添加到最近工作区
     roots.forEach(r => addRecentWorkspace(r))
 
-    console.log('[SecureFile] Active workspace set:', roots)
+    logger.security.info('[SecureFile] Active workspace set:', roots)
     return true
   })
 
@@ -412,7 +413,7 @@ export function registerSecureFileHandlers(
       })
       return content
     } catch (e: any) {
-      console.error('[File] read failed:', filePath, e.message)
+      logger.security.error('[File] read failed:', filePath, e.message)
       return null
     }
   })
@@ -453,7 +454,7 @@ export function registerSecureFileHandlers(
       })
       return base64
     } catch (e: any) {
-      console.error('[File] read binary failed:', filePath, e.message)
+      logger.security.error('[File] read binary failed:', filePath, e.message)
       return null
     }
   })
@@ -505,7 +506,7 @@ export function registerSecureFileHandlers(
       })
       return true
     } catch (e: any) {
-      console.error('[File] write failed:', filePath, e.message)
+      logger.security.error('[File] write failed:', filePath, e.message)
       return false
     }
   })
@@ -595,7 +596,7 @@ export function registerSecureFileHandlers(
       })
       return true
     } catch (e: any) {
-      console.error('[File] mkdir failed:', dirPath, e.message)
+      logger.security.error('[File] mkdir failed:', dirPath, e.message)
       return false
     }
   })
@@ -653,7 +654,7 @@ export function registerSecureFileHandlers(
       })
       return true
     } catch (e: any) {
-      console.error('[File] delete failed:', filePath, e.message)
+      logger.security.error('[File] delete failed:', filePath, e.message)
       return false
     }
   })
@@ -679,7 +680,7 @@ export function registerSecureFileHandlers(
       })
       return true
     } catch (e: any) {
-      console.error('[File] rename failed:', oldPath, e.message)
+      logger.security.error('[File] rename failed:', oldPath, e.message)
       return false
     }
   })
@@ -741,11 +742,11 @@ export function registerSecureFileHandlers(
 
 export function cleanupSecureFileWatcher() {
   if (watcherSubscription) {
-    console.log('[Watcher] 清理文件监听器...')
+    logger.security.info('[Watcher] 清理文件监听器...')
     const subscription = watcherSubscription
     watcherSubscription = null
     subscription.close().catch((e: any) => {
-      console.log('[Watcher] 清理完成 (已忽略错误):', e.message)
+      logger.security.info('[Watcher] 清理完成 (已忽略错误):', e.message)
     })
   }
 }

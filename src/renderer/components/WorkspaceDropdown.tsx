@@ -2,10 +2,11 @@
  * WorkspaceDropdown - IDEA风格工作区下拉菜单
  * 显示当前工作区并提供快速切换功能
  */
+import { logger } from '@utils/Logger'
 import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, Plus, FolderOpen, History, Folder } from 'lucide-react'
-import { useStore } from '../store'
-import { adnifyDir } from '../services/adnifyDirService'
+import { useStore } from '@store'
+import { adnifyDir } from '@services/adnifyDirService'
 
 interface RecentWorkspace {
     path: string
@@ -35,7 +36,7 @@ export default function WorkspaceDropdown() {
                     }))
                 )
             } catch (e) {
-                console.error('[WorkspaceDropdown] Failed to load recent workspaces:', e)
+                logger.ui.error('[WorkspaceDropdown] Failed to load recent workspaces:', e)
             }
         }
         if (isOpen) {
@@ -114,7 +115,7 @@ export default function WorkspaceDropdown() {
             const items = await window.electronAPI.readDir(path)
             setFiles(items)
         } catch (e) {
-            console.error('[WorkspaceDropdown] Failed to open recent workspace:', e)
+            logger.ui.error('[WorkspaceDropdown] Failed to open recent workspace:', e)
         }
     }
 

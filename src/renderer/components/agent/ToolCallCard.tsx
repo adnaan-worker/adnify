@@ -8,10 +8,10 @@ import {
   Check, X, ChevronDown, ChevronRight, Loader2,
   Terminal, Search, Copy, AlertTriangle
 } from 'lucide-react'
-import { useStore } from '../../store'
-import { t } from '../../i18n'
-import { ToolCall } from '../../agent/core/types'
-import { JsonHighlight } from '../../utils/jsonHighlight'
+import { useStore } from '@store'
+import { t } from '@renderer/i18n'
+import { ToolCall } from '@renderer/agent/core/types'
+import { JsonHighlight } from '@utils/jsonHighlight'
 
 interface ToolCallCardProps {
   toolCall: ToolCall

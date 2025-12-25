@@ -6,7 +6,7 @@
 
 import { useState } from 'react'
 import { X, Check, ExternalLink, Square, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
-import { PendingChange } from '../../agent/core/types'
+import { PendingChange } from '@renderer/agent/core/types'
 import { Button } from '../ui'
 
 interface AgentStatusBarProps {

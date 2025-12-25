@@ -2,10 +2,11 @@
  * 自定义确认对话框组件
  * 替代原生 window.confirm，支持国际化和自定义样式
  */
+import { logger } from '@utils/Logger'
 import { useState, useCallback, createContext, useContext, ReactNode, useEffect } from 'react'
 import { AlertTriangle } from 'lucide-react'
-import { useStore } from '../store'
-import { t } from '../i18n'
+import { useStore } from '@store'
+import { t } from '@renderer/i18n'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/Button'
 
@@ -206,7 +207,7 @@ export function globalConfirm(options: ConfirmOptions): Promise<boolean> {
   return new Promise((resolve) => {
     if (!globalSetState) {
       // 如果没有挂载 GlobalConfirmDialog，回退到原生 confirm
-      console.warn('GlobalConfirmDialog not mounted, falling back to native confirm')
+      logger.ui.warn('GlobalConfirmDialog not mounted, falling back to native confirm')
       resolve(window.confirm(options.message))
       return
     }

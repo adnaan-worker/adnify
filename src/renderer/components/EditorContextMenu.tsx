@@ -3,8 +3,8 @@
  * 完全国际化支持
  */
 import { useEffect, useRef } from 'react'
-import { useStore } from '../store'
-import { t, TranslationKey } from '../i18n'
+import { useStore } from '@store'
+import { t, TranslationKey } from '@renderer/i18n'
 import type { editor } from 'monaco-editor'
 
 interface MenuItem {

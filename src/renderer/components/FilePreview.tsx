@@ -2,6 +2,7 @@
  * 文件预览组件
  * 支持 Markdown 预览、图片显示、不支持文件类型提示
  */
+import { logger } from '@utils/Logger'
 import { useState, useCallback, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -152,7 +153,7 @@ export function ImagePreview({ path }: ImagePreviewProps) {
                     setError(true)
                 }
             } catch (e) {
-                console.error('Failed to load image:', e)
+                logger.file.error('Failed to load image:', e)
                 setError(true)
             } finally {
                 setLoading(false)

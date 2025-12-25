@@ -3,6 +3,7 @@
  * 提供通用的错误处理和工具方法
  */
 
+import { logger } from '@shared/utils/Logger'
 import { LLMProvider, ChatParams, LLMError, LLMErrorCode } from '../types'
 
 export abstract class BaseProvider implements LLMProvider {
@@ -103,13 +104,13 @@ export abstract class BaseProvider implements LLMProvider {
     const prefix = `[${this.name}]`
     switch (level) {
       case 'info':
-        console.log(prefix, message, data || '')
+        logger.system.info(prefix, message, data || '')
         break
       case 'warn':
-        console.warn(prefix, message, data || '')
+        logger.system.warn(prefix, message, data || '')
         break
       case 'error':
-        console.error(prefix, message, data || '')
+        logger.system.error(prefix, message, data || '')
         break
     }
   }

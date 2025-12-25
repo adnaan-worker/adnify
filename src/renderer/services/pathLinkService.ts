@@ -3,9 +3,10 @@
  * 统一处理所有文件类型的路径跳转（import、href、src、url() 等）
  */
 
+import { logger } from '@utils/Logger'
 import type { languages, editor, IRange } from 'monaco-editor'
-import { getPathSeparator, getDirPath, joinPath } from '../utils/pathUtils'
-import { useStore } from '../store'
+import { getPathSeparator, getDirPath, joinPath } from '@utils/pathUtils'
+import { useStore } from '@store'
 
 // ============ 类型定义 ============
 
@@ -252,7 +253,7 @@ class PathLinkService {
     const result = await this.tryOpenFile(resolvedPath, extensions)
     
     if (!result.success) {
-      console.warn('Could not resolve path:', linkPath, '-> tried:', resolvedPath)
+      logger.system.warn('Could not resolve path:', linkPath, '-> tried:', resolvedPath)
     }
     
     return result.success

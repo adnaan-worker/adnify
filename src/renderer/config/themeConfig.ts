@@ -4,6 +4,8 @@
  * 使用 RGB 格式以支持 Tailwind 透明度修饰符
  */
 
+import { logger } from '@utils/Logger'
+
 export interface ThemeColors {
   // 背景色 (RGB 格式: "r g b")
   background: string
@@ -231,7 +233,7 @@ class ThemeManager {
         }
       }
     } catch (e) {
-      console.error('Failed to load theme from config:', e)
+      logger.settings.error('Failed to load theme from config:', e)
     }
   }
 
@@ -240,7 +242,7 @@ class ThemeManager {
       window.electronAPI.setSetting('themeId', this.currentTheme.id)
       window.electronAPI.setSetting('customThemes', this.customThemes)
     } catch (e) {
-      console.error('Failed to save theme to config:', e)
+      logger.settings.error('Failed to save theme to config:', e)
     }
   }
 
@@ -322,7 +324,7 @@ class ThemeManager {
     // 更新 color-scheme
     root.style.colorScheme = theme.type
 
-    console.log('[Theme] Applied theme:', theme.name)
+    logger.settings.info('[Theme] Applied theme:', theme.name)
   }
 
   subscribe(callback: (theme: Theme) => void): () => void {

@@ -2,8 +2,8 @@
  * LLM 客户端
  * 处理与 LLM 的通信
  */
-import { LLMStreamChunk, LLMToolCall, LLMResult, LLMError } from '../../types/electron'
-import { getEditorConfig } from '../../config/editorConfig'
+import { LLMStreamChunk, LLMToolCall, LLMResult, LLMError } from '@app-types/electron'
+import { getEditorConfig } from '@renderer/config/editorConfig'
 
 const getRequestTimeout = () => getEditorConfig().performance.requestTimeoutMs
 

@@ -1,23 +1,24 @@
+import { logger } from '@utils/Logger'
 import { useRef, useCallback, useEffect, useState } from 'react'
 import MonacoEditor, { DiffEditor, OnMount, loader } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { FileCode, X, ChevronRight, AlertCircle, AlertTriangle, RefreshCw, Home, Eye, Edit, Columns } from 'lucide-react'
-import { useStore } from '../store'
-import { useAgent } from '../hooks/useAgent'
-import { t } from '../i18n'
-import { getFileName, getPathSeparator } from '../utils/pathUtils'
+import { useStore } from '@store'
+import { useAgent } from '@hooks/useAgent'
+import { t } from '@renderer/i18n'
+import { getFileName, getPathSeparator } from '@utils/pathUtils'
 import { toast } from './ToastProvider'
 import DiffViewer from './DiffViewer'
 import InlineEdit from './InlineEdit'
 import EditorContextMenu from './EditorContextMenu'
-import { lintService } from '../agent/lintService'
-import { streamingEditService } from '../agent/streamingEditService'
+import { lintService } from '@renderer/agent/lintService'
+import { streamingEditService } from '@renderer/agent/streamingEditService'
 import { LintError, StreamingEditState } from '@/renderer/agent/toolTypes'
-import { completionService } from '../services/completionService'
+import { completionService } from '@services/completionService'
 import { getFileType, MarkdownPreview, ImagePreview, UnsupportedFile, isPlanFile } from './FilePreview'
 import { PlanPreview } from './agent/PlanPreview'
 
-import { initMonacoTypeService } from '../services/monacoTypeService'
+import { initMonacoTypeService } from '@services/monacoTypeService'
 import {
   startLspServer,
   didOpenDocument,
@@ -25,16 +26,16 @@ import {
   goToDefinition,
   lspUriToPath,
   onDiagnostics,
-} from '../services/lspService'
-import { registerLspProviders } from '../services/lspProviders'
-import { getFileInfo, getLargeFileEditorOptions, getLargeFileWarning } from '../services/largeFileService'
-import { pathLinkService } from '../services/pathLinkService'
-import { getEditorConfig } from '../config/editorConfig'
-import { keybindingService } from '../services/keybindingService'
+} from '@services/lspService'
+import { registerLspProviders } from '@services/lspProviders'
+import { getFileInfo, getLargeFileEditorOptions, getLargeFileWarning } from '@services/largeFileService'
+import { pathLinkService } from '@services/pathLinkService'
+import { getEditorConfig } from '@renderer/config/editorConfig'
+import { keybindingService } from '@services/keybindingService'
 // 导入 Monaco worker 配置
 import { monaco } from '../monacoWorker'
 // 导入编辑器配置
-import type { ThemeName } from '../store/slices/themeSlice'
+import type { ThemeName } from '@store/slices/themeSlice'
 
 // 配置 Monaco 使用本地安装的版本（支持国际化）
 // monaco-editor-nls 插件会在构建时注入语言包
@@ -162,13 +163,13 @@ export default function Editor() {
   // 监听 workspacePath 变化，启动 LSP 服务器
   useEffect(() => {
     if (workspacePath && !isLspReady) {
-      console.log('[Editor] workspacePath changed, starting LSP server:', workspacePath)
+      logger.ui.info('[Editor] workspacePath changed, starting LSP server:', workspacePath)
       startLspServer(workspacePath).then((success) => {
         if (success) {
-          console.log('[Editor] LSP server started (from workspacePath change)')
+          logger.ui.info('[Editor] LSP server started (from workspacePath change)')
           setIsLspReady(true)
         } else {
-          console.warn('[Editor] LSP server failed to start')
+          logger.ui.warn('[Editor] LSP server failed to start')
         }
       })
     }
@@ -316,7 +317,7 @@ export default function Editor() {
     if (workspacePath) {
       startLspServer(workspacePath).then((success) => {
         if (success) {
-          console.log('[Editor] LSP server started')
+          logger.ui.info('[Editor] LSP server started')
           setIsLspReady(true)
           // 通知 LSP 当前文件已打开
           const currentFile = useStore.getState().openFiles.find(
@@ -395,7 +396,7 @@ export default function Editor() {
               })
               .filter(Boolean) as import('monaco-editor').languages.Location[]
           } catch (error) {
-            console.error('[Editor] Definition provider error:', error)
+            logger.ui.error('[Editor] Definition provider error:', error)
             return null
           }
         },
@@ -615,7 +616,7 @@ export default function Editor() {
         }
       }
     } catch (e) {
-      console.error('Lint check failed:', e)
+      logger.ui.error('Lint check failed:', e)
     } finally {
       setIsLinting(false)
     }
@@ -703,7 +704,7 @@ export default function Editor() {
           editor.pushUndoStop()
         }
       } catch (error) {
-        console.error('Replace in selection failed:', error)
+        logger.ui.error('Replace in selection failed:', error)
       }
     }
 

@@ -3,7 +3,8 @@
  * 缓存目录内容，减少重复的文件系统请求
  */
 
-import { FileItem } from '../types/electron'
+import { logger } from '@utils/Logger'
+import { FileItem } from '@app-types/electron'
 
 interface CacheEntry {
     items: FileItem[]
@@ -58,7 +59,7 @@ class DirectoryCacheService {
             const items = await window.electronAPI.readDir(path)
             return items
         } catch (error) {
-            console.error('[DirCache] Failed to read directory:', path, error)
+            logger.file.error('[DirCache] Failed to read directory:', path, error)
             return []
         }
     }

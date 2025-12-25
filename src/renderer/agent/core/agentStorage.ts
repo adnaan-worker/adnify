@@ -5,8 +5,9 @@
  * 通过 setSessionsPartialDirty 实现延迟批量写入
  */
 
+import { logger } from '@utils/Logger'
 import { StateStorage } from 'zustand/middleware'
-import { adnifyDir } from '../../services/adnifyDirService'
+import { adnifyDir } from '@services/adnifyDirService'
 
 /**
  * 自定义 Zustand Storage
@@ -28,7 +29,7 @@ export const agentStorage: StateStorage = {
       // 使用 dirty flag 机制，延迟写入
       adnifyDir.setSessionsPartialDirty(name, parsed)
     } catch (error) {
-      console.error('[AgentStorage] Failed to parse:', error)
+      logger.agent.error('[AgentStorage] Failed to parse:', error)
     }
   },
 

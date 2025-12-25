@@ -3,6 +3,7 @@
  * 提供网络请求能力给渲染进程
  */
 
+import { logger } from '@shared/utils/Logger'
 import { ipcMain } from 'electron'
 import * as https from 'https'
 import * as http from 'http'
@@ -175,7 +176,7 @@ let cachedSearchApiType: 'serper' | 'tavily' | null = null
 export function setSearchApiKey(type: 'serper' | 'tavily', key: string) {
     cachedSearchApiType = type
     cachedSearchApiKey = key
-    console.log(`[HTTP] Search API configured: ${type}`)
+    logger.ipc.info(`[HTTP] Search API configured: ${type}`)
 }
 
 async function webSearch(query: string, maxResults = 5): Promise<WebSearchResult> {
@@ -192,7 +193,7 @@ async function webSearch(query: string, maxResults = 5): Promise<WebSearchResult
                 return await searchWithTavily(query, apiKey, maxResults)
             }
         } catch (error) {
-            console.error(`[HTTP] ${apiType} search failed, falling back to local:`, error)
+            logger.ipc.error(`[HTTP] ${apiType} search failed, falling back to local:`, error)
         }
     }
 
@@ -200,7 +201,7 @@ async function webSearch(query: string, maxResults = 5): Promise<WebSearchResult
     try {
         return await searchWithLocalBrowser(query, maxResults)
     } catch (error) {
-        console.error('[HTTP] Local browser search failed:', error)
+        logger.ipc.error('[HTTP] Local browser search failed:', error)
         return {
             success: false,
             error: `搜索失败: ${error}`,
@@ -383,13 +384,13 @@ async function searchWithTavily(query: string, apiKey: string, maxResults: numbe
 export function registerHttpHandlers() {
     // 读取 URL 内容
     ipcMain.handle('http:readUrl', async (_event, url: string, timeout?: number) => {
-        console.log('[HTTP] Reading URL:', url)
+        logger.ipc.info('[HTTP] Reading URL:', url)
         return fetchUrl(url, timeout)
     })
 
     // 网络搜索
     ipcMain.handle('http:webSearch', async (_event, query: string, maxResults?: number) => {
-        console.log('[HTTP] Web search:', query)
+        logger.ipc.info('[HTTP] Web search:', query)
         return webSearch(query, maxResults)
     })
 
@@ -399,7 +400,7 @@ export function registerHttpHandlers() {
         return { success: true }
     })
 
-    console.log('[HTTP] IPC handlers registered')
+    logger.ipc.info('[HTTP] IPC handlers registered')
 }
 
 

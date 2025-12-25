@@ -5,7 +5,8 @@
  * 数据通过 adnifyDir 服务统一管理
  */
 
-import { useStore } from '../store'
+import { logger } from '@utils/Logger'
+import { useStore } from '@store'
 import { adnifyDir, WorkspaceStateData } from './adnifyDirService'
 
 /**
@@ -31,7 +32,7 @@ export async function saveWorkspaceState(): Promise<void> {
   }
 
   await adnifyDir.saveWorkspaceState(state)
-  console.log('[WorkspaceState] Saved:', state.openFiles.length, 'files')
+  logger.system.info('[WorkspaceState] Saved:', state.openFiles.length, 'files')
 }
 
 /**
@@ -44,11 +45,11 @@ export async function restoreWorkspaceState(): Promise<void> {
 
   const state = await adnifyDir.getWorkspaceState()
   if (!state.openFiles.length && !state.layout) {
-    console.log('[WorkspaceState] No saved state')
+    logger.system.info('[WorkspaceState] No saved state')
     return
   }
 
-  console.log('[WorkspaceState] Restoring:', state.openFiles.length, 'files')
+  logger.system.info('[WorkspaceState] Restoring:', state.openFiles.length, 'files')
 
   // 恢复展开的文件夹
   for (const folder of state.expandedFolders) {
@@ -63,7 +64,7 @@ export async function restoreWorkspaceState(): Promise<void> {
         openFile(filePath, fileContent)
       }
     } catch {
-      console.warn('[WorkspaceState] Failed to restore file:', filePath)
+      logger.system.warn('[WorkspaceState] Failed to restore file:', filePath)
     }
   }
 
@@ -80,7 +81,7 @@ export async function restoreWorkspaceState(): Promise<void> {
     setTerminalLayout(state.layout.terminalLayout)
   }
 
-  console.log('[WorkspaceState] Restored successfully')
+  logger.system.info('[WorkspaceState] Restored successfully')
 }
 
 /**

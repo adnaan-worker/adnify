@@ -8,6 +8,7 @@
  * 3. 可配置：每个工具可以有独立的超时、重试策略
  */
 
+import { logger } from '@utils/Logger'
 import { z } from 'zod'
 import { AGENT_DEFAULTS, TOOL_CATEGORIES } from '@/shared/constants'
 import { ToolApprovalType } from './types'
@@ -53,7 +54,7 @@ class ToolRegistry {
      */
     register(tool: RegisteredTool): void {
         if (this.tools.has(tool.name)) {
-            console.warn(`[ToolRegistry] Tool "${tool.name}" already registered, overwriting`)
+            logger.agent.warn(`[ToolRegistry] Tool "${tool.name}" already registered, overwriting`)
         }
         this.tools.set(tool.name, tool)
     }

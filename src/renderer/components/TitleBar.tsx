@@ -1,5 +1,5 @@
 import { Minus, Square, X, Search, HelpCircle } from 'lucide-react'
-import { useStore } from '../store'
+import { useStore } from '@store'
 import { Logo } from './Logo'
 import { Button } from './ui'
 import WorkspaceDropdown from './WorkspaceDropdown'

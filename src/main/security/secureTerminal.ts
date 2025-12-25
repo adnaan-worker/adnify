@@ -2,6 +2,7 @@
  * 安全的终端执行模块（替代原有 terminal.ts 中的高危功能）
  */
 
+import { logger } from '@shared/utils/Logger'
 import { ipcMain, BrowserWindow } from 'electron'
 import { spawn, execSync } from 'child_process'
 import { securityManager, OperationType } from './securityModule'
@@ -31,7 +32,7 @@ let WHITELIST: CommandWhitelist = {
 export function updateWhitelist(shellCommands: string[], gitCommands: string[]) {
   WHITELIST.shell = new Set(shellCommands.map(cmd => cmd.toLowerCase()))
   WHITELIST.git = new Set(gitCommands.map(cmd => cmd.toLowerCase()))
-  console.log('[Security] Whitelist updated:', {
+  logger.security.info('[Security] Whitelist updated:', {
     shell: Array.from(WHITELIST.shell),
     git: Array.from(WHITELIST.git)
   })
@@ -191,7 +192,7 @@ export function registerSecureTerminalHandlers(
     } else {
       // 无工作区模式：使用 cwd 或当前进程工作目录
       targetPath = cwd || process.cwd()
-      console.log(`[Security] No workspace set, using: ${targetPath}`)
+      logger.security.info(`[Security] No workspace set, using: ${targetPath}`)
     }
 
     // 2. 检测危险模式
@@ -285,7 +286,7 @@ export function registerSecureTerminalHandlers(
     // 1. 工作区检查（允许无工作区模式以支持新窗口）
     if (!workspace || workspace.roots.length === 0) {
       // 无工作区时信任传入的cwd路径
-      console.log('[Git] No workspace set, trusting cwd:', cwd)
+      logger.security.info('[Git] No workspace set, trusting cwd:', cwd)
     } else {
       // 2. 验证工作区边界
       if (!securityManager.validateWorkspacePath(cwd, workspace.roots)) {
@@ -352,7 +353,7 @@ export function registerSecureTerminalHandlers(
         exitCode: result.exitCode,
       }
     } catch (error) {
-      console.warn('[Git] dugite 不可用，尝试安全的 spawn 方式')
+      logger.security.warn('[Git] dugite 不可用，尝试安全的 spawn 方式')
 
       try {
         // 6. 安全回退：使用 spawn 而非 exec
@@ -389,9 +390,9 @@ export function registerSecureTerminalHandlers(
   // Try to load node-pty
   try {
     pty = require('node-pty')
-    console.log('[Terminal] node-pty loaded successfully')
+    logger.security.info('[Terminal] node-pty loaded successfully')
   } catch (e) {
-    console.warn('[Terminal] node-pty not available, interactive terminal disabled')
+    logger.security.warn('[Terminal] node-pty not available, interactive terminal disabled')
   }
 
   /**
@@ -443,7 +444,7 @@ export function registerSecureTerminalHandlers(
 
       // Add error handler to prevent unhandled exceptions
       ptyProcess.on('error', (err: any) => {
-        console.error(`[Terminal] PTY Error (id: ${id}):`, err)
+        logger.security.error(`[Terminal] PTY Error (id: ${id}):`, err)
       })
 
       ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
@@ -459,10 +460,10 @@ export function registerSecureTerminalHandlers(
         shell: shellPath,
       })
 
-      console.log(`[Terminal] Created terminal ${id} with shell ${shellPath}`)
+      logger.security.info(`[Terminal] Created terminal ${id} with shell ${shellPath}`)
       return { success: true }
     } catch (error: any) {
-      console.error('[Terminal] Failed to create terminal:', error)
+      logger.security.error('[Terminal] Failed to create terminal:', error)
       return { success: false, error: error.message }
     }
   })
@@ -530,7 +531,7 @@ export function registerSecureTerminalHandlers(
       }
     }
 
-    console.log('[Terminal] Available shells:', shells.map(s => s.label).join(', '))
+    logger.security.info('[Terminal] Available shells:', shells.map(s => s.label).join(', '))
     return shells
   })
 
@@ -543,7 +544,7 @@ export function registerSecureTerminalHandlers(
       try {
         ptyProcess.write(data)
       } catch (err) {
-        console.error(`[Terminal] Write error (id: ${id}):`, err)
+        logger.security.error(`[Terminal] Write error (id: ${id}):`, err)
       }
     }
   })
@@ -575,7 +576,7 @@ export function registerSecureTerminalHandlers(
           ptyProcess.removeAllListeners('data')
           ptyProcess.kill()
         } catch (err) {
-          console.error(`[Terminal] Kill error (id: ${id}):`, err)
+          logger.security.error(`[Terminal] Kill error (id: ${id}):`, err)
         }
         terminals.delete(id)
       }
@@ -587,7 +588,7 @@ export function registerSecureTerminalHandlers(
           ptyProcess.removeAllListeners('data')
           ptyProcess.kill()
         } catch (err) {
-          console.error(`[Terminal] Kill error (id: ${termId}):`, err)
+          logger.security.error(`[Terminal] Kill error (id: ${termId}):`, err)
         }
         terminals.delete(termId)
       }

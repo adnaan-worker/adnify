@@ -4,8 +4,9 @@
  * 让用户定义项目级 AI 行为偏好
  */
 
-import { useStore } from '../store'
-import { joinPath } from '../utils/pathUtils'
+import { logger } from '@utils/Logger'
+import { useStore } from '@store'
+import { joinPath } from '@utils/pathUtils'
 
 export interface ProjectRules {
   content: string
@@ -54,7 +55,7 @@ class RulesService {
           source: ruleFile,
           lastModified: now,
         }
-        console.log(`[RulesService] Loaded rules from: ${ruleFile}`)
+        logger.agent.info(`[RulesService] Loaded rules from: ${ruleFile}`)
         return this.cachedRules
       }
     }

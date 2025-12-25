@@ -3,8 +3,9 @@
  * 配置 TypeScript 编译选项以支持跨文件跳转和智能感知
  */
 
+import { logger } from '@utils/Logger'
 import type * as Monaco from 'monaco-editor'
-import { getEditorConfig } from '../config/editorConfig'
+import { getEditorConfig } from '@renderer/config/editorConfig'
 
 // Monaco 实例引用
 let monacoInstance: typeof Monaco | null = null
@@ -68,7 +69,7 @@ export function initMonacoTypeService(monaco: typeof Monaco) {
   monaco.languages.typescript.typescriptDefaults.setEagerModelSync(true)
   monaco.languages.typescript.javascriptDefaults.setEagerModelSync(true)
 
-  console.log('[MonacoTypeService] Initialized with eager model sync')
+  logger.system.info('[MonacoTypeService] Initialized with eager model sync')
 }
 
 /**
@@ -170,7 +171,7 @@ export async function addProjectFilesToTypeService(workspacePath: string) {
   if (!monacoInstance || !workspacePath) return
 
   try {
-    console.log('[MonacoTypeService] Scanning project files...')
+    logger.system.info('[MonacoTypeService] Scanning project files...')
 
     // 获取项目中的 TS/JS 文件
     const files = await getProjectFiles(workspacePath)
@@ -192,9 +193,9 @@ export async function addProjectFilesToTypeService(workspacePath: string) {
       }
     }
 
-    console.log(`[MonacoTypeService] Added ${addedCount} files to language service`)
+    logger.system.info(`[MonacoTypeService] Added ${addedCount} files to language service`)
   } catch (error) {
-    console.error('[MonacoTypeService] Failed to add project files:', error)
+    logger.system.error('[MonacoTypeService] Failed to add project files:', error)
   }
 }
 

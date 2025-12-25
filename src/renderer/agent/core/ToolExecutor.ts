@@ -3,6 +3,7 @@
  * 负责工具的验证和执行
  */
 
+import { logger } from '@utils/Logger'
 import { ToolExecutionResult } from './types'
 import { validatePath, isSensitivePath } from '@/renderer/utils/pathUtils'
 import { pathToLspUri } from '@/renderer/services/lspService'
@@ -766,7 +767,7 @@ export async function executeTool(
         const plan = store.plan
 
         // 调试日志
-        console.log('[update_plan] Received args:', JSON.stringify(validatedArgs, null, 2))
+        logger.agent.info('[update_plan] Received args:', JSON.stringify(validatedArgs, null, 2))
 
         if (status) {
           store.updatePlanStatus(status as any)
@@ -782,12 +783,12 @@ export async function executeTool(
                 const titleMatch = plan.items.find(p => p.title === item.title)
                 if (titleMatch) {
                   targetId = titleMatch.id
-                  console.log(`[update_plan] Mapped title "${item.title}" -> id ${targetId}`)
+                  logger.agent.info(`[update_plan] Mapped title "${item.title}" -> id ${targetId}`)
                 }
               }
 
               if (!targetId) {
-                console.warn('[update_plan] Item missing id and no title match found, skipping:', item)
+                logger.agent.warn('[update_plan] Item missing id and no title match found, skipping:', item)
                 continue
               }
             }
@@ -801,7 +802,7 @@ export async function executeTool(
               if (prefixMatches.length === 1) {
                 matchedItem = prefixMatches[0]
                 targetId = matchedItem.id
-                console.log(`[update_plan] Mapped prefix "${item.id}" -> id ${targetId}`)
+                logger.agent.info(`[update_plan] Mapped prefix "${item.id}" -> id ${targetId}`)
               }
             }
 
@@ -817,7 +818,7 @@ export async function executeTool(
                 if (adjustedIndex >= 0 && adjustedIndex < plan.items.length) {
                   matchedItem = plan.items[adjustedIndex]
                   targetId = matchedItem.id
-                  console.log(`[update_plan] Mapped index "${item.id}" -> index ${adjustedIndex} -> id ${targetId}`)
+                  logger.agent.info(`[update_plan] Mapped index "${item.id}" -> index ${adjustedIndex} -> id ${targetId}`)
                 }
               }
             }
@@ -828,7 +829,7 @@ export async function executeTool(
                 title: item.title
               })
             } else {
-              console.warn(`[update_plan] Could not find item for identifier: ${item.id}`)
+              logger.agent.warn(`[update_plan] Could not find item for identifier: ${item.id}`)
             }
           }
         }
@@ -884,7 +885,7 @@ export async function executeTool(
                 storeState.reloadFileFromDisk(planFilePath, planContent)
               }
             } catch (err) {
-              console.error('[update_plan] Failed to sync editor state:', err)
+              logger.agent.error('[update_plan] Failed to sync editor state:', err)
             }
           }
         }

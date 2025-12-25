@@ -3,9 +3,10 @@
  * 智能选择和管理 AI 对话的上下文
  */
 
-import { useStore } from '../store'
+import { logger } from '@utils/Logger'
+import { useStore } from '@store'
 import { terminalService } from './terminalService'
-import { ignoreService } from '../services/ignoreService'
+import { ignoreService } from '@services/ignoreService'
 
 export interface FileContext {
 	path: string
@@ -254,7 +255,7 @@ export async function searchCodebase(query: string, topK?: number): Promise<File
 			endLine: r.endLine,
 		}))
 	} catch (e) {
-		console.error('[Context] Codebase search failed:', e)
+		logger.agent.error('[Context] Codebase search failed:', e)
 		return []
 	}
 }
@@ -358,7 +359,7 @@ export async function getGitContext(workspacePath: string): Promise<string> {
 
 		return context
 	} catch (e) {
-		console.error('[Context] Git context failed:', e)
+		logger.agent.error('[Context] Git context failed:', e)
 		return ''
 	}
 }
@@ -511,7 +512,7 @@ export async function collectContext(
 
 		// 跳过被忽略的文件
 		if (ignoreService.isIgnored(item.uri)) {
-			console.log(`[Context] Skipping ignored file: ${item.uri}`)
+			logger.agent.info(`[Context] Skipping ignored file: ${item.uri}`)
 			continue
 		}
 
@@ -533,7 +534,7 @@ export async function collectContext(
 				}
 			}
 		} catch (e) {
-			console.warn(`[Context] Failed to read file: ${item.uri}`, e)
+			logger.agent.warn(`[Context] Failed to read file: ${item.uri}`, e)
 		}
 	}
 

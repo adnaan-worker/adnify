@@ -15,14 +15,14 @@ import {
   Clipboard,
   ExternalLink
 } from 'lucide-react'
-import { useStore } from '../store'
-import { FileItem } from '../types/electron'
-import { t } from '../i18n'
-import { getDirPath, joinPath } from '../utils/pathUtils'
+import { useStore } from '@store'
+import { FileItem } from '@app-types/electron'
+import { t } from '@renderer/i18n'
+import { getDirPath, joinPath } from '@utils/pathUtils'
 import { toast } from './ToastProvider'
 import { Input, ContextMenu, ContextMenuItem } from './ui'
-import { directoryCacheService } from '../services/directoryCacheService'
-import { keybindingService } from '../services/keybindingService'
+import { directoryCacheService } from '@services/directoryCacheService'
+import { keybindingService } from '@services/keybindingService'
 
 // 每个节点的高度（像素）
 const ITEM_HEIGHT = 28

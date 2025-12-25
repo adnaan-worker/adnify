@@ -6,8 +6,9 @@
  * - 消息持久化支持
  * - 上下文窗口管理
  */
+import { logger } from '@utils/Logger'
 import { StateCreator } from 'zustand'
-import { ToolStatus, ToolApprovalType, Checkpoint } from '../../agent/toolTypes'
+import { ToolStatus, ToolApprovalType, Checkpoint } from '@renderer/agent/toolTypes'
 
 // ============ 配置常量 ============
 
@@ -121,7 +122,7 @@ export const createChatSlice: StateCreator<ChatSlice, [], [], ChatSlice> = (set)
       const { useModeStore } = require('../../modes/modeStore')
       useModeStore.getState().setMode(mode)
     } catch (e) {
-      console.warn('[ChatSlice] Failed to sync modeStore:', e)
+      logger.store.warn('[ChatSlice] Failed to sync modeStore:', e)
     }
   },
 

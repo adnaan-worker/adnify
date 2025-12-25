@@ -1,3 +1,4 @@
+import { logger } from '@utils/Logger'
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react'
 import { useStore } from './store'
 import TitleBar from './components/TitleBar'
@@ -24,7 +25,7 @@ import { checkpointService } from './agent/checkpointService'
 import { useAgentStore, initializeAgentStore } from './agent/core/AgentStore'
 import { keybindingService } from './services/keybindingService'
 import { registerCoreCommands } from './config/commands'
-import { LAYOUT_LIMITS } from '../shared/constants'
+import { LAYOUT_LIMITS } from '@shared/constants'
 
 // 懒加载大组件以优化首屏性能
 const ComposerPanel = lazy(() => import('./components/ComposerPanel'))
@@ -146,7 +147,7 @@ function AppContent() {
 
         // 注册设置同步监听器
         window.electronAPI.onSettingsChanged(({ key, value }) => {
-          console.log(`[App] Setting changed in another window: ${key}`, value)
+          logger.system.info(`[App] Setting changed in another window: ${key}`, value)
           if (key === 'llmConfig') setLLMConfig(value as any)
           if (key === 'language') setLanguage(value as any)
           if (key === 'autoApprove') setAutoApprove(value as any)
@@ -173,7 +174,7 @@ function AppContent() {
           }
         }, 100)
       } catch (error) {
-        console.error('Failed to load settings:', error)
+        logger.system.error('Failed to load settings:', error)
         // Even if loading fails, ensure keybindings are registered
         registerCoreCommands()
         removeInitialLoader()
@@ -322,9 +323,9 @@ function AppContent() {
 
     // Listen for menu commands from main process
     const removeListener = window.electronAPI.onExecuteCommand((commandId) => {
-      console.log('[App] Received command from main:', commandId)
+      logger.system.info('[App] Received command from main:', commandId)
       if (commandId === 'workbench.action.showCommands') {
-        console.log('[App] Showing Command Palette')
+        logger.system.info('[App] Showing Command Palette')
         setShowCommandPalette(true)
       }
       if (commandId === 'workbench.action.toggleDevTools') {

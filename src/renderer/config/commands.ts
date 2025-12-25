@@ -1,5 +1,5 @@
 
-import { keybindingService } from '../services/keybindingService'
+import { keybindingService } from '@services/keybindingService'
 
 export const registerCoreCommands = () => {
     const commands = [

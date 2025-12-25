@@ -3,6 +3,7 @@
  * 使用 ripgrep 进行高性能搜索
  */
 
+import { logger } from '@shared/utils/Logger'
 import { ipcMain } from 'electron'
 import { spawn } from 'child_process'
 import { rgPath } from '@vscode/ripgrep'
@@ -68,7 +69,7 @@ async function searchInDirectory(
     })
 
     rg.stderr.on('data', (data) => {
-      console.error('[ripgrep]', data.toString())
+      logger.ipc.error('[ripgrep]', data.toString())
     })
 
     rg.on('close', () => {
@@ -92,7 +93,7 @@ async function searchInDirectory(
     })
 
     rg.on('error', (err) => {
-      console.error('[ripgrep] spawn error:', err)
+      logger.ipc.error('[ripgrep] spawn error:', err)
       resolve([])
     })
   })
@@ -115,7 +116,7 @@ export function registerSearchHandlers() {
       // 合并结果并去重（如果需要）
       return allResults.flat()
     } catch (error) {
-      console.error('[Search] Multi-root search failed:', error)
+      logger.ipc.error('[Search] Multi-root search failed:', error)
       return []
     }
   })

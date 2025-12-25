@@ -1,3 +1,4 @@
+import { logger } from '@shared/utils/Logger'
 import * as path from 'path'
 import * as crypto from 'crypto'
 import Parser from 'web-tree-sitter'
@@ -146,7 +147,7 @@ export class TreeSitterChunker {
       this.parser = new Parser()
       this.initialized = true
     } catch (e) {
-      console.error('[TreeSitterChunker] Failed to initialize parser:', e)
+      logger.index.error('[TreeSitterChunker] Failed to initialize parser:', e)
       // Fallback or rethrow? 
       // If TS fails, we might want to fallback to regex chunker.
     }
@@ -173,7 +174,7 @@ export class TreeSitterChunker {
     } catch (e) {
       // 只在第一次失败时警告，后续静默处理
       this.failedLanguages.add(langName)
-      console.warn(`[TreeSitterChunker] Failed to load language ${langName} (will use fallback chunker)`)
+      logger.index.warn(`[TreeSitterChunker] Failed to load language ${langName} (will use fallback chunker)`)
       return false
     }
   }
@@ -254,7 +255,7 @@ export class TreeSitterChunker {
       // We can mix in a "Line Chunker" for the gaps if needed.
 
     } catch (e) {
-      console.error(`[TreeSitterChunker] Error querying ${filePath}:`, e)
+      logger.index.error(`[TreeSitterChunker] Error querying ${filePath}:`, e)
     } finally {
       tree.delete()
     }

@@ -1,3 +1,4 @@
+import { logger } from '@utils/Logger'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { ThreadSlice, createThreadSlice } from './createThreadSlice'
@@ -12,9 +13,9 @@ let windowId: number | null = null
 export const initializeAgentStore = async () => {
     try {
         windowId = await window.electronAPI.getWindowId()
-        console.log('[AgentStore] Initialized with windowId:', windowId)
+        logger.agent.info('[AgentStore] Initialized with windowId:', windowId)
     } catch (e) {
-        console.error('[AgentStore] Failed to get windowId:', e)
+        logger.agent.error('[AgentStore] Failed to get windowId:', e)
     }
 }
 

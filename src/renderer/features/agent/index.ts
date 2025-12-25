@@ -6,21 +6,21 @@
 export * from './types'
 
 // Store
-export { useAgentStore } from '../../agent/core/AgentStore'
+export { useAgentStore } from '@renderer/agent/core/AgentStore'
 
 // 服务
-export { AgentService } from '../../agent/core/AgentService'
-export { executeTool, getToolDefinitions, getToolApprovalType, WRITE_TOOLS, TOOL_DISPLAY_NAMES } from '../../agent/core/ToolExecutor'
+export { AgentService } from '@renderer/agent/core/AgentService'
+export { executeTool, getToolDefinitions, getToolApprovalType, WRITE_TOOLS, TOOL_DISPLAY_NAMES } from '@renderer/agent/core/ToolExecutor'
 
 // 其他服务
-export { checkpointService } from '../../agent/checkpointService'
-export { terminalService } from '../../agent/terminalService'
-export { lintService } from '../../agent/lintService'
-export { streamingEditService } from '../../agent/streamingEditService'
-export { contextService } from '../../agent/contextService'
-export { sessionService } from '../../agent/sessionService'
-export { rulesService } from '../../agent/rulesService'
-export { composerService } from '../../agent/composerService'
+export { checkpointService } from '@renderer/agent/checkpointService'
+export { terminalService } from '@renderer/agent/terminalService'
+export { lintService } from '@renderer/agent/lintService'
+export { streamingEditService } from '@renderer/agent/streamingEditService'
+export { contextService } from '@renderer/agent/contextService'
+export { sessionService } from '@renderer/agent/sessionService'
+export { rulesService } from '@renderer/agent/rulesService'
+export { composerService } from '@renderer/agent/composerService'
 
 // Hooks
-export { useAgent } from '../../hooks/useAgent'
+export { useAgent } from '@hooks/useAgent'

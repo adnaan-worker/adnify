@@ -3,6 +3,7 @@
  * 支持实时编辑预览和增量更新
  */
 
+import { logger } from '@utils/Logger'
 import { StreamingEditState } from './toolTypes'
 
 type StreamingEditListener = (state: StreamingEditState) => void
@@ -143,7 +144,7 @@ class StreamingEditService {
 			try {
 				listener(state)
 			} catch (e) {
-				console.error('Streaming edit listener error:', e)
+				logger.agent.error('Streaming edit listener error:', e)
 			}
 		}
 	}

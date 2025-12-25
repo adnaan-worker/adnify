@@ -18,7 +18,18 @@
     "allowSyntheticDefaultImports": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@main/*": ["src/main/*"],
+      "@renderer/*": ["src/renderer/*"],
+      "@shared/*": ["src/shared/*"],
+      "@components/*": ["src/renderer/components/*"],
+      "@features/*": ["src/renderer/features/*"],
+      "@services/*": ["src/renderer/services/*"],
+      "@store": ["src/renderer/store"],
+      "@store/*": ["src/renderer/store/*"],
+      "@hooks/*": ["src/renderer/hooks/*"],
+      "@utils/*": ["src/renderer/utils/*"],
+      "@app-types/*": ["src/renderer/types/*"]
     }
   },
   "include": ["src"],

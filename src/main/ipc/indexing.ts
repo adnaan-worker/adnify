@@ -2,6 +2,7 @@
  * 代码库索引 IPC handlers
  */
 
+import { logger } from '@shared/utils/Logger'
 import { ipcMain, BrowserWindow } from 'electron'
 import { getIndexService, EmbeddingConfig } from '../indexing'
 
@@ -17,7 +18,7 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
       await indexService.initialize()
       return { success: true }
     } catch (e) {
-      console.error('[Index] Initialize failed:', e)
+      logger.ipc.error('[Index] Initialize failed:', e)
       return { success: false, error: e instanceof Error ? e.message : String(e) }
     }
   })
@@ -34,12 +35,12 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
 
       // 异步执行索引
       indexService.indexWorkspace().catch(e => {
-        console.error('[Index] Indexing failed:', e)
+        logger.ipc.error('[Index] Indexing failed:', e)
       })
 
       return { success: true }
     } catch (e) {
-      console.error('[Index] Start failed:', e)
+      logger.ipc.error('[Index] Start failed:', e)
       return { success: false, error: e instanceof Error ? e.message : String(e) }
     }
   })
@@ -73,7 +74,7 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
       await indexService.initialize()
       return await indexService.search(query, topK || 10)
     } catch (e) {
-      console.error('[Index] Search failed:', e)
+      logger.ipc.error('[Index] Search failed:', e)
       return []
     }
   })

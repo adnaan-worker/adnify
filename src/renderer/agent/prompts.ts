@@ -3,10 +3,10 @@
  * 基于新的提示词模板系统，支持多模板切换和预览
  */
 
-import { ChatMode } from '../store'
+import { ChatMode } from '@store'
 import { rulesService } from './rulesService'
 import { useAgentStore } from './core/AgentStore'
-import { FILE_LIMITS } from '../../shared/constants'
+import { FILE_LIMITS } from '@shared/constants'
 
 // Search/Replace 块格式 - 从统一模块导入
 export {
@@ -15,7 +15,7 @@ export {
 	REPLACE_MARKER as FINAL,
 	parseSearchReplaceBlocks,
 	applySearchReplaceBlocks,
-} from '../utils/searchReplace'
+} from '@utils/searchReplace'
 
 // 限制常量（从共享配置导入）
 export const MAX_FILE_CHARS = FILE_LIMITS.MAX_FILE_CHARS

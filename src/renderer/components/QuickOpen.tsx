@@ -5,10 +5,10 @@
 
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Search, FileText, X } from 'lucide-react'
-import { useStore } from '../store'
-import { getFileName } from '../utils/pathUtils'
-import { keybindingService } from '../services/keybindingService'
-import { t } from '../i18n'
+import { useStore } from '@store'
+import { getFileName } from '@utils/pathUtils'
+import { keybindingService } from '@services/keybindingService'
+import { t } from '@renderer/i18n'
 import { Button } from './ui'
 
 interface QuickOpenProps {

@@ -3,14 +3,14 @@
  * 统一处理文件打开、大文件检测等
  */
 
-import { useStore } from '../store'
-import { LargeFileInfo } from '../store/slices/fileSlice'
+import { useStore } from '@store'
+import { LargeFileInfo } from '@store/slices/fileSlice'
 import {
   getFileInfo,
   getLargeFileWarning,
   isLargeFile
-} from '../services/largeFileService'
-import { toast } from '../components/ToastProvider'
+} from '@services/largeFileService'
+import { toast } from '@components/ToastProvider'
 
 // ============ 配置常量 ============
 

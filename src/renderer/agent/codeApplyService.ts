@@ -3,7 +3,7 @@
  * 处理代码块的应用、Diff 预览和编辑操作
  */
 
-import { toFullPath } from '../utils/pathUtils'
+import { toFullPath } from '@utils/pathUtils'
 
 // ===== 类型定义 =====
 

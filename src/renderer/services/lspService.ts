@@ -3,8 +3,9 @@
  * 支持多根目录工作区
  */
 
-import { useStore } from '../store'
-import { EXTENSION_TO_LANGUAGE, LSP_SUPPORTED_LANGUAGES } from '../../shared/languages'
+import { logger } from '@utils/Logger'
+import { useStore } from '@store'
+import { EXTENSION_TO_LANGUAGE, LSP_SUPPORTED_LANGUAGES } from '@shared/languages'
 
 // 文档版本追踪
 const documentVersions = new Map<string, number>()
@@ -79,7 +80,7 @@ export async function startLspServer(workspacePath: string): Promise<boolean> {
     const result = await window.electronAPI.lspStart(workspacePath)
     return result.success
   } catch (error) {
-    console.error('[LSP] Failed to start:', error)
+    logger.lsp.error('[LSP] Failed to start:', error)
     return false
   }
 }
@@ -93,7 +94,7 @@ export async function stopLspServer(): Promise<void> {
     documentVersions.clear()
     openedDocuments.clear()
   } catch (error) {
-    console.error('[LSP] Failed to stop:', error)
+    logger.lsp.error('[LSP] Failed to stop:', error)
   }
 }
 

@@ -4,7 +4,8 @@
  * 双重存储：localStorage（快速读取）+ 文件（持久化备份）
  */
 
-import { IGNORED_DIRECTORIES } from '../../shared/languages'
+import { logger } from '@utils/Logger'
+import { IGNORED_DIRECTORIES } from '@shared/languages'
 
 export interface EditorConfig {
   // 编辑器外观
@@ -148,7 +149,7 @@ function readFromLocalStorage(): EditorConfig | null {
       return JSON.parse(stored)
     }
   } catch (e) {
-    console.error('[EditorConfig] Failed to read from localStorage:', e)
+    logger.settings.error('[EditorConfig] Failed to read from localStorage:', e)
   }
   return null
 }
@@ -160,7 +161,7 @@ function writeToLocalStorage(config: EditorConfig): void {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(config))
   } catch (e) {
-    console.error('[EditorConfig] Failed to write to localStorage:', e)
+    logger.settings.error('[EditorConfig] Failed to write to localStorage:', e)
   }
 }
 
@@ -189,7 +190,7 @@ export async function initEditorConfig(): Promise<EditorConfig> {
       return merged
     }
   } catch (e) {
-    console.error('[EditorConfig] Failed to read from file:', e)
+    logger.settings.error('[EditorConfig] Failed to read from file:', e)
   }
 
   // 3. 都没有，使用默认配置并保存
@@ -222,7 +223,7 @@ export function saveEditorConfig(config: Partial<EditorConfig>): void {
 
   // 异步写入文件（持久化备份，不阻塞）
   window.electronAPI.setSetting(FILE_STORAGE_KEY, merged).catch((e) => {
-    console.error('[EditorConfig] Failed to save to file:', e)
+    logger.settings.error('[EditorConfig] Failed to save to file:', e)
   })
 }
 
@@ -246,7 +247,7 @@ export async function restoreFromFile(): Promise<EditorConfig> {
       return merged
     }
   } catch (e) {
-    console.error('[EditorConfig] Failed to restore from file:', e)
+    logger.settings.error('[EditorConfig] Failed to restore from file:', e)
   }
   return defaultEditorConfig
 }

@@ -1,3 +1,4 @@
+import { logger } from '@utils/Logger'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
     FolderOpen, File, ChevronRight, ChevronDown,
@@ -7,17 +8,17 @@ import {
     AlertCircle, AlertTriangle, Info, Code, Hash, Braces, Box,
     ExternalLink
 } from 'lucide-react'
-import { useStore } from '../store'
-import { FileItem, LspDiagnostic, LspDocumentSymbol } from '../types/electron'
-import { t } from '../i18n'
-import { getFileName, getDirPath, joinPath } from '../utils/pathUtils'
-import { gitService, GitStatus, GitCommit } from '../agent/gitService'
-import { getEditorConfig } from '../config/editorConfig'
+import { useStore } from '@store'
+import { FileItem, LspDiagnostic, LspDocumentSymbol } from '@app-types/electron'
+import { t } from '@renderer/i18n'
+import { getFileName, getDirPath, joinPath } from '@utils/pathUtils'
+import { gitService, GitStatus, GitCommit } from '@renderer/agent/gitService'
+import { getEditorConfig } from '@renderer/config/editorConfig'
 import { toast } from './ToastProvider'
-import { onDiagnostics, getDocumentSymbols } from '../services/lspService'
-import { adnifyDir } from '../services/adnifyDirService'
-import { directoryCacheService } from '../services/directoryCacheService'
-import { keybindingService } from '../services/keybindingService'
+import { onDiagnostics, getDocumentSymbols } from '@services/lspService'
+import { adnifyDir } from '@services/adnifyDirService'
+import { directoryCacheService } from '@services/directoryCacheService'
+import { keybindingService } from '@services/keybindingService'
 import { Input, Button, Tooltip, ContextMenu, ContextMenuItem } from './ui'
 import CheckpointPanel from './CheckpointPanel'
 
@@ -1110,7 +1111,7 @@ function GitView() {
             setBranches(b)
             setStashList(st)
         } catch (e: unknown) {
-            console.error('Git status error:', e)
+            logger.ui.error('Git status error:', e)
             setError('Failed to load git status')
         } finally {
             setIsRefreshing(false)
@@ -1755,7 +1756,7 @@ function OutlineView() {
 
     // 加载符号
     useEffect(() => {
-        console.log('[OutlineView] Check conditions:', { activeFilePath, isLspReady })
+        logger.ui.info('[OutlineView] Check conditions:', { activeFilePath, isLspReady })
         if (!activeFilePath || !isLspReady) {
             setSymbols([])
             return
@@ -1764,15 +1765,15 @@ function OutlineView() {
         const loadSymbols = async () => {
             setIsLoading(true)
             try {
-                console.log('[OutlineView] Loading symbols for:', activeFilePath)
+                logger.ui.info('[OutlineView] Loading symbols for:', activeFilePath)
                 const result = await getDocumentSymbols(activeFilePath)
-                console.log('[OutlineView] Got symbols:', result?.length || 0)
+                logger.ui.info('[OutlineView] Got symbols:', result?.length || 0)
                 setSymbols(result || [])
                 // 默认展开第一层
                 const firstLevel = new Set(result?.map((s: LspDocumentSymbol) => s.name) || [])
                 setExpandedSymbols(firstLevel)
             } catch (e) {
-                console.error('Failed to load symbols:', e)
+                logger.ui.error('Failed to load symbols:', e)
                 setSymbols([])
             } finally {
                 setIsLoading(false)

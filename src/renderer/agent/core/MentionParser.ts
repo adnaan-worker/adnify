@@ -1,3 +1,4 @@
+import { logger } from '@utils/Logger'
 import { FileText, Folder, Database, Globe, FileCode, Terminal, GitBranch } from 'lucide-react'
 
 export type MentionType = 'file' | 'folder' | 'codebase' | 'web' | 'git' | 'terminal' | 'symbols'
@@ -122,7 +123,7 @@ export class MentionParser {
                 const files = await this.searchFiles(workspacePath, lowerQuery, options)
                 suggestions.push(...files)
             } catch (e) {
-                console.error('Error searching files:', e)
+                logger.agent.error('Error searching files:', e)
             }
         }
 

@@ -3,6 +3,7 @@
  * 整合 Embedding、分块、向量存储
  */
 
+import { logger } from '@shared/utils/Logger'
 import * as path from 'path'
 import { BrowserWindow } from 'electron'
 import { Worker } from 'worker_threads'
@@ -69,18 +70,18 @@ export class CodebaseIndexService {
             } else if (message.chunks && message.chunks.length > 0) {
               await this.vectorStore.upsertFile(message.filePath, message.chunks)
             }
-            console.log(`[IndexService] Updated index for: ${message.filePath}`)
+            logger.index.info(`[IndexService] Updated index for: ${message.filePath}`)
             break
 
           case 'complete':
             this.status.isIndexing = false
             this.status.lastIndexedAt = Date.now()
-            console.log(`[IndexService] Indexing complete. Total chunks: ${this.status.totalChunks}`)
+            logger.index.info(`[IndexService] Indexing complete. Total chunks: ${this.status.totalChunks}`)
             this.emitProgress()
             break
 
           case 'error':
-            console.error('[IndexService] Worker error:', message.error)
+            logger.index.error('[IndexService] Worker error:', message.error)
             this.status.error = message.error
             this.status.isIndexing = false
             this.emitProgress()
@@ -89,15 +90,15 @@ export class CodebaseIndexService {
       })
 
       this.worker.on('error', (err) => {
-        console.error('[IndexService] Worker thread error (full):', err)
-        if (err.stack) console.error(err.stack)
+        logger.index.error('[IndexService] Worker thread error (full):', err)
+        if (err.stack) logger.index.error(err.stack)
         this.status.error = err.message
         this.status.isIndexing = false
         this.emitProgress()
       })
 
     } catch (e) {
-      console.error('[IndexService] Failed to initialize worker:', e)
+      logger.index.error('[IndexService] Failed to initialize worker:', e)
     }
   }
 
@@ -122,7 +123,7 @@ export class CodebaseIndexService {
       this.status.totalFiles = stats.fileCount
     }
 
-    console.log('[IndexService] Initialized for:', this.workspacePath,
+    logger.index.info('[IndexService] Initialized for:', this.workspacePath,
       hasExistingIndex ? `(${this.status.totalChunks} chunks)` : '(no index)')
   }
 
@@ -164,7 +165,7 @@ export class CodebaseIndexService {
    */
   async indexWorkspace(): Promise<void> {
     if (this.status.isIndexing) {
-      console.log('[IndexService] Already indexing, skipping...')
+      logger.index.info('[IndexService] Already indexing, skipping...')
       return
     }
 
@@ -188,7 +189,7 @@ export class CodebaseIndexService {
       const existingHashes = await this.vectorStore.getFileHashes()
 
       // 2. 发送给 Worker 处理 (Worker now handles file collection)
-      console.log(`[IndexService] Starting indexing for ${this.workspacePath}...`)
+      logger.index.info(`[IndexService] Starting indexing for ${this.workspacePath}...`)
       this.worker?.postMessage({
         type: 'index',
         workspacePath: this.workspacePath,
@@ -197,7 +198,7 @@ export class CodebaseIndexService {
       })
 
     } catch (e) {
-      console.error('[IndexService] Indexing failed:', e)
+      logger.index.error('[IndexService] Indexing failed:', e)
       this.status.error = e instanceof Error ? e.message : String(e)
       this.status.isIndexing = false
       this.emitProgress()
@@ -265,7 +266,7 @@ export class CodebaseIndexService {
       indexedFiles: 0,
       totalChunks: 0,
     }
-    console.log('[IndexService] Index cleared')
+    logger.index.info('[IndexService] Index cleared')
   }
 
   /**

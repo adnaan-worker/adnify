@@ -1,9 +1,10 @@
+import { logger } from '@utils/Logger'
 import { useEffect, useState } from 'react'
 import { GitBranch, AlertCircle, XCircle, Database, Loader2, Cpu, Terminal, CheckCircle2, ScrollText } from 'lucide-react'
-import { useStore } from '../store'
-import { t } from '../i18n'
-import { IndexStatus } from '../types/electron'
-import { indexWorkerService, IndexProgress } from '../services/indexWorkerService'
+import { useStore } from '@store'
+import { t } from '@renderer/i18n'
+import { IndexStatus } from '@app-types/electron'
+import { indexWorkerService, IndexProgress } from '@services/indexWorkerService'
 import BottomBarPopover from './ui/BottomBarPopover'
 import ToolCallLogContent from './ToolCallLogContent'
 import { PlanListPopover } from './PlanListContent'
@@ -22,7 +23,7 @@ export default function StatusBar() {
 
     const unsubProgress = indexWorkerService.onProgress(setWorkerProgress)
     const unsubError = indexWorkerService.onError((error) => {
-      console.error('[StatusBar] Worker error:', error)
+      logger.ui.error('[StatusBar] Worker error:', error)
     })
 
     return () => {

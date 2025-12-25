@@ -3,6 +3,7 @@
  * 支持 Claude 系列模型
  */
 
+import { logger } from '@shared/utils/Logger'
 import Anthropic from '@anthropic-ai/sdk'
 import { BaseProvider } from './base'
 import { ChatParams, ToolDefinition, ToolCall, MessageContent } from '../types'
@@ -32,7 +33,7 @@ export class AnthropicProvider extends BaseProvider {
         return { type: 'text', text: part.text }
       } else {
         if (part.source.type === 'url') {
-          console.warn('Anthropic provider received URL image, which is not directly supported.')
+          logger.system.warn('Anthropic provider received URL image, which is not directly supported.')
           return { type: 'text', text: '[Image URL not supported]' }
         }
         return {

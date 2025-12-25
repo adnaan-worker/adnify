@@ -3,6 +3,7 @@
  * 支持多根目录工作区（为每个根目录启动独立的服务器实例）
  */
 
+import { logger } from '@shared/utils/Logger'
 import { spawn, ChildProcess } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -55,7 +56,7 @@ function findModulePath(moduleName: string, subPath: string): string | null {
 function getTypeScriptServerCommand(): { command: string; args: string[] } | null {
   const serverPath = findModulePath('typescript-language-server', 'lib/cli.mjs')
     || findModulePath('typescript-language-server', 'lib/cli.js')
-  console.log('[LSP Manager] TypeScript server path:', serverPath)
+  logger.lsp.info('[LSP Manager] TypeScript server path:', serverPath)
   // 使用 process.execPath 配合 ELECTRON_RUN_AS_NODE=1 环境变量
   if (serverPath) return { command: process.execPath, args: [serverPath, '--stdio'] }
   return null
@@ -210,20 +211,20 @@ class LspManager {
 
     this.servers.set(key, instance)
 
-    console.log(`[LSP ${key}] Starting process: ${command} ${args.join(' ')}`)
+    logger.lsp.info(`[LSP ${key}] Starting process: ${command} ${args.join(' ')}`)
 
     proc.on('error', (err) => {
-      console.error(`[LSP ${key}] Process spawn error:`, err.message)
+      logger.lsp.error(`[LSP ${key}] Process spawn error:`, err.message)
     })
 
     proc.stdout.on('data', (data: Buffer) => this.handleServerOutput(key, data))
     proc.stderr?.on('data', (data: Buffer) => {
       const msg = data.toString().trim()
-      if (msg) console.warn(`[LSP ${key}] STDERR:`, msg)
+      if (msg) logger.lsp.warn(`[LSP ${key}] STDERR:`, msg)
     })
 
     proc.on('close', (code) => {
-      console.log(`[LSP ${key}] Closed with code: ${code}`)
+      logger.lsp.info(`[LSP ${key}] Closed with code: ${code}`)
       const inst = this.servers.get(key)
       this.servers.delete(key)
 
@@ -238,25 +239,25 @@ class LspManager {
         inst.lastCrashTime = now
 
         if (inst.crashCount <= LspManager.MAX_CRASH_COUNT) {
-          console.warn(`[LSP ${key}] Server crashed, attempting restart (${inst.crashCount}/${LspManager.MAX_CRASH_COUNT})...`)
+          logger.lsp.warn(`[LSP ${key}] Server crashed, attempting restart (${inst.crashCount}/${LspManager.MAX_CRASH_COUNT})...`)
           setTimeout(() => {
             this.startServer(inst.config.name, inst.workspacePath).catch(console.error)
           }, 1000)
         } else {
-          console.error(`[LSP ${key}] Server crashed too many times, giving up`)
+          logger.lsp.error(`[LSP ${key}] Server crashed too many times, giving up`)
         }
       }
     })
 
-    proc.stdin.on('error', (err) => console.warn(`[LSP ${key}] stdin error:`, err.message))
+    proc.stdin.on('error', (err) => logger.lsp.warn(`[LSP ${key}] stdin error:`, err.message))
 
     try {
       await this.initializeServer(key, workspacePath)
       instance.initialized = true
-      console.log(`[LSP ${key}] Initialized successfully`)
+      logger.lsp.info(`[LSP ${key}] Initialized successfully`)
       return true
     } catch (error: any) {
-      console.error(`[LSP ${key}] Init failed:`, error.message)
+      logger.lsp.error(`[LSP ${key}] Init failed:`, error.message)
       this.stopServerByKey(key)
       return false
     }

@@ -38,7 +38,7 @@ export type {
   PendingChange,
   MessageCheckpoint,
   AgentConfig,
-} from '../../agent/core/types'
+} from '@renderer/agent/core/types'
 
 export {
   isUserMessage,
@@ -52,4 +52,4 @@ export {
   getMessageImages,
   getModifiedFilesFromMessages,
   findLastCheckpointIndex,
-} from '../../agent/core/types'
+} from '@renderer/agent/core/types'

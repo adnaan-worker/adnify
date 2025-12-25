@@ -9,13 +9,13 @@ import {
   Globe, Cpu, FolderOpen, Rocket, HardDrive, Eye, EyeOff,
   Shield, Zap, Lock, Info
 } from 'lucide-react'
-import { useStore, LLMConfig, AutoApproveSettings, SecuritySettings } from '../store'
-import { Language } from '../i18n'
-import { themeManager, Theme } from '../config/themeConfig'
+import { useStore, LLMConfig, AutoApproveSettings, SecuritySettings } from '@store'
+import { Language } from '@renderer/i18n'
+import { themeManager, Theme } from '@renderer/config/themeConfig'
 import { PROVIDERS } from '@/shared/config/providers'
 import { LLM_DEFAULTS } from '@/shared/constants'
 import { Logo } from './Logo'
-import { adnifyDir } from '../services/adnifyDirService'
+import { adnifyDir } from '@services/adnifyDirService'
 import { Button, Input, Select, Switch } from './ui'
 
 interface OnboardingWizardProps {

@@ -3,6 +3,7 @@
  * 使用 LanceDB 存储和检索代码向量
  */
 
+import { logger } from '@shared/utils/Logger'
 import * as path from 'path'
 import * as fs from 'fs'
 import { IndexedChunk, SearchResult } from './types'
@@ -40,9 +41,9 @@ export class VectorStoreService {
       if (tables.includes(this.tableName)) {
         this.table = await this.db.openTable(this.tableName)
       }
-      console.log('[VectorStore] Initialized at:', this.indexPath)
+      logger.index.info('[VectorStore] Initialized at:', this.indexPath)
     } catch (e) {
-      console.error('[VectorStore] Failed to initialize LanceDB:', e)
+      logger.index.error('[VectorStore] Failed to initialize LanceDB:', e)
       this.db = null
     }
   }
@@ -102,7 +103,7 @@ export class VectorStoreService {
         }
         return hashMap
     } catch (e) {
-        console.error('[VectorStore] Error fetching file hashes:', e)
+        logger.index.error('[VectorStore] Error fetching file hashes:', e)
         return new Map()
     }
   }
@@ -114,7 +115,7 @@ export class VectorStoreService {
     if (!this.db) return
 
     if (chunks.length === 0) {
-      console.log('[VectorStore] No chunks to index')
+      logger.index.info('[VectorStore] No chunks to index')
       return
     }
 
@@ -139,7 +140,7 @@ export class VectorStoreService {
     }
 
     this.table = await this.db.createTable(this.tableName, data)
-    console.log(`[VectorStore] Created index with ${chunks.length} chunks`)
+    logger.index.info(`[VectorStore] Created index with ${chunks.length} chunks`)
   }
 
   /**
@@ -165,7 +166,7 @@ export class VectorStoreService {
     // 如果表不存在，创建表
     if (!this.table) {
       this.table = await this.db.createTable(this.tableName, data)
-      console.log(`[VectorStore] Created table with ${chunks.length} initial chunks`)
+      logger.index.info(`[VectorStore] Created table with ${chunks.length} initial chunks`)
     } else {
       await this.table.add(data)
     }

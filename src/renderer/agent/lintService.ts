@@ -3,8 +3,9 @@
  * 参考 void 编辑器的 get_lint_errors 功能
  */
 
+import { logger } from '@utils/Logger'
 import { LintError } from './toolTypes'
-import { onDiagnostics, lspUriToPath } from '../services/lspService'
+import { onDiagnostics, lspUriToPath } from '@services/lspService'
 
 // 支持的语言和对应的 lint 命令
 const LINT_COMMANDS: Record<string, { command: string; parser: (output: string, file: string) => LintError[] }> = {
@@ -219,7 +220,7 @@ class LintService {
 
 			return errors
 		} catch (error) {
-			console.error('Lint error:', error)
+			logger.agent.error('Lint error:', error)
 			return []
 		}
 	}

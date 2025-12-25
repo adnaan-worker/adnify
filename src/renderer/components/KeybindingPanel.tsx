@@ -1,8 +1,8 @@
 
 import { useEffect, useState } from 'react'
 import { Search, RotateCcw } from 'lucide-react'
-import { keybindingService, Command } from '../services/keybindingService'
-import { registerCoreCommands } from '../config/commands'
+import { keybindingService, Command } from '@services/keybindingService'
+import { registerCoreCommands } from '@renderer/config/commands'
 import { Input, Button, Modal } from './ui'
 
 export default function KeybindingPanel() {

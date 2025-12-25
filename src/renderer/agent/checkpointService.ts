@@ -5,6 +5,7 @@
  * 支持配置保留策略（数量、时间、文件大小限制）
  */
 
+import { logger } from '@utils/Logger'
 import { Checkpoint, FileSnapshot } from './toolTypes'
 import { 
   loadCheckpoints, 
@@ -12,8 +13,8 @@ import {
   loadProjectSettings,
   CheckpointData,
   DEFAULT_PROJECT_SETTINGS 
-} from '../services/projectStorageService'
-import { useStore } from '../store'
+} from '@services/projectStorageService'
+import { useStore } from '@store'
 
 class CheckpointService {
   private checkpoints: Checkpoint[] = []
@@ -54,7 +55,7 @@ class CheckpointService {
       // 清理过期检查点
       this.cleanupOldCheckpoints()
       
-      console.log(`[Checkpoint] Loaded ${this.checkpoints.length} checkpoints from project`)
+      logger.agent.info(`[Checkpoint] Loaded ${this.checkpoints.length} checkpoints from project`)
     }
     
     this.isLoaded = true
@@ -73,7 +74,7 @@ class CheckpointService {
     })
     
     if (this.checkpoints.length < before) {
-      console.log(`[Checkpoint] Cleaned up ${before - this.checkpoints.length} old checkpoints`)
+      logger.agent.info(`[Checkpoint] Cleaned up ${before - this.checkpoints.length} old checkpoints`)
       this.currentIdx = Math.min(this.currentIdx, this.checkpoints.length - 1)
       this.saveToStorage()
     }
@@ -95,7 +96,7 @@ class CheckpointService {
     
     const success = await saveCheckpoints(data)
     if (!success) {
-      console.warn('[Checkpoint] Failed to save to project storage')
+      logger.agent.warn('[Checkpoint] Failed to save to project storage')
     }
   }
 
@@ -117,7 +118,7 @@ class CheckpointService {
       if (content !== null) {
         const sizeKB = content.length / 1024
         if (sizeKB > this.maxFileSizeKB) {
-          console.warn(`[Checkpoint] File too large (${sizeKB.toFixed(1)}KB), skipping: ${filePath}`)
+          logger.agent.warn(`[Checkpoint] File too large (${sizeKB.toFixed(1)}KB), skipping: ${filePath}`)
           return null
         }
       }

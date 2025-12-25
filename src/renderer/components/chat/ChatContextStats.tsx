@@ -2,8 +2,8 @@
  * 上下文统计显示组件
  */
 import { Database, History, FileText, Code } from 'lucide-react'
-import { ContextStats } from '../../store'
-import { Language } from '../../i18n'
+import { ContextStats } from '@store'
+import { Language } from '@renderer/i18n'
 
 interface ChatContextStatsProps {
   stats: ContextStats

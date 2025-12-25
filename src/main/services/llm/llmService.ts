@@ -3,6 +3,7 @@
  * 统一管理 LLM Provider，处理消息发送和事件分发
  */
 
+import { logger } from '@shared/utils/Logger'
 import { BrowserWindow } from 'electron'
 import { OpenAIProvider } from './providers/openai'
 import { AnthropicProvider } from './providers/anthropic'
@@ -30,7 +31,7 @@ export class LLMService {
     const key = `${config.provider}-${config.apiKey}-${config.baseUrl || 'default'}-${config.timeout || 'default'}-${adapterKey}`
 
     if (!this.providers.has(key)) {
-      console.log('[LLMService] Creating new provider:', config.provider, 'adapter:', adapterKey, 'timeout:', config.timeout)
+      logger.system.info('[LLMService] Creating new provider:', config.provider, 'adapter:', adapterKey, 'timeout:', config.timeout)
 
       // 根据 adapter 类型选择实现
       switch (adapterKey) {
@@ -65,7 +66,7 @@ export class LLMService {
   }) {
     const { config, messages, tools, systemPrompt } = params
 
-    console.log('[LLMService] sendMessage', {
+    logger.system.info('[LLMService] sendMessage', {
       provider: config.provider,
       model: config.model,
       messageCount: messages.length,
@@ -108,7 +109,7 @@ export class LLMService {
         },
 
         onComplete: (result) => {
-          console.log('[LLMService] Complete', {
+          logger.system.info('[LLMService] Complete', {
             contentLength: result.content.length,
             toolCallCount: result.toolCalls?.length || 0,
           })
@@ -122,7 +123,7 @@ export class LLMService {
         },
 
         onError: (error) => {
-          console.error('[LLMService] Error', {
+          logger.system.error('[LLMService] Error', {
             code: error.code,
             message: error.message,
             retryable: error.retryable,
@@ -143,7 +144,7 @@ export class LLMService {
     } catch (error: unknown) {
       const err = error as { name?: string; message?: string }
       if (err.name !== 'AbortError') {
-        console.error('[LLMService] Uncaught error:', error)
+        logger.system.error('[LLMService] Uncaught error:', error)
         if (!this.window.isDestroyed()) {
           try {
             this.window.webContents.send('llm:error', {
@@ -164,7 +165,7 @@ export class LLMService {
    */
   abort() {
     if (this.currentAbortController) {
-      console.log('[LLMService] Aborting request')
+      logger.system.info('[LLMService] Aborting request')
       this.currentAbortController.abort()
       this.currentAbortController = null
     }

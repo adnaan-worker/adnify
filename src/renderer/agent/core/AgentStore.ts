@@ -3,6 +3,7 @@
  * 参考 Cursor/Void 的架构设计
  */
 
+import { logger } from '@utils/Logger'
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { agentStorage } from './agentStorage'
@@ -858,7 +859,7 @@ export const useAgentStore = create<AgentStore>()(
           description,
         }
 
-        console.log('[Checkpoint] Created checkpoint:', checkpoint.id, 'for message:', messageId, 'with files:', Object.keys(fileSnapshots))
+        logger.agent.info('[Checkpoint] Created checkpoint:', checkpoint.id, 'for message:', messageId, 'with files:', Object.keys(fileSnapshots))
 
         set(state => ({
           messageCheckpoints: [...state.messageCheckpoints, checkpoint],
@@ -869,19 +870,19 @@ export const useAgentStore = create<AgentStore>()(
 
       // 添加文件快照到当前检查点（在文件修改前调用）
       addSnapshotToCurrentCheckpoint: (filePath: string, content: string | null) => {
-        console.log('[Checkpoint] Adding snapshot for:', filePath, 'content length:', content?.length ?? 'null')
+        logger.agent.info('[Checkpoint] Adding snapshot for:', filePath, 'content length:', content?.length ?? 'null')
 
         set(state => {
           // 找到最新的检查点
           if (state.messageCheckpoints.length === 0) {
-            console.log('[Checkpoint] No checkpoints exist, cannot add snapshot')
+            logger.agent.info('[Checkpoint] No checkpoints exist, cannot add snapshot')
             return state
           }
 
           const checkpoints = [...state.messageCheckpoints]
           const lastCheckpoint = checkpoints[checkpoints.length - 1]
 
-          console.log('[Checkpoint] Current checkpoint:', lastCheckpoint.id, 'existing files:', Object.keys(lastCheckpoint.fileSnapshots))
+          logger.agent.info('[Checkpoint] Current checkpoint:', lastCheckpoint.id, 'existing files:', Object.keys(lastCheckpoint.fileSnapshots))
 
           // 如果该文件还没有快照，添加它（只保留最早的快照）
           if (!(filePath in lastCheckpoint.fileSnapshots)) {
@@ -892,11 +893,11 @@ export const useAgentStore = create<AgentStore>()(
                 [filePath]: { fsPath: filePath, content },
               },
             }
-            console.log('[Checkpoint] Added snapshot for:', filePath)
+            logger.agent.info('[Checkpoint] Added snapshot for:', filePath)
             return { messageCheckpoints: checkpoints }
           }
 
-          console.log('[Checkpoint] Snapshot already exists for:', filePath)
+          logger.agent.info('[Checkpoint] Snapshot already exists for:', filePath)
           return state
         })
       },
@@ -905,8 +906,8 @@ export const useAgentStore = create<AgentStore>()(
         const state = get()
         const checkpointIdx = state.messageCheckpoints.findIndex(cp => cp.id === checkpointId)
 
-        console.log('[Restore] Looking for checkpoint:', checkpointId)
-        console.log('[Restore] All checkpoints:', state.messageCheckpoints.map(cp => ({
+        logger.agent.info('[Restore] Looking for checkpoint:', checkpointId)
+        logger.agent.info('[Restore] All checkpoints:', state.messageCheckpoints.map(cp => ({
           id: cp.id,
           messageId: cp.messageId,
           files: Object.keys(cp.fileSnapshots),
@@ -942,8 +943,8 @@ export const useAgentStore = create<AgentStore>()(
           }
         }
 
-        console.log('[Restore] Files to restore:', Object.keys(filesToRestore))
-        console.log('[Restore] PendingChanges:', state.pendingChanges.map(c => c.filePath))
+        logger.agent.info('[Restore] Files to restore:', Object.keys(filesToRestore))
+        logger.agent.info('[Restore] PendingChanges:', state.pendingChanges.map(c => c.filePath))
 
         // 恢复所有文件
         for (const [filePath, snapshot] of Object.entries(filesToRestore)) {
@@ -1197,10 +1198,10 @@ export async function initializeAgentStore(): Promise<void> {
     const persistApi = (useAgentStore as any).persist
     if (persistApi) {
       await persistApi.rehydrate()
-      console.log('[AgentStore] Rehydrated from project storage:', STORE_NAME)
+      logger.agent.info('[AgentStore] Rehydrated from project storage:', STORE_NAME)
     }
   } catch (error) {
-    console.error('[AgentStore] Failed to initialize storage:', error)
+    logger.agent.error('[AgentStore] Failed to initialize storage:', error)
     // 降级到默认行为，不阻塞应用启动
   }
 }

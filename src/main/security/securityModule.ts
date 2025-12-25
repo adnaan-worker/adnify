@@ -3,6 +3,7 @@
  * 统一管理所有敏感操作的权限校验和审计日志
  */
 
+import { logger } from '@shared/utils/Logger'
 import Store from 'electron-store'
 import * as path from 'path'
 import { SECURITY_DEFAULTS } from '../../shared/constants'
@@ -134,7 +135,7 @@ class SecurityManager implements SecurityModule {
    */
   updateConfig(config: Partial<SecuritySettings>) {
     this.config = { ...this.config, ...config }
-    console.log('[Security] Configuration updated:', this.config)
+    logger.security.info('[Security] Configuration updated:', this.config)
   }
 
   /**
@@ -203,7 +204,7 @@ class SecurityManager implements SecurityModule {
     auditStore.set('logs', logs)
 
     const status = success ? '✅' : '❌'
-    console.log(`[Security Audit] ${status} ${operation} - ${target}`)
+    logger.security.info(`[Security Audit] ${status} ${operation} - ${target}`)
   }
 
   /**
@@ -242,7 +243,7 @@ class SecurityManager implements SecurityModule {
 
       return isInside && !isSensitive
     } catch (error) {
-      console.error('[Security] Path validation error:', error)
+      logger.security.error('[Security] Path validation error:', error)
       return false
     }
   }

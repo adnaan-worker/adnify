@@ -3,6 +3,7 @@
  * 将 LSP 服务集成到 Monaco Editor
  */
 
+import { logger } from '@utils/Logger'
 import type * as Monaco from 'monaco-editor'
 
 // 扩展 CompletionItem 类型以支持 LSP data 字段
@@ -116,7 +117,7 @@ export function registerLspProviders(monaco: typeof Monaco) {
       const modelUri = model.uri.toString()
       const filePath = lspUriToPath(modelUri)
       
-      console.log('[LSP Hover] Request:', { modelUri, filePath, line: position.lineNumber - 1, col: position.column - 1 })
+      logger.lsp.info('[LSP Hover] Request:', { modelUri, filePath, line: position.lineNumber - 1, col: position.column - 1 })
       
       const result = await getHoverInfo(
         filePath,
@@ -124,7 +125,7 @@ export function registerLspProviders(monaco: typeof Monaco) {
         position.column - 1
       )
 
-      console.log('[LSP Hover] Result:', result)
+      logger.lsp.info('[LSP Hover] Result:', result)
 
       if (!result || !result.contents) return null
 
@@ -500,7 +501,7 @@ export function registerLspProviders(monaco: typeof Monaco) {
     },
   })
 
-  console.log('[LSP Providers] All providers registered')
+  logger.lsp.info('[LSP Providers] All providers registered')
 }
 
 /**

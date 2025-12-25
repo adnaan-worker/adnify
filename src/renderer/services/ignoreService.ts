@@ -3,6 +3,7 @@
  * 支持 .adnifyignore 文件，语法兼容 .gitignore
  */
 
+import { logger } from '@utils/Logger'
 import picomatch from 'picomatch'
 
 // 默认忽略规则
@@ -56,7 +57,7 @@ class IgnoreServiceClass {
                 const content = await window.electronAPI.readFile(ignorePath)
                 if (content) {
                     this.parsePatterns(content)
-                    console.log(`[IgnoreService] Loaded ${fileName} with ${this.patterns.length} patterns`)
+                    logger.system.info(`[IgnoreService] Loaded ${fileName} with ${this.patterns.length} patterns`)
                     return
                 }
             } catch {
@@ -67,7 +68,7 @@ class IgnoreServiceClass {
         // 使用默认规则
         this.patterns = [...DEFAULT_IGNORE_PATTERNS]
         this.matcher = picomatch(this.patterns, { dot: true, basename: true })
-        console.log('[IgnoreService] Using default patterns')
+        logger.system.info('[IgnoreService] Using default patterns')
     }
 
     /**

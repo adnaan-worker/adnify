@@ -1,3 +1,4 @@
+import { logger } from '@shared/utils/Logger'
 import { parentPort } from 'worker_threads'
 import * as fs from 'fs/promises'
 import { Dirent } from 'fs'
@@ -148,7 +149,7 @@ async function handleIndex(workspacePath: string, config: IndexConfig, existingH
         try {
             chunks = await tsChunker!.chunkFile(filePath, content, workspacePath)
         } catch (e) {
-            console.warn(`Tree-sitter failed for ${filePath}, falling back to regex`, e)
+            logger.index.warn(`Tree-sitter failed for ${filePath}, falling back to regex`, e)
         }
         
         // Fallback to regex if empty
@@ -186,7 +187,7 @@ async function handleIndex(workspacePath: string, config: IndexConfig, existingH
         }
 
       } catch (error) {
-        console.error(`Error processing file ${filePath}:`, error)
+        logger.index.error(`Error processing file ${filePath}:`, error)
         // Continue even if one file fails
         processedFiles++
       }
@@ -197,7 +198,7 @@ async function handleIndex(workspacePath: string, config: IndexConfig, existingH
     // Final flush
     flushChunks()
 
-    console.log(`[Worker] Indexing complete. Total: ${totalFiles}, Skipped: ${skippedFiles}, Chunks: ${totalChunks}`)
+    logger.index.info(`[Worker] Indexing complete. Total: ${totalFiles}, Skipped: ${skippedFiles}, Chunks: ${totalChunks}`)
 
     parentPort?.postMessage({
       type: 'complete',
@@ -239,7 +240,7 @@ async function handleUpdate(workspacePath: string, filePath: string, config: Ind
     try {
         chunks = await tsChunker!.chunkFile(filePath, content, workspacePath)
     } catch (e) {
-        console.warn(`Tree-sitter failed for ${filePath}, falling back to regex`, e)
+        logger.index.warn(`Tree-sitter failed for ${filePath}, falling back to regex`, e)
     }
     
     // Fallback to regex if empty

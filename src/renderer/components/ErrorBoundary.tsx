@@ -3,6 +3,7 @@
  * 捕获 React 组件树中的错误并显示友好的错误界面
  */
 
+import { logger } from '@utils/Logger'
 import { Component, ReactNode } from 'react'
 import { AlertTriangle, RefreshCw, Bug } from 'lucide-react'
 
@@ -28,7 +29,7 @@ export class ErrorBoundary extends Component<Props, State> {
 	}
 
 	componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-		console.error('ErrorBoundary caught an error:', error, errorInfo)
+		logger.ui.error('ErrorBoundary caught an error:', error, errorInfo)
 		this.setState({ errorInfo })
 	}
 

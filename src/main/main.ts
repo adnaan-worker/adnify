@@ -3,6 +3,7 @@
  * 重构后的主进程入口（支持多窗口和安全模块）
  */
 
+import { logger } from '@shared/utils/Logger'
 import { app, BrowserWindow } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -22,13 +23,13 @@ import { SECURITY_DEFAULTS, WINDOW_DEFAULTS } from '../shared/constants'
 const bootstrapStore = new Store({ name: 'bootstrap' })
 
 // Debug logging
-console.log('[Main] UserData Path:', app.getPath('userData'))
-console.log('[Main] Bootstrap Store Path:', bootstrapStore.path)
-console.log('[Main] Bootstrap Store Content:', bootstrapStore.store)
+logger.system.info('[Main] UserData Path:', app.getPath('userData'))
+logger.system.info('[Main] Bootstrap Store Path:', bootstrapStore.path)
+logger.system.info('[Main] Bootstrap Store Content:', bootstrapStore.store)
 
 // 2. 检查是否有自定义配置路径
 const customConfigPath = bootstrapStore.get('customConfigPath') as string | undefined
-console.log('[Main] Read customConfigPath:', customConfigPath)
+logger.system.info('[Main] Read customConfigPath:', customConfigPath)
 
 let mainStore: Store
 
@@ -36,12 +37,12 @@ function initStore() {
   const options: any = { name: 'config' }
 
   if (customConfigPath && fs.existsSync(customConfigPath)) {
-    console.log('[Main] Using custom config path:', customConfigPath)
+    logger.system.info('[Main] Using custom config path:', customConfigPath)
     options.cwd = customConfigPath
   } else {
-    console.log('[Main] Using default config path:', app.getPath('userData'))
+    logger.system.info('[Main] Using default config path:', app.getPath('userData'))
     if (customConfigPath) {
-      console.log('[Main] Custom path exists?', fs.existsSync(customConfigPath))
+      logger.system.info('[Main] Custom path exists?', fs.existsSync(customConfigPath))
     }
   }
 
@@ -88,7 +89,7 @@ function findWindowByWorkspace(roots: string[]): BrowserWindow | null {
 // 设置窗口的工作区
 function setWindowWorkspace(windowId: number, roots: string[]) {
   windowWorkspaces.set(windowId, roots)
-  console.log('[Main] Window workspace set:', windowId, roots)
+  logger.system.info('[Main] Window workspace set:', windowId, roots)
 }
 // 清理窗口工作区
 function clearWindowWorkspace(windowId: number) {
@@ -152,13 +153,13 @@ function createWindow(isEmpty: boolean = false) {
       // 最后一个窗口关闭时，执行全局清理
       isQuitting = true
       e.preventDefault()
-      console.log('[Main] Last window closing, starting cleanup...')
+      logger.system.info('[Main] Last window closing, starting cleanup...')
       try {
         cleanupAllHandlers()
         await lspManager.stopAllServers()
-        console.log('[Main] Cleanup completed')
+        logger.system.info('[Main] Cleanup completed')
       } catch (err) {
-        console.error('[Main] Cleanup error:', err)
+        logger.system.error('[Main] Cleanup error:', err)
       }
       win.destroy()
       app.quit()
@@ -206,7 +207,7 @@ function createWindow(isEmpty: boolean = false) {
 // ==========================================
 
 app.whenReady().then(() => {
-  console.log('[Security] 🔒 初始化安全模块...')
+  logger.system.info('[Security] 🔒 初始化安全模块...')
 
   const securityConfig = mainStore.get('securitySettings', {
     enablePermissionConfirm: true,
@@ -223,7 +224,7 @@ app.whenReady().then(() => {
   const gitCommands = securityConfig.allowedGitSubcommands || [...SECURITY_DEFAULTS.GIT_SUBCOMMANDS]
   updateWhitelist(shellCommands, gitCommands)
 
-  console.log('[Security] ✅ 安全模块已初始化')
+  logger.system.info('[Security] ✅ 安全模块已初始化')
 
   // 注册所有 IPC handlers
   registerAllHandlers({
@@ -277,12 +278,12 @@ app.whenReady().then(() => {
           label: 'Command Palette',
           // accelerator: 'Ctrl+Shift+P', // Remove accelerator to let renderer handle it
           click: (_: any, focusedWindow: BrowserWindow) => {
-            console.log('[Main] Menu: Command Palette triggered')
+            logger.system.info('[Main] Menu: Command Palette triggered')
             if (focusedWindow) {
-              console.log('[Main] Sending workbench:execute-command to renderer')
+              logger.system.info('[Main] Sending workbench:execute-command to renderer')
               focusedWindow.webContents.send('workbench:execute-command', 'workbench.action.showCommands')
             } else {
-              console.log('[Main] No focused window to send command to')
+              logger.system.info('[Main] No focused window to send command to')
             }
           }
         }

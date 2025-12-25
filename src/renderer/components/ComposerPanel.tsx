@@ -9,17 +9,18 @@
  * - 统一 Diff 生成
  */
 
+import { logger } from '@utils/Logger'
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import {
   Sparkles, X, FileText, Plus,
   ChevronDown, ChevronRight, Check, AlertCircle,
   Loader2, FolderOpen, CheckCheck, XCircle
 } from 'lucide-react'
-import { useStore } from '../store'
+import { useStore } from '@store'
 import DiffViewer from './DiffViewer'
-import { t } from '../i18n'
-import { composerService, FileChange } from '../agent/composerService'
-import { getEditorConfig } from '../config/editorConfig'
+import { t } from '@renderer/i18n'
+import { composerService, FileChange } from '@renderer/agent/composerService'
+import { getEditorConfig } from '@renderer/config/editorConfig'
 
 interface FileEdit {
   path: string
@@ -172,7 +173,7 @@ export default function ComposerPanel({ onClose, initialChanges }: ComposerPanel
         ))
       }
     } catch (err) {
-      console.error('Failed to apply edit:', err)
+      logger.ui.error('Failed to apply edit:', err)
     }
   }, [updateFileContent])
 
@@ -208,12 +209,12 @@ export default function ComposerPanel({ onClose, initialChanges }: ComposerPanel
 
   const handleAcceptAllComposer = useCallback(async () => {
     const result = await composerService.acceptAll()
-    console.log(`[Composer] Accepted ${result.accepted} changes, ${result.failed} failed`)
+    logger.ui.info(`[Composer] Accepted ${result.accepted} changes, ${result.failed} failed`)
   }, [])
 
   const handleRejectAllComposer = useCallback(async () => {
     const result = await composerService.rejectAll()
-    console.log(`[Composer] Rejected ${result.rejected} changes`)
+    logger.ui.info(`[Composer] Rejected ${result.rejected} changes`)
   }, [])
 
   // 键盘快捷键: Ctrl+Shift+A 接受全部, Ctrl+Shift+X 拒绝全部

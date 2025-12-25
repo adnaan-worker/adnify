@@ -11,6 +11,8 @@
  */
 
 // 目录名常量
+import { logger } from '@utils/Logger'
+
 export const ADNIFY_DIR_NAME = '.adnify'
 
 // 子目录和文件
@@ -158,10 +160,10 @@ class AdnifyDirService {
       }
 
       this.initializedRoots.add(rootPath)
-      console.log('[AdnifyDir] Root initialized:', rootPath)
+      logger.system.info('[AdnifyDir] Root initialized:', rootPath)
       return true
     } catch (error) {
-      console.error('[AdnifyDir] Root initialization failed:', rootPath, error)
+      logger.system.error('[AdnifyDir] Root initialization failed:', rootPath, error)
       return false
     }
   }
@@ -181,7 +183,7 @@ class AdnifyDirService {
     await this.initialize(rootPath)
     await this.loadAllData()
     this.initialized = true
-    console.log('[AdnifyDir] Primary root set:', rootPath)
+    logger.system.info('[AdnifyDir] Primary root set:', rootPath)
   }
 
   reset(): void {
@@ -190,7 +192,7 @@ class AdnifyDirService {
     this.initialized = false
     this.cache = { sessions: null, workspaceState: null, settings: null }
     this.dirty = { sessions: false, workspaceState: false, settings: false }
-    console.log('[AdnifyDir] Reset')
+    logger.system.info('[AdnifyDir] Reset')
   }
 
   async flush(): Promise<void> {
@@ -221,7 +223,7 @@ class AdnifyDirService {
 
     if (promises.length > 0) {
       await Promise.all(promises)
-      console.log('[AdnifyDir] Flushed all dirty data')
+      logger.system.info('[AdnifyDir] Flushed all dirty data')
     }
   }
 
@@ -232,7 +234,7 @@ class AdnifyDirService {
     if (this.flushTimer) return // 已有待定刷盘
     this.flushTimer = setTimeout(() => {
       this.flushTimer = null
-      this.flush().catch(err => console.error('[AdnifyDir] Flush error:', err))
+      this.flush().catch(err => logger.system.error('[AdnifyDir] Flush error:', err))
     }, this.FLUSH_INTERVAL)
   }
 
@@ -344,7 +346,7 @@ class AdnifyDirService {
     try {
       return await window.electronAPI.writeFile(this.getFilePath(file, rootPath), content)
     } catch (error) {
-      console.error(`[AdnifyDir] Failed to write ${file}:`, error)
+      logger.system.error(`[AdnifyDir] Failed to write ${file}:`, error)
       return false
     }
   }
@@ -376,7 +378,7 @@ class AdnifyDirService {
     this.cache.sessions = sessions || {}
     this.cache.workspaceState = workspaceState || { ...DEFAULT_WORKSPACE_STATE }
     this.cache.settings = settings ? { ...DEFAULT_PROJECT_SETTINGS, ...settings } : { ...DEFAULT_PROJECT_SETTINGS }
-    console.log('[AdnifyDir] Loaded all data from disk')
+    logger.system.info('[AdnifyDir] Loaded all data from disk')
   }
 
   private async readJsonFile<T>(file: AdnifyFile): Promise<T | null> {
@@ -394,7 +396,7 @@ class AdnifyDirService {
       const content = JSON.stringify(data, null, 2)
       await window.electronAPI.writeFile(this.getFilePath(file), content)
     } catch (error) {
-      console.error(`[AdnifyDir] Failed to write ${file}:`, error)
+      logger.system.error(`[AdnifyDir] Failed to write ${file}:`, error)
     }
   }
 

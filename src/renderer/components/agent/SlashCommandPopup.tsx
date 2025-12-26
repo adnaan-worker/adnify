@@ -3,15 +3,17 @@
  * 当用户输入 / 时显示可用命令
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useMemo } from 'react'
 import { Command, Sparkles, FileCode, Wrench, Bug, Zap, MessageSquare, Code } from 'lucide-react'
 import { slashCommandService, SlashCommand } from '@/renderer/services/slashCommandService'
+import { InputPopup, InputPopupItem } from '@/renderer/components/common/InputPopup'
+import { useStore } from '@/renderer/store'
 
 interface SlashCommandPopupProps {
     query: string // 包含 / 的输入
+    position: { x: number; y: number }
     onSelect: (command: SlashCommand) => void
     onClose: () => void
-    position: { x: number; y: number }
 }
 
 const COMMAND_ICONS: Record<string, typeof Command> = {
@@ -24,82 +26,40 @@ const COMMAND_ICONS: Record<string, typeof Command> = {
     type: Code,
 }
 
-export default function SlashCommandPopup({ query, onSelect, onClose, position }: SlashCommandPopupProps) {
-    const [selectedIndex, setSelectedIndex] = useState(0)
-    const containerRef = useRef<HTMLDivElement>(null)
+// 将 SlashCommand 转换为 InputPopupItem
+interface CommandItem extends InputPopupItem {
+    command: SlashCommand
+}
 
+export default function SlashCommandPopup({ query, position, onSelect, onClose }: SlashCommandPopupProps) {
+    const { language } = useStore()
     const matchingCommands = slashCommandService.findMatching(query)
 
-    useEffect(() => {
-        setSelectedIndex(0)
-    }, [query])
+    // 转换为 InputPopup 需要的格式
+    const items: CommandItem[] = useMemo(() => {
+        return matchingCommands.map(cmd => ({
+            id: cmd.name,
+            label: `/${cmd.name}`,
+            description: cmd.description,
+            icon: COMMAND_ICONS[cmd.name] || Sparkles,
+            command: cmd,
+        }))
+    }, [matchingCommands])
 
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault()
-                setSelectedIndex(prev => Math.min(prev + 1, matchingCommands.length - 1))
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault()
-                setSelectedIndex(prev => Math.max(prev - 1, 0))
-            } else if (e.key === 'Enter' && matchingCommands.length > 0) {
-                e.preventDefault()
-                onSelect(matchingCommands[selectedIndex])
-            } else if (e.key === 'Escape') {
-                e.preventDefault()
-                onClose()
-            }
-        }
+    const handleSelect = (item: CommandItem) => {
+        onSelect(item.command)
+    }
 
-        window.addEventListener('keydown', handleKeyDown)
-        return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [selectedIndex, matchingCommands, onSelect, onClose])
-
-    // 点击外部关闭
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-                onClose()
-            }
-        }
-
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [onClose])
-
-    if (matchingCommands.length === 0) return null
+    if (items.length === 0) return null
 
     return (
-        <div
-            ref={containerRef}
-            className="absolute bg-surface border border-border-subtle rounded-lg shadow-xl py-1 z-50 min-w-[240px] max-h-[280px] overflow-y-auto"
-            style={{
-                bottom: position.y,
-                left: position.x,
-            }}
-        >
-            <div className="px-3 py-1.5 text-[10px] text-text-muted uppercase tracking-wider border-b border-border-subtle">
-                Commands
-            </div>
-            {matchingCommands.map((cmd, index) => {
-                const Icon = COMMAND_ICONS[cmd.name] || Sparkles
-                return (
-                    <button
-                        key={cmd.name}
-                        onClick={() => onSelect(cmd)}
-                        className={`w-full text-left px-3 py-2 flex items-center gap-3 ${index === selectedIndex
-                                ? 'bg-accent/20 text-accent'
-                                : 'text-text-primary hover:bg-surface-hover'
-                            }`}
-                    >
-                        <Icon className="w-4 h-4 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium">/{cmd.name}</div>
-                            <div className="text-xs text-text-muted truncate">{cmd.description}</div>
-                        </div>
-                    </button>
-                )
-            })}
-        </div>
+        <InputPopup<CommandItem>
+            position={position}
+            items={items}
+            onSelect={handleSelect}
+            onClose={onClose}
+            header={<span>{language === 'zh' ? '快捷命令' : 'Quick Commands'}</span>}
+            emptyText={language === 'zh' ? '没有匹配的命令' : 'No matching commands'}
+        />
     )
 }

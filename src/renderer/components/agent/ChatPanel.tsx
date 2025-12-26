@@ -30,7 +30,8 @@ import { MentionParser, MentionCandidate } from '@/renderer/agent/core/MentionPa
 import ChatMessageUI from './ChatMessage'
 import AgentStatusBar from './AgentStatusBar'
 import { keybindingService } from '@/renderer/services/keybindingService'
-import { slashCommandService } from '@/renderer/services/slashCommandService'
+import { slashCommandService, SlashCommand } from '@/renderer/services/slashCommandService'
+import SlashCommandPopup from './SlashCommandPopup'
 import { AgentService } from '@/renderer/agent/core/AgentService'
 import { Button } from '../ui'
 import { useToast } from '@/renderer/components/common/ToastProvider'
@@ -96,9 +97,9 @@ export default function ChatPanel() {
   const [mentionLoading, setMentionLoading] = useState(false)
   const [mentionRange, setMentionRange] = useState<{ start: number; end: number } | null>(null)
   const [isDragging, setIsDragging] = useState(false)
-  // TODO: 斜杠命令 UI 待实现
-  const [, setShowSlashCommand] = useState(false)
-  const [, setSlashCommandQuery] = useState('')
+  // 斜杠命令状态
+  const [showSlashCommand, setShowSlashCommand] = useState(false)
+  const [slashCommandQuery, setSlashCommandQuery] = useState('')
   const [showContextWarning, setShowContextWarning] = useState(false)
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -211,22 +212,91 @@ export default function ChatPanel() {
     e.stopPropagation()
     setIsDragging(false)
 
+    // 辅助函数：检测路径是否是文件夹
+    const isDirectory = async (path: string): Promise<boolean> => {
+      try {
+        const result = await window.electronAPI.readDir(path)
+        return Array.isArray(result)
+      } catch {
+        return false
+      }
+    }
+
+    // 获取拖放的文件
     const files = Array.from(e.dataTransfer.files)
-    const imageFiles = files.filter(f => f.type.startsWith('image/'))
-    if (imageFiles.length > 0) {
-      imageFiles.forEach(addImage)
+
+    if (files.length > 0) {
+      // 有原生文件对象（外部文件拖入）
+      const imageFiles = files.filter(f => f.type.startsWith('image/'))
+      if (imageFiles.length > 0) {
+        imageFiles.forEach(addImage)
+        return
+      }
+
+      for (const file of files) {
+        const filePath = (file as any).path
+        if (filePath) {
+          const exists = contextItems.some((s: ContextItem) =>
+            (s.type === 'File' && (s as FileContext).uri === filePath) ||
+            (s.type === 'Folder' && (s as any).uri === filePath)
+          )
+          if (!exists) {
+            const isDir = await isDirectory(filePath)
+            if (isDir) {
+              addContextItem({ type: 'Folder', uri: filePath })
+            } else {
+              addContextItem({ type: 'File', uri: filePath })
+            }
+          }
+        }
+      }
       return
     }
 
-    // 处理代码文件
-    for (const file of files) {
-      const filePath = (file as any).path || file.name
-      const exists = contextItems.some((s: ContextItem) => s.type === 'File' && (s as FileContext).uri === filePath)
-      if (!exists) {
-        addContextItem({ type: 'File', uri: filePath })
+    // 没有原生文件，尝试从自定义数据中获取路径
+    const items = e.dataTransfer.items
+    if (!items || items.length === 0) {
+      return
+    }
+
+    // 尝试获取 adnify 自定义路径
+    let filePath: string | null = null
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      if (item.kind === 'string') {
+        if (item.type === 'application/adnify-file-path') {
+          filePath = await new Promise<string>((resolve) => {
+            item.getAsString((s) => resolve(s))
+          })
+          break
+        } else if (item.type === 'text/uri-list' && !filePath) {
+          const uriList = await new Promise<string>((resolve) => {
+            item.getAsString((s) => resolve(s))
+          })
+          const match = uriList.match(/file:\/\/\/(.+)/)
+          if (match) {
+            filePath = decodeURIComponent(match[1])
+          }
+        }
       }
     }
-  }, [addImage, contextItems, addContextItem])
+
+    if (filePath) {
+      const exists = contextItems.some((s: ContextItem) =>
+        (s.type === 'File' && (s as FileContext).uri === filePath) ||
+        (s.type === 'Folder' && (s as any).uri === filePath)
+      )
+      if (!exists) {
+        const isDir = await isDirectory(filePath)
+        if (isDir) {
+          addContextItem({ type: 'Folder', uri: filePath })
+        } else {
+          addContextItem({ type: 'File', uri: filePath })
+        }
+      }
+    }
+  }, [addImage, contextItems, addContextItem, language])
 
   // 输入变化处理
   const handleInputChange = useCallback(async (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -234,16 +304,20 @@ export default function ChatPanel() {
     const cursorPos = e.target.selectionStart || 0
     setInput(value)
 
+    // 计算弹窗位置
+    const updatePopupPosition = () => {
+      if (inputContainerRef.current) {
+        const rect = inputContainerRef.current.getBoundingClientRect()
+        setMentionPosition({ x: rect.left + 16, y: rect.top })
+      }
+    }
+
     const parseResult = MentionParser.parse(value, cursorPos)
 
     if (parseResult) {
       setMentionQuery(parseResult.query)
       setMentionRange(parseResult.range)
-
-      if (inputContainerRef.current) {
-        const rect = inputContainerRef.current.getBoundingClientRect()
-        setMentionPosition({ x: rect.left + 16, y: rect.top })
-      }
+      updatePopupPosition()
       setShowFileMention(true)
       setShowSlashCommand(false)
 
@@ -257,8 +331,10 @@ export default function ChatPanel() {
       } finally {
         setMentionLoading(false)
       }
-    } else if (value.startsWith('/')) {
+    } else if (value.startsWith('/') && !value.includes(' ') && value.length < 20) {
+      // 斜杠命令：只在行首输入 / 且没有空格时触发
       setSlashCommandQuery(value)
+      updatePopupPosition()
       setShowSlashCommand(true)
       setShowFileMention(false)
       setMentionQuery('')
@@ -415,6 +491,24 @@ export default function ChatPanel() {
     if (exists) return
     addContextItem({ type: 'File', uri: activeFilePath })
   }, [activeFilePath, contextItems, addContextItem])
+
+  // 处理斜杠命令选择
+  const handleSlashCommand = useCallback((cmd: SlashCommand) => {
+    const result = slashCommandService.parse('/' + cmd.name, {
+      activeFilePath: activeFilePath || undefined,
+      selectedCode: selectedCode || undefined,
+      workspacePath: workspacePath || undefined,
+    })
+    if (result) {
+      setInput(result.prompt)
+      if (result.mode) {
+        setChatMode(result.mode as any)
+      }
+    }
+    setShowSlashCommand(false)
+    setSlashCommandQuery('')
+    textareaRef.current?.focus()
+  }, [activeFilePath, selectedCode, workspacePath, setChatMode])
 
   // 键盘处理
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -725,6 +819,18 @@ export default function ChatPanel() {
                 loading={mentionLoading}
                 onSelect={handleSelectMention}
                 onClose={() => { setShowFileMention(false); setMentionQuery('') }}
+              />
+            )
+          }
+
+          {/* Slash Command Popup */}
+          {
+            showSlashCommand && (
+              <SlashCommandPopup
+                query={slashCommandQuery}
+                position={mentionPosition}
+                onSelect={handleSlashCommand}
+                onClose={() => { setShowSlashCommand(false); setSlashCommandQuery('') }}
               />
             )
           }

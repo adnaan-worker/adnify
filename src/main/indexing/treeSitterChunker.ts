@@ -229,9 +229,29 @@ export class TreeSitterChunker {
         // Skip small nodes
         if (node.endPosition.row - node.startPosition.row < 3) continue
 
-        // Check node text size
-        if (node.text.length > this.config.chunkSize * 100) { // Rough char estimate
-          // Too big? Maybe we should split it further (TODO)
+        // 检查节点大小，如果过大则递归拆分
+        const maxChunkChars = this.config.chunkSize * 100 // ~50000 字符
+        if (node.text.length > maxChunkChars) {
+          // 递归拆分大块：尝试按子节点拆分
+          const subChunks = this.splitLargeNode(node, filePath, relativePath, fileHash, langName, maxChunkChars)
+          if (subChunks.length > 0) {
+            chunks.push(...subChunks)
+            continue
+          }
+          // 如果无法拆分，截断内容
+          chunks.push({
+            id: `${filePath}:${node.startPosition.row}`,
+            filePath,
+            relativePath,
+            fileHash,
+            content: node.text.slice(0, maxChunkChars) + '\n...[truncated]',
+            startLine: node.startPosition.row + 1,
+            endLine: node.endPosition.row + 1,
+            type: this.mapCaptureToType(name),
+            language: langName,
+            symbols: this.extractName(node)
+          })
+          continue
         }
 
         chunks.push({
@@ -258,6 +278,76 @@ export class TreeSitterChunker {
       logger.index.error(`[TreeSitterChunker] Error querying ${filePath}:`, e)
     } finally {
       tree.delete()
+    }
+
+    return chunks
+  }
+
+  /**
+   * 递归拆分过大的代码块
+   * 策略：按直接子节点拆分，如果子节点仍然过大则继续递归
+   */
+  private splitLargeNode(
+    node: Parser.SyntaxNode,
+    filePath: string,
+    relativePath: string,
+    fileHash: string,
+    langName: string,
+    maxChunkChars: number
+  ): CodeChunk[] {
+    const chunks: CodeChunk[] = []
+
+    // 获取有意义的子节点（跳过标点符号等）
+    const meaningfulChildren: Parser.SyntaxNode[] = []
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i)
+      if (child && child.text.length > 50) {
+        meaningfulChildren.push(child)
+      }
+    }
+
+    // 如果没有足够的子节点，无法拆分
+    if (meaningfulChildren.length < 2) {
+      return []
+    }
+
+    // 按子节点创建分块
+    for (const child of meaningfulChildren) {
+      if (child.text.length > maxChunkChars) {
+        // 子节点仍然过大，递归拆分
+        const subChunks = this.splitLargeNode(child, filePath, relativePath, fileHash, langName, maxChunkChars)
+        if (subChunks.length > 0) {
+          chunks.push(...subChunks)
+        } else {
+          // 无法继续拆分，截断
+          chunks.push({
+            id: `${filePath}:${child.startPosition.row}`,
+            filePath,
+            relativePath,
+            fileHash,
+            content: child.text.slice(0, maxChunkChars) + '\n...[truncated]',
+            startLine: child.startPosition.row + 1,
+            endLine: child.endPosition.row + 1,
+            type: 'block',
+            language: langName,
+            symbols: this.extractName(child)
+          })
+        }
+      } else if (child.endPosition.row - child.startPosition.row >= 3) {
+        // 子节点大小合适，直接添加
+        chunks.push({
+          id: `${filePath}:${child.startPosition.row}`,
+          filePath,
+          relativePath,
+          fileHash,
+          content: child.text,
+          startLine: child.startPosition.row + 1,
+          endLine: child.endPosition.row + 1,
+          type: 'block',
+          language: langName,
+          symbols: this.extractName(child)
+        })
+      }
     }
 
     return chunks

@@ -162,9 +162,12 @@ export async function safeOpenFile(
     }
 
     // 7. 打开文件
+    // 编码检测已在主进程实现 (secureFile.ts:readFileWithEncoding):
+    // - UTF-8 BOM 自动去除
+    // - 二进制文件检测
     openFile(filePath, content, originalContent, {
       largeFileInfo,
-      encoding: 'utf-8', // TODO: 检测实际编码
+      encoding: 'utf-8',
     })
     setActiveFile(filePath)
 

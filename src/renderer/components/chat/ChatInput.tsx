@@ -14,7 +14,9 @@ import {
   Paperclip,
   ArrowUp,
   ClipboardList,
-  Plus
+  Plus,
+  Folder,
+  Globe
 } from 'lucide-react'
 import { useStore } from '@store'
 import { WorkMode } from '@/renderer/modes/types'
@@ -96,6 +98,7 @@ export default function ChatInput({
   const hasSymbolsRef = useMemo(() => /@symbols\b/i.test(input), [input])
   const hasGitRef = useMemo(() => /@git\b/i.test(input), [input])
   const hasTerminalRef = useMemo(() => /@terminal\b/i.test(input), [input])
+  const hasWebRef = useMemo(() => /@web\b/i.test(input), [input])
 
   // 添加图片
   const addImage = useCallback(async (file: File) => {
@@ -167,57 +170,85 @@ export default function ChatInput({
                 <span>{activeFilePath.split(/[\\/]/).pop()}</span>
               </button>
             )}
-            {/* Context Items (Source of Truth) */}
-            {contextItems.map((item, i) => {
-              if (item.type === 'File') {
-                const uri = (item as FileContext).uri
-                const name = uri.split(/[\\/]/).pop() || uri
-                return (
-                  <span
-                    key={`ctx-${i}`}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-white/5 text-text-secondary text-[10px] font-medium rounded-full border border-white/10 animate-fade-in select-none group/chip"
-                  >
-                    <FileText className="w-2.5 h-2.5 opacity-70" />
-                    <span title={uri}>{name}</span>
-                    <button
-                      onClick={() => onRemoveContextItem(item)}
-                      className="ml-0.5 p-0.5 rounded-full hover:bg-white/10 text-text-muted hover:text-text-primary opacity-0 group-hover/chip:opacity-100 transition-opacity"
-                    >
-                      <X className="w-2 h-2" />
-                    </button>
-                  </span>
-                )
+            {/* Context Items - 只显示文件/文件夹/代码选择（拖放添加的） */}
+            {contextItems.filter(item => ['File', 'Folder', 'CodeSelection'].includes(item.type)).map((item, i) => {
+              const getContextStyle = (type: string) => {
+                switch (type) {
+                  case 'File': return { bg: 'bg-white/5', text: 'text-text-secondary', border: 'border-white/10', Icon: FileText }
+                  case 'CodeSelection': return { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20', Icon: Code }
+                  case 'Folder': return { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/20', Icon: Folder }
+                  default: return { bg: 'bg-white/5', text: 'text-text-muted', border: 'border-white/10', Icon: FileText }
+                }
               }
-              // Other context types can be added here if needed
-              return null
+
+              const getLabel = () => {
+                switch (item.type) {
+                  case 'File':
+                  case 'Folder': {
+                    const uri = (item as any).uri || ''
+                    return uri.split(/[\\/]/).pop() || uri
+                  }
+                  case 'CodeSelection': {
+                    const uri = (item as any).uri || ''
+                    const range = (item as any).range as [number, number] | undefined
+                    const name = uri.split(/[\\/]/).pop() || uri
+                    return range ? `${name}:${range[0]}-${range[1]}` : name
+                  }
+                  default: return 'Context'
+                }
+              }
+
+              const style = getContextStyle(item.type)
+              const label = getLabel()
+              const uri = (item as any).uri || ''
+
+              return (
+                <span
+                  key={`ctx-${i}`}
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 ${style.bg} ${style.text} text-[10px] font-medium rounded-full border ${style.border} animate-fade-in select-none group/chip`}
+                  title={uri || item.type}
+                >
+                  <style.Icon className="w-2.5 h-2.5" />
+                  <span className="max-w-[100px] truncate">{label}</span>
+                  <button
+                    onClick={() => onRemoveContextItem(item)}
+                    className="ml-0.5 p-0.5 rounded-full hover:bg-white/10 text-current hover:text-status-error opacity-0 group-hover/chip:opacity-100 transition-opacity"
+                  >
+                    <X className="w-2 h-2" />
+                  </button>
+                </span>
+              )
             })}
 
-            {/* Parsed Refs (Visual Feedback for typed mentions) - Filter out duplicates if needed */}
-            {/* For now, we keep them but maybe we should hide them if they are already in contextItems? */}
-            {/* Let's show special refs first */}
-
+            {/* @xxx 引用 - 跟随输入文本，删除文本则消失 */}
             {hasCodebaseRef && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-purple-500/10 text-purple-400 text-[10px] font-medium rounded-full border border-purple-500/20 animate-fade-in select-none">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-500/10 text-green-400 text-[10px] font-medium rounded-full border border-green-500/20 animate-fade-in select-none">
                 <Database className="w-2.5 h-2.5" />
-                Codebase
+                @codebase
               </span>
             )}
             {hasSymbolsRef && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-500/10 text-blue-400 text-[10px] font-medium rounded-full border border-blue-500/20 animate-fade-in select-none">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-pink-500/10 text-pink-400 text-[10px] font-medium rounded-full border border-pink-500/20 animate-fade-in select-none">
                 <Code className="w-2.5 h-2.5" />
-                Symbols
+                @symbols
               </span>
             )}
             {hasGitRef && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-500/10 text-orange-400 text-[10px] font-medium rounded-full border border-orange-500/20 animate-fade-in select-none">
                 <GitBranch className="w-2.5 h-2.5" />
-                Git
+                @git
               </span>
             )}
             {hasTerminalRef && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-500/10 text-green-400 text-[10px] font-medium rounded-full border border-green-500/20 animate-fade-in select-none">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 text-[10px] font-medium rounded-full border border-cyan-500/20 animate-fade-in select-none">
                 <Terminal className="w-2.5 h-2.5" />
-                Terminal
+                @terminal
+              </span>
+            )}
+            {hasWebRef && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-500/10 text-blue-400 text-[10px] font-medium rounded-full border border-blue-500/20 animate-fade-in select-none">
+                <Globe className="w-2.5 h-2.5" />
+                @web
               </span>
             )}
           </div>

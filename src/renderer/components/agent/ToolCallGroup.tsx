@@ -6,6 +6,7 @@
 
 import { useState, useMemo } from 'react'
 import { ChevronDown, ChevronRight, Layers } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@/renderer/agent/types'
 import ToolCallCard from './ToolCallCard'
 import FileChangeCard from './FileChangeCard'
@@ -85,12 +86,15 @@ export default function ToolCallGroup({
                     renderToolCard(completedCalls[0])
                 ) : (
                     // 多个已完成工具，折叠显示
-                    <div className="rounded-lg border border-white/5 bg-white/[0.02] overflow-hidden transition-colors hover:bg-white/[0.04]">
+                    <motion.div 
+                        layout
+                        className="rounded-xl border border-white/5 bg-surface/30 backdrop-blur-sm overflow-hidden transition-colors hover:bg-surface/50"
+                    >
                         <div
-                            className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none"
+                            className="flex items-center gap-3 px-3 py-2.5 cursor-pointer select-none"
                             onClick={() => setIsExpanded(!isExpanded)}
                         >
-                            <div className="p-1 rounded-md bg-white/5 text-text-muted">
+                            <div className="p-1.5 rounded-md bg-white/5 text-text-muted border border-white/5">
                                 <Layers className="w-3.5 h-3.5" />
                             </div>
                             <div className="flex-1 min-w-0 flex items-center gap-2">
@@ -101,27 +105,45 @@ export default function ToolCallGroup({
                                 </span>
                                 <div className="h-px flex-1 bg-white/5 mx-2" />
                             </div>
-                            <div className="text-text-muted/50">
-                                {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                            </div>
+                            <motion.div 
+                                animate={{ rotate: isExpanded ? 180 : 0 }}
+                                className="text-text-muted/50"
+                            >
+                                <ChevronDown className="w-3.5 h-3.5" />
+                            </motion.div>
                         </div>
 
-                        {isExpanded && (
-                            <div className="border-t border-white/5 p-2 space-y-2 bg-black/10 animate-slide-down">
-                                {/* Timeline connector line could go here if we want strictly timeline look */}
-                                {completedCalls.map(renderToolCard)}
-                            </div>
-                        )}
-                    </div>
+                        <AnimatePresence initial={false}>
+                            {isExpanded && (
+                                <motion.div
+                                    layout
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                                >
+                                    <div className="border-t border-white/5 p-2 space-y-2 bg-black/5">
+                                        {completedCalls.map(renderToolCard)}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </motion.div>
                 )
             )}
 
             {/* 2. 正在运行/等待的工具 (始终展开，直接显示) */}
-            {activeCalls.length > 0 && (
-                <div className="space-y-2 animate-fade-in">
-                    {activeCalls.map(renderToolCard)}
-                </div>
-            )}
+            <AnimatePresence>
+                {activeCalls.length > 0 && (
+                    <motion.div 
+                        className="space-y-2"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                    >
+                        {activeCalls.map(renderToolCard)}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     )
 }

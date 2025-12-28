@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { Check, X, ChevronDown, ChevronRight, ExternalLink, Loader2, FileCode } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@renderer/agent/types'
 import InlineDiffPreview, { getDiffStats } from './InlineDiffPreview'
 
@@ -85,45 +86,91 @@ export default function FileChangeCard({
         }
     }, [isRunning, isStreaming])
 
+    // 延迟渲染逻辑：动画期间不渲染重型内容
+    const [showContent, setShowContent] = useState(false)
+    useEffect(() => {
+        let timer: NodeJS.Timeout
+        if (isExpanded) {
+            // 展开时：延迟显示内容，等待动画完成
+            // 缩短到 100ms，让用户感觉更快
+            timer = setTimeout(() => setShowContent(true), 100)
+        } else {
+            // 收起时：立即隐藏内容，防止重绘
+            setShowContent(false)
+        }
+        return () => clearTimeout(timer)
+    }, [isExpanded])
+
     // 判断是否是新建文件
     const isNewFile = !oldContent && !!newContent
 
+    // 计算卡片样式
+    const cardStyle = useMemo(() => {
+        if (isAwaitingApproval) return 'border-yellow-500/30 bg-yellow-500/5 shadow-[0_0_15px_-3px_rgba(234,179,8,0.1)]'
+        if (isError) return 'border-red-500/20 bg-red-500/5 shadow-[0_0_15px_-3px_rgba(239,68,68,0.1)]'
+        if (isStreaming || isRunning) return 'border-accent/30 bg-accent/5 shadow-[0_0_15px_-3px_rgba(var(--accent)/0.15)]'
+        return 'border-white/5 bg-surface/30 backdrop-blur-sm hover:bg-surface/50 hover:border-white/10 hover:shadow-lg hover:shadow-black/20'
+    }, [isAwaitingApproval, isError, isStreaming, isRunning])
+
     return (
-        <div className={`
-            group my-1.5 rounded-lg border transition-all duration-200
-            ${isAwaitingApproval
-                ? 'border-yellow-500/30 bg-yellow-500/5'
-                : isError
-                    ? 'border-red-500/20 bg-red-500/5'
-                    : 'border-white/5 bg-transparent hover:border-white/10'
-            }
-        `}>
+        <motion.div 
+            layout
+            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+            className={`
+                group my-2 rounded-xl border transition-colors duration-300 overflow-hidden
+                ${cardStyle}
+            `}
+        >
             {/* Header */}
             <div
-                className="flex items-center gap-3 px-3 py-2 cursor-pointer select-none"
+                className="flex items-center gap-3 px-3 py-2.5 cursor-pointer select-none relative"
                 onClick={() => setIsExpanded(!isExpanded)}
             >
+                {/* Active Indicator Line */}
+                {(isStreaming || isRunning) && (
+                    <motion.div
+                        layoutId="active-indicator-file"
+                        className="absolute left-0 top-0 bottom-0 w-0.5 bg-accent"
+                    />
+                )}
+
                 {/* Status Icon */}
-                <div className="shrink-0">
+                <div className="shrink-0 relative z-10">
                     {isStreaming || isRunning ? (
-                        <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />
+                        <div className="relative">
+                            <div className="absolute inset-0 bg-accent/20 rounded-full animate-ping" />
+                            <Loader2 className="w-4 h-4 text-accent animate-spin relative z-10" />
+                        </div>
                     ) : isSuccess ? (
-                        <Check className="w-3.5 h-3.5 text-green-400" />
+                        <div className="w-5 h-5 rounded-full bg-green-500/10 flex items-center justify-center border border-green-500/20">
+                            <Check className="w-3 h-3 text-green-400" />
+                        </div>
                     ) : isError ? (
-                        <X className="w-3.5 h-3.5 text-red-400" />
+                        <div className="w-5 h-5 rounded-full bg-red-500/10 flex items-center justify-center border border-red-500/20">
+                            <X className="w-3 h-3 text-red-400" />
+                        </div>
                     ) : (
-                        <FileCode className="w-3.5 h-3.5 text-text-muted" />
+                        <div className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+                            <FileCode className="w-3 h-3 text-text-muted" />
+                        </div>
                     )}
                 </div>
 
                 {/* Title & Stats */}
                 <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
-                    <span className="text-xs font-medium text-text-secondary group-hover:text-text-primary transition-colors truncate">
+                    <span className="text-sm font-medium text-text-secondary group-hover:text-text-primary transition-colors truncate">
                         {fileName}
                     </span>
 
                     {(isSuccess || newContent) && (
-                        <span className="text-[10px] font-mono opacity-60 flex items-center gap-1.5 px-1.5 py-0.5 bg-white/5 rounded">
+                        <motion.span 
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="text-[10px] font-mono opacity-60 flex items-center gap-1.5 px-1.5 py-0.5 bg-white/5 rounded border border-white/5"
+                        >
                             {diffStats.added > 0 && (
                                 <span className="text-green-400">+{diffStats.added}</span>
                             )}
@@ -133,7 +180,7 @@ export default function FileChangeCard({
                             {isNewFile && diffStats.added === 0 && (
                                 <span className="text-blue-400">new</span>
                             )}
-                        </span>
+                        </motion.span>
                     )}
                 </div>
 
@@ -145,36 +192,72 @@ export default function FileChangeCard({
                                 e.stopPropagation()
                                 onOpenInEditor(filePath, oldContent, newContent)
                             }}
-                            className="p-1 text-text-muted hover:text-accent hover:bg-white/10 rounded transition-colors"
+                            className="p-1.5 text-text-muted hover:text-accent hover:bg-white/10 rounded-md transition-colors"
                             title="Open in Editor"
                         >
-                            <ExternalLink className="w-3.5 h-3.5" />
+                            <ExternalLink className="w-4 h-4" />
                         </button>
                     )}
-                    <div className="text-text-muted/50 group-hover:text-text-muted transition-colors">
-                        {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                    </div>
+                    <motion.div 
+                        animate={{ rotate: isExpanded ? 180 : 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="text-text-muted/50 group-hover:text-text-muted transition-colors"
+                    >
+                        <ChevronDown className="w-4 h-4" />
+                    </motion.div>
                 </div>
             </div>
 
             {/* Expanded Content */}
-            {isExpanded && newContent && (
-                <div className="px-3 pb-3 pt-0 animate-slide-down">
-                    <div className="pl-6.5">
-                        <div className="rounded-md border border-white/5 bg-black/20 overflow-hidden">
-                            <div className="max-h-64 overflow-auto custom-scrollbar">
-                                <InlineDiffPreview
-                                    oldContent={oldContent}
-                                    newContent={newContent}
-                                    filePath={filePath}
-                                    isStreaming={isStreaming || isRunning}
-                                    maxLines={50}
-                                />
+            <AnimatePresence initial={false}>
+                {isExpanded && newContent && (
+                    <motion.div
+                        layout
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.25, ease: "easeInOut" }}
+                        className="overflow-hidden"
+                    >
+                        <div className="px-3 pb-3 pt-0">
+                            <div>
+                                <div className="rounded-lg border border-white/5 bg-black/20 overflow-hidden shadow-inner">
+                                    <div className="max-h-64 overflow-auto custom-scrollbar relative min-h-[60px]">
+                                        {showContent || isRunning || isStreaming ? (
+                                            <InlineDiffPreview
+                                                oldContent={oldContent}
+                                                newContent={newContent}
+                                                filePath={filePath}
+                                                isStreaming={isStreaming || isRunning}
+                                                maxLines={50}
+                                            />
+                                        ) : (
+                                            // 现代化的骨架屏 - 模拟代码编辑器结构
+                                            // 移除杂乱的颜色，使用统一的灰阶 Pulse 效果，更专业简洁
+                                            <div className="min-h-[160px] p-4 w-full select-none flex flex-col gap-3 opacity-50">
+                                                {[...Array(5)].map((_, i) => (
+                                                    <div key={i} className="flex items-center gap-4">
+                                                        {/* 模拟行号列 */}
+                                                        <div className="w-8 h-2.5 bg-white/10 rounded-sm animate-pulse shrink-0" />
+                                                        {/* 模拟代码内容 - 随机宽度 */}
+                                                        <div 
+                                                            className="h-2.5 bg-white/10 rounded-sm animate-pulse" 
+                                                            style={{ 
+                                                                width: `${Math.max(30, 85 - (i * 15) % 50)}%`, // 产生 85%, 70%, 55%... 这样的变化
+                                                                animationDelay: `${i * 100}ms` 
+                                                            }} 
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-            )}
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Error Message */}
             {toolCall.error && isExpanded && (
@@ -190,18 +273,18 @@ export default function FileChangeCard({
                 <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-yellow-500/10 bg-yellow-500/5">
                     <button
                         onClick={onReject}
-                        className="px-3 py-1 text-[11px] font-medium text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                        className="px-3 py-1.5 text-xs font-medium text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all active:scale-95"
                     >
                         Reject
                     </button>
                     <button
                         onClick={onApprove}
-                        className="px-3 py-1 text-[11px] font-medium bg-accent text-white hover:bg-accent-hover rounded transition-colors shadow-sm shadow-accent/20"
+                        className="px-3 py-1.5 text-xs font-medium bg-accent text-white hover:bg-accent-hover rounded-md transition-all shadow-sm shadow-accent/20 active:scale-95 hover:shadow-accent/40"
                     >
                         Accept
                     </button>
                 </div>
             )}
-        </div>
+        </motion.div>
     )
 }

@@ -9,6 +9,7 @@ import {
   Upload,
   X
 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Logo } from '@/renderer/components/common/Logo'
 import { useStore, useModeStore } from '@/renderer/store'
 import { useAgent } from '@/renderer/hooks/useAgent'
@@ -691,7 +692,7 @@ export default function ChatPanel() {
         )}
 
         {/* Header - 简洁版 */}
-        <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between h-10 px-3 bg-background/80 backdrop-blur-md border-b border-white/5 select-none">
+        <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between h-10 px-3 bg-background/60 backdrop-blur-xl border-b border-white/5 select-none transition-all duration-300">
           <div className="flex items-center gap-2">
             {/* 分支选择器 - 始终显示，点击展开分支管理 */}
             <BranchSelector language={language} onClick={() => setShowBranches(!showBranches)} />
@@ -703,7 +704,7 @@ export default function ChatPanel() {
               size="icon"
               onClick={() => setShowThreads(!showThreads)}
               title={language === 'zh' ? '历史记录' : 'Chat history'}
-              className="hover:bg-white/5 text-text-muted hover:text-text-primary"
+              className="hover:bg-white/5 text-text-muted hover:text-text-primary transition-colors"
             >
               <History className="w-4 h-4" />
             </Button>
@@ -712,7 +713,7 @@ export default function ChatPanel() {
               size="icon"
               onClick={() => createThread()}
               title={language === 'zh' ? '新对话' : 'New chat'}
-              className="hover:bg-white/5 text-text-muted hover:text-text-primary"
+              className="hover:bg-white/5 text-text-muted hover:text-text-primary transition-colors"
             >
               <Plus className="w-4 h-4" />
             </Button>
@@ -721,7 +722,7 @@ export default function ChatPanel() {
               variant="ghost"
               size="icon"
               onClick={clearMessages}
-              className="hover:bg-red-500/10 hover:text-red-500 text-text-muted"
+              className="hover:bg-red-500/10 hover:text-red-500 text-text-muted transition-colors"
               title={language === 'zh' ? '清空对话' : 'Clear chat'}
             >
               <Trash2 className="w-4 h-4" />
@@ -730,74 +731,100 @@ export default function ChatPanel() {
         </div>
 
         {/* Thread list overlay */}
-        {showThreads && (
-          <div className="absolute top-[50px] right-0 left-0 bottom-0 bg-background/95 backdrop-blur-md z-30 overflow-hidden p-4 animate-fade-in">
-            <div className="flex flex-col gap-2 max-w-2xl mx-auto">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-text-primary">Chat History</h3>
-                <Button variant="ghost" size="icon" onClick={() => setShowThreads(false)} className="h-6 w-6">
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-              {threads.map((thread: ChatThread) => {
-                if (!thread) return null
-                const firstUserMsg = thread.messages.find((m: ChatMessageType) => m.role === 'user')
-                const preview = firstUserMsg ? getMessageText(firstUserMsg.content).slice(0, 50) : 'New chat'
-                return (
-                  <div
-                    key={thread.id}
-                    className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all duration-200 border group ${currentThreadId === thread.id
-                      ? 'bg-accent/10 border-accent/20 text-accent'
-                      : 'bg-surface/30 border-white/5 hover:border-white/10 hover:bg-surface/50 text-text-secondary'
-                      }`}
-                    onClick={() => { switchThread(thread.id); setShowThreads(false) }}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{preview || 'New chat'}</p>
-                      <p className="text-xs text-text-muted mt-0.5">
-                        {new Date(thread.lastModified).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => { e.stopPropagation(); deleteThread(thread.id) }}
-                      className="h-8 w-8 hover:bg-red-500/10 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all transform scale-90 group-hover:scale-100"
+        <AnimatePresence>
+          {showThreads && (
+            <motion.div 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="absolute top-[50px] right-0 left-0 bottom-0 bg-background/95 backdrop-blur-md z-30 overflow-hidden p-4"
+            >
+              <div className="flex flex-col gap-2 max-w-2xl mx-auto">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-text-primary">Chat History</h3>
+                  <Button variant="ghost" size="icon" onClick={() => setShowThreads(false)} className="h-6 w-6">
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+                {threads.map((thread: ChatThread) => {
+                  if (!thread) return null
+                  const firstUserMsg = thread.messages.find((m: ChatMessageType) => m.role === 'user')
+                  const preview = firstUserMsg ? getMessageText(firstUserMsg.content).slice(0, 50) : 'New chat'
+                  return (
+                    <div
+                      key={thread.id}
+                      className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all duration-200 border group ${currentThreadId === thread.id
+                        ? 'bg-accent/10 border-accent/20 text-accent'
+                        : 'bg-surface/30 border-white/5 hover:border-white/10 hover:bg-surface/50 text-text-secondary'
+                        }`}
+                      onClick={() => { switchThread(thread.id); setShowThreads(false) }}
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{preview || 'New chat'}</p>
+                        <p className="text-xs text-text-muted mt-0.5">
+                          {new Date(thread.lastModified).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => { e.stopPropagation(); deleteThread(thread.id) }}
+                        className="h-8 w-8 hover:bg-red-500/10 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all transform scale-90 group-hover:scale-100"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Branch Manager overlay */}
-        {showBranches && (
-          <div className="absolute top-[50px] right-0 left-0 bottom-0 bg-background/95 backdrop-blur-md z-30 overflow-auto animate-fade-in">
-            <div className="max-w-2xl mx-auto">
-              <BranchManager language={language} onClose={() => setShowBranches(false)} />
-            </div>
-          </div>
-        )}
+        <AnimatePresence>
+          {showBranches && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.2 }}
+              className="absolute top-[50px] right-0 left-0 bottom-0 bg-background/95 backdrop-blur-md z-30 overflow-auto"
+            >
+              <div className="max-w-2xl mx-auto">
+                <BranchManager language={language} onClose={() => setShowBranches(false)} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Drag Overlay */}
-        {isDragging && (
-          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center pointer-events-none animate-fade-in">
-            <div className="flex flex-col items-center gap-4 p-8 rounded-3xl border border-accent/30 bg-surface/90 shadow-2xl shadow-accent/20 transform scale-100 animate-scale-in">
-              <div className="p-5 rounded-full bg-accent/10 border border-accent/20 relative">
-                <div className="absolute inset-0 bg-accent/20 blur-xl rounded-full animate-pulse" />
-                <Upload className="w-10 h-10 text-accent relative z-10" />
-              </div>
-              <div className="text-center">
-                <p className="text-lg font-medium text-text-primary mb-1">{language === 'zh' ? '释放以添加文件' : 'Drop files to add context'}</p>
-                <p className="text-sm text-text-muted">{language === 'zh' ? '支持代码和图片' : 'Supports code and images'}</p>
-              </div>
-            </div>
-          </div>
-        )
-        }
+        <AnimatePresence>
+          {isDragging && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center pointer-events-none"
+            >
+              <motion.div 
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                className="flex flex-col items-center gap-4 p-8 rounded-3xl border border-accent/30 bg-surface/90 shadow-2xl shadow-accent/20"
+              >
+                <div className="p-5 rounded-full bg-accent/10 border border-accent/20 relative">
+                  <div className="absolute inset-0 bg-accent/20 blur-xl rounded-full animate-pulse" />
+                  <Upload className="w-10 h-10 text-accent relative z-10" />
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-medium text-text-primary mb-1">{language === 'zh' ? '释放以添加文件' : 'Drop files to add context'}</p>
+                  <p className="text-sm text-text-muted">{language === 'zh' ? '支持代码和图片' : 'Supports code and images'}</p>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Messages Area */}
         <div className="flex-1 min-h-0 relative z-0 flex flex-col pt-12">
@@ -815,25 +842,61 @@ export default function ChatPanel() {
           {/* Empty State */}
           {messages.length === 0 ? (
             <div className="flex flex-col h-full w-full bg-background/40 backdrop-blur-3xl relative overflow-hidden">
-              {/* Background Ambience - More subtle */}
+              {/* Background Ambience - More subtle & Animated */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px] opacity-50 mix-blend-screen" />
-                <div className="absolute bottom-[-10%] left-[-20%] w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[120px] opacity-30 mix-blend-screen" />
+                <motion.div 
+                  animate={{ 
+                    scale: [1, 1.2, 1],
+                    opacity: [0.3, 0.5, 0.3],
+                    x: [0, 20, 0]
+                  }}
+                  transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+                  className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px] mix-blend-screen" 
+                />
+                <motion.div 
+                  animate={{ 
+                    scale: [1, 1.1, 1],
+                    opacity: [0.2, 0.4, 0.2],
+                    x: [0, -30, 0]
+                  }}
+                  transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+                  className="absolute bottom-[-10%] left-[-20%] w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[120px] mix-blend-screen" 
+                />
               </div>
-              <div className="flex-1 flex flex-col items-center justify-center p-8 animate-fade-in select-none">
-                <div className="relative mb-8">
-                  <div className="absolute inset-0 bg-accent/20 blur-3xl rounded-full animate-pulse" />
-                  <div className="relative w-16 h-16 bg-surface/40 backdrop-blur-2xl rounded-2xl border border-white/10 flex items-center justify-center shadow-2xl">
-                    <Logo className="w-8 h-8 text-accent opacity-80" glow />
+              
+              <div className="flex-1 flex flex-col items-center justify-center p-8 select-none z-10">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+                  className="relative mb-8"
+                >
+                  <motion.div 
+                    animate={{ opacity: [0.5, 0.8, 0.5], scale: [1, 1.05, 1] }}
+                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                    className="absolute inset-0 bg-accent/20 blur-3xl rounded-full" 
+                  />
+                  <div className="relative w-20 h-20 bg-surface/40 backdrop-blur-2xl rounded-2xl border border-white/10 flex items-center justify-center shadow-2xl shadow-accent/10">
+                    <Logo className="w-10 h-10 text-accent opacity-90" glow />
                   </div>
-                </div>
-                <div className="text-center space-y-2">
-                  <h1 className="text-xl font-bold text-text-primary tracking-tight opacity-90">
+                </motion.div>
+                <div className="text-center space-y-3">
+                  <motion.h1 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1, duration: 0.5 }}
+                    className="text-2xl font-bold text-text-primary tracking-tight"
+                  >
                     Adnify Agent
-                  </h1>
-                  <p className="text-sm text-text-muted max-w-[280px] leading-relaxed opacity-60">
+                  </motion.h1>
+                  <motion.p 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2, duration: 0.5 }}
+                    className="text-sm text-text-muted max-w-[280px] leading-relaxed opacity-60"
+                  >
                     {language === 'zh' ? '今天我能帮你构建什么？' : 'What can I help you build today?'}
-                  </p>
+                  </motion.p>
                 </div>
               </div>
             </div>

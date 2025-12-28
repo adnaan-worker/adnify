@@ -355,7 +355,9 @@ export function handleLLMDone(
   if (finalContent) {
     const xmlToolCalls = parseXMLToolCalls(finalContent)
     if (xmlToolCalls.length > 0) {
-      finalContent = removeXMLToolCallsFromContent(finalContent)
+      // 清理 XML 工具调用标记
+      const cleanedContent = removeXMLToolCallsFromContent(finalContent)
+      finalContent = cleanedContent
 
       const store = useAgentStore.getState()
       for (const tc of xmlToolCalls) {
@@ -370,6 +372,23 @@ export function handleLLMDone(
               name: tc.name,
               arguments: tc.arguments,
             })
+          }
+        }
+      }
+
+      // 同步更新 UI 中的消息内容（移除 XML 标记）
+      if (currentAssistantId && cleanedContent !== state.content) {
+        const thread = store.getCurrentThread()
+        if (thread) {
+          const msg = thread.messages.find(m => m.id === currentAssistantId)
+          if (msg && msg.role === 'assistant') {
+            const newParts = (msg as any).parts.map((p: any) =>
+              p.type === 'text' ? { ...p, content: cleanedContent } : p
+            )
+            store.updateMessage(currentAssistantId, {
+              content: cleanedContent,
+              parts: newParts,
+            } as any)
           }
         }
       }

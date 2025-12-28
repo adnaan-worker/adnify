@@ -1,14 +1,20 @@
+/**
+ * 终端面板组件
+ * 
+ * 职责：
+ * - 纯 UI 渲染
+ * - 订阅 terminalManager 状态
+ * - 处理用户交互，委托给 terminalManager
+ */
+
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Terminal as XTerminal } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
-import { WebLinksAddon } from '@xterm/addon-web-links'
-import { WebglAddon } from '@xterm/addon-webgl'
 import { X, Plus, Trash2, ChevronUp, ChevronDown, Terminal as TerminalIcon, Sparkles, Play, SplitSquareHorizontal, LayoutTemplate } from 'lucide-react'
 import { useStore, useModeStore } from '@store'
-import { getEditorConfig } from '@renderer/config/editorConfig'
 import { themes } from '../editor/ThemeManager'
 import { Button, Select } from '../ui'
+import { terminalManager, TerminalManagerState } from '@/renderer/services/TerminalManager'
 
+// xterm 样式
 const XTERM_STYLE = `
 .xterm { font-feature-settings: "liga" 0; position: relative; user-select: none; -ms-user-select: none; -webkit-user-select: none; padding: 4px; }
 .xterm.focus, .xterm:focus { outline: none; }
@@ -34,129 +40,92 @@ const XTERM_STYLE = `
 .xterm-link-layer a { cursor: pointer; color: #3b82f6; text-decoration: underline; }
 `
 
-interface TerminalSession {
-    id: string
-    name: string
-    shell: string
-    cwd: string
+// 生成终端主题
+function getTerminalTheme(themeName: string) {
+    const themeVars = themes[themeName as keyof typeof themes] || themes['adnify-dark']
+    const rgbToHex = (rgb: string) => {
+        if (!rgb) return '#000000'
+        const [r, g, b] = rgb.split(' ').map(Number)
+        return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+    }
+    return {
+        background: rgbToHex(themeVars['--surface']),
+        foreground: rgbToHex(themeVars['--text-primary']),
+        cursor: rgbToHex(themeVars['--text-secondary']),
+        selectionBackground: rgbToHex(themeVars['--accent']),
+        selectionForeground: '#ffffff',
+        black: rgbToHex(themeVars['--surface']),
+        red: '#ef4444',
+        green: '#22c55e',
+        yellow: '#eab308',
+        blue: rgbToHex(themeVars['--accent']),
+        magenta: '#a855f7',
+        cyan: '#06b6d4',
+        white: rgbToHex(themeVars['--text-primary']),
+    }
 }
 
 export default function TerminalPanel() {
     const { terminalVisible, setTerminalVisible, workspace, setInputPrompt, currentTheme, terminalLayout, setTerminalLayout } = useStore()
     const { setMode } = useModeStore()
+    
+    // UI 状态
     const [isCollapsed, setIsCollapsed] = useState(false)
     const [height, setHeight] = useState(280)
     const [isResizing, setIsResizing] = useState(false)
-
-    const isSplitView = terminalLayout === 'split'
-    const setIsSplitView = (value: boolean) => setTerminalLayout(value ? 'split' : 'tabs')
-
-    const [terminals, setTerminals] = useState<TerminalSession[]>([])
-    const [activeId, setActiveId] = useState<string | null>(null)
-    const [availableShells, setAvailableShells] = useState<{ label: string, path: string }[]>([])
+    const [availableShells, setAvailableShells] = useState<{ label: string; path: string }[]>([])
     const [showShellMenu, setShowShellMenu] = useState(false)
     const [selectedRoot, setSelectedRoot] = useState<string>('')
-
     const [scripts, setScripts] = useState<Record<string, string>>({})
     const [showScriptMenu, setShowScriptMenu] = useState(false)
 
+    // 终端状态（来自 terminalManager）
+    const [managerState, setManagerState] = useState<TerminalManagerState>(() => terminalManager.getState())
+    
+    const isSplitView = terminalLayout === 'split'
+    const containerRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+    const mountedTerminals = useRef<Set<string>>(new Set())
+
+    // 菜单引用
     const shellMenuRef = useRef<HTMLDivElement>(null)
     const shellButtonRef = useRef<HTMLButtonElement>(null)
     const scriptMenuRef = useRef<HTMLDivElement>(null)
     const scriptButtonRef = useRef<HTMLButtonElement>(null)
 
+    // ===== 订阅 terminalManager =====
+    
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (showShellMenu &&
-                shellMenuRef.current &&
-                !shellMenuRef.current.contains(event.target as Node) &&
-                shellButtonRef.current &&
-                !shellButtonRef.current.contains(event.target as Node)) {
-                setShowShellMenu(false)
-            }
-            if (showScriptMenu &&
-                scriptMenuRef.current &&
-                !scriptMenuRef.current.contains(event.target as Node) &&
-                scriptButtonRef.current &&
-                !scriptButtonRef.current.contains(event.target as Node)) {
-                setShowScriptMenu(false)
-            }
-        }
-
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside)
-        }
-    }, [showShellMenu, showScriptMenu])
-
-    const terminalRefs = useRef<Map<string, XTerminal>>(new Map())
-    const addonRefs = useRef<Map<string, FitAddon>>(new Map())
-    const containerRefs = useRef<Map<string, HTMLDivElement>>(new Map())
-    const outputBuffers = useRef<Map<string, string[]>>(new Map())
-
-    // Handle pending terminal commands from other components (e.g. Agent ToolCallCard)
-    const { pendingTerminalCommand, setPendingTerminalCommand } = useStore()
-
-    useEffect(() => {
-        if (pendingTerminalCommand && terminalVisible) {
-            // Ensure we have an active terminal
-            if (!activeId && terminals.length === 0) {
-                // Create a new terminal if none exists
-                // We'll need to wait for it to be created, so we might need a more robust way
-                // For now, let's just try to create one if we can access the create function
-                // or just rely on the user having one open.
-                // Ideally, we should trigger createTerminal here.
-            }
-
-            const targetId = activeId || (terminals.length > 0 ? terminals[0].id : null)
-
-            if (targetId) {
-                const term = terminalRefs.current.get(targetId)
-                if (term) {
-                    // If CWD is specified, we might want to cd into it first
-                    // But for now, let's just paste the command
-                    if (pendingTerminalCommand.command) {
-                        term.input(pendingTerminalCommand.command)
-                        // If autoRun is true, we could append \r, but let's let the user press enter for safety
-                        // unless explicitly requested.
-                        if (pendingTerminalCommand.autoRun) {
-                            term.input('\r')
-                        }
-                    }
-
-                    // Clear the pending command
-                    setPendingTerminalCommand(null)
-
-                    // Focus the terminal
-                    term.focus()
-                }
-            }
-        }
-    }, [pendingTerminalCommand, terminalVisible, activeId, terminals, setPendingTerminalCommand])
-
-    const startResizing = useCallback((e: React.MouseEvent) => {
-        e.preventDefault()
-        setIsResizing(true)
+        return terminalManager.subscribe(setManagerState)
     }, [])
 
+    // ===== 主题同步 =====
+    
     useEffect(() => {
-        if (!isResizing) return
-        const handleMouseMove = (e: MouseEvent) => {
-            const newHeight = window.innerHeight - e.clientY - 24
-            if (newHeight > 100 && newHeight < window.innerHeight - 100) setHeight(newHeight)
-        }
-        const stopResizing = () => {
-            setIsResizing(false)
-            if (activeId) addonRefs.current.get(activeId)?.fit()
-        }
-        window.addEventListener('mousemove', handleMouseMove)
-        window.addEventListener('mouseup', stopResizing)
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove)
-            window.removeEventListener('mouseup', stopResizing)
-        }
-    }, [isResizing, activeId])
+        const theme = getTerminalTheme(currentTheme)
+        terminalManager.setTheme(theme)
+    }, [currentTheme])
 
+    // ===== 挂载 xterm 到容器 =====
+    
+    useEffect(() => {
+        for (const terminal of managerState.terminals) {
+            const container = containerRefs.current.get(terminal.id)
+            if (container && !mountedTerminals.current.has(terminal.id)) {
+                terminalManager.mountTerminal(terminal.id, container)
+                mountedTerminals.current.add(terminal.id)
+            }
+        }
+        
+        // 清理已删除的终端
+        for (const id of mountedTerminals.current) {
+            if (!managerState.terminals.find(t => t.id === id)) {
+                mountedTerminals.current.delete(id)
+            }
+        }
+    }, [managerState.terminals])
+
+    // ===== 初始化 =====
+    
     useEffect(() => {
         const loadShells = async () => {
             try {
@@ -184,182 +153,106 @@ export default function TerminalPanel() {
                     const pkg = JSON.parse(content)
                     if (pkg.scripts) setScripts(pkg.scripts)
                 }
-            } catch (e) {
+            } catch {
                 setScripts({})
             }
         }
         loadScripts()
     }, [selectedRoot])
 
+    // 自动创建第一个终端
     useEffect(() => {
-        if (terminalVisible && terminals.length === 0 && availableShells.length > 0) {
+        if (terminalVisible && managerState.terminals.length === 0 && availableShells.length > 0) {
             createTerminal()
         }
-    }, [terminalVisible, availableShells.length])
+    }, [terminalVisible, managerState.terminals.length, availableShells.length])
 
+    // ===== 窗口大小调整 =====
+    
     useEffect(() => {
-        if (!terminalVisible || isCollapsed || !activeId) return
+        if (!terminalVisible || isCollapsed || !managerState.activeId) return
+        
         const handleResize = () => {
-            const targets = isSplitView ? terminals : terminals.filter(t => t.id === activeId)
-            targets.forEach(t => {
-                const addon = addonRefs.current.get(t.id)
-                if (addon) {
-                    try {
-                        addon.fit()
-                        const dims = addon.proposeDimensions()
-                        if (dims && dims.cols > 0 && dims.rows > 0) {
-                            window.electronAPI.resizeTerminal(t.id, dims.cols, dims.rows)
-                        }
-                    } catch { }
-                }
-            })
+            const targets = isSplitView ? managerState.terminals : managerState.terminals.filter(t => t.id === managerState.activeId)
+            targets.forEach(t => terminalManager.fitTerminal(t.id))
         }
+        
         window.addEventListener('resize', handleResize)
         setTimeout(handleResize, 100)
         return () => window.removeEventListener('resize', handleResize)
-    }, [terminalVisible, isCollapsed, activeId, height, isSplitView, terminals.length])
+    }, [terminalVisible, isCollapsed, managerState.activeId, height, isSplitView, managerState.terminals.length])
+
+    // ===== 拖拽调整高度 =====
+    
+    const startResizing = useCallback((e: React.MouseEvent) => {
+        e.preventDefault()
+        setIsResizing(true)
+    }, [])
 
     useEffect(() => {
-        const unsubscribe = window.electronAPI.onTerminalData(({ id, data }: { id: string, data: string }) => {
-            const targetId = id || activeId
-            if (!targetId) return
-            const term = terminalRefs.current.get(targetId)
-            if (term) {
-                term.write(data)
-                if (!outputBuffers.current.has(targetId)) outputBuffers.current.set(targetId, [])
-                const buffer = outputBuffers.current.get(targetId)!
-                buffer.push(data)
-                if (buffer.length > 1000) buffer.shift()
+        if (!isResizing) return
+        
+        const handleMouseMove = (e: MouseEvent) => {
+            const newHeight = window.innerHeight - e.clientY - 24
+            if (newHeight > 100 && newHeight < window.innerHeight - 100) {
+                setHeight(newHeight)
             }
-        })
-        return unsubscribe
-    }, [activeId])
-
-    const getTerminalTheme = (themeName: string) => {
-        const themeVars = themes[themeName as keyof typeof themes] || themes['adnify-dark']
-        const rgbToHex = (rgb: string) => {
-            if (!rgb) return '#000000'
-            const [r, g, b] = rgb.split(' ').map(Number)
-            return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
         }
-        return {
-            background: rgbToHex(themeVars['--surface']),
-            foreground: rgbToHex(themeVars['--text-primary']),
-            cursor: rgbToHex(themeVars['--text-secondary']),
-            selectionBackground: rgbToHex(themeVars['--accent']),
-            selectionForeground: '#ffffff',
-            black: rgbToHex(themeVars['--surface']),
-            red: '#ef4444',
-            green: '#22c55e',
-            yellow: '#eab308',
-            blue: rgbToHex(themeVars['--accent']),
-            magenta: '#a855f7',
-            cyan: '#06b6d4',
-            white: rgbToHex(themeVars['--text-primary']),
+        
+        const stopResizing = () => {
+            setIsResizing(false)
+            if (managerState.activeId) {
+                terminalManager.fitTerminal(managerState.activeId)
+            }
         }
-    }
+        
+        window.addEventListener('mousemove', handleMouseMove)
+        window.addEventListener('mouseup', stopResizing)
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove)
+            window.removeEventListener('mouseup', stopResizing)
+        }
+    }, [isResizing, managerState.activeId])
 
+    // ===== 菜单点击外部关闭 =====
+    
     useEffect(() => {
-        const newTheme = getTerminalTheme(currentTheme)
-        terminalRefs.current.forEach(term => term.options.theme = newTheme)
-    }, [currentTheme])
+        const handleClickOutside = (event: MouseEvent) => {
+            if (showShellMenu && shellMenuRef.current && !shellMenuRef.current.contains(event.target as Node) && shellButtonRef.current && !shellButtonRef.current.contains(event.target as Node)) {
+                setShowShellMenu(false)
+            }
+            if (showScriptMenu && scriptMenuRef.current && !scriptMenuRef.current.contains(event.target as Node) && scriptButtonRef.current && !scriptButtonRef.current.contains(event.target as Node)) {
+                setShowScriptMenu(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [showShellMenu, showScriptMenu])
 
+    // ===== 操作函数 =====
+    
     const createTerminal = async (shellPath?: string, shellName?: string) => {
-        const id = crypto.randomUUID()
-        const name = shellName || availableShells[0]?.label || 'Terminal'
         const cwd = selectedRoot || workspace?.roots?.[0] || ''
-
-        setTerminals(prev => [...prev, { id, name, shell: shellPath || '', cwd }])
-        setActiveId(id)
+        await terminalManager.createTerminal({
+            name: shellName || availableShells[0]?.label || 'Terminal',
+            cwd,
+            shell: shellPath,
+        })
         setShowShellMenu(false)
-
-        setTimeout(async () => {
-            const container = containerRefs.current.get(id)
-            if (!container) return
-
-            const termConfig = getEditorConfig().terminal
-            const term = new XTerminal({
-                cursorBlink: termConfig.cursorBlink,
-                fontFamily: termConfig.fontFamily,
-                fontSize: termConfig.fontSize,
-                lineHeight: termConfig.lineHeight,
-                scrollback: termConfig.scrollback,
-                allowProposedApi: true,
-                theme: getTerminalTheme(currentTheme)
-            })
-
-            const fitAddon = new FitAddon()
-            term.loadAddon(fitAddon)
-            term.loadAddon(new WebLinksAddon())
-            term.open(container)
-
-            try {
-                const webglAddon = new WebglAddon()
-                term.loadAddon(webglAddon)
-                webglAddon.onContextLoss(() => webglAddon.dispose())
-            } catch { }
-
-            term.onData(data => window.electronAPI.writeTerminal(id, data))
-            terminalRefs.current.set(id, term)
-            addonRefs.current.set(id, fitAddon)
-
-            try { fitAddon.fit() } catch { }
-            await window.electronAPI.createTerminal({ id, cwd, shell: shellPath })
-            const dims = fitAddon.proposeDimensions()
-            if (dims && dims.cols > 0 && dims.rows > 0) window.electronAPI.resizeTerminal(id, dims.cols, dims.rows)
-
-            term.registerLinkProvider({
-                provideLinks(bufferLineNumber, callback) {
-                    const line = term.buffer.active.getLine(bufferLineNumber - 1)
-                    if (!line) return callback([])
-                    const text = line.translateToString(true)
-                    const regex = /(?:^|\s|")((?:[a-zA-Z]:[\\/]|[.\/])[\w\-.\\/ ]+\.[a-zA-Z0-9]+)(?::(\d+))?(?::(\d+))?/g
-                    let match
-                    const links = []
-                    while ((match = regex.exec(text)) !== null) {
-                        const [fullMatch, filePath, lineNum, colNum] = match
-                        const startIndex = match.index + fullMatch.indexOf(filePath)
-                        links.push({
-                            range: { start: { x: startIndex + 1, y: bufferLineNumber }, end: { x: startIndex + filePath.length + 1, y: bufferLineNumber } },
-                            text: fullMatch,
-                            activate: async () => {
-                                const fullPath = filePath.startsWith('.') ? `${cwd}/${filePath}`.replace(/\\/g, '/') : filePath
-                                const content = await window.electronAPI.readFile(fullPath)
-                                if (content !== null) {
-                                    useStore.getState().openFile(fullPath, content)
-                                    if (lineNum) setTimeout(() => window.dispatchEvent(new CustomEvent('editor:goto-line', { detail: { line: parseInt(lineNum), column: colNum ? parseInt(colNum) : 1 } })), 100)
-                                }
-                            }
-                        })
-                    }
-                    callback(links)
-                }
-            })
-        }, 50)
     }
 
     const closeTerminal = (id: string, e?: React.MouseEvent) => {
         e?.stopPropagation()
-        terminalRefs.current.get(id)?.dispose()
-        terminalRefs.current.delete(id)
-        addonRefs.current.delete(id)
-        containerRefs.current.delete(id)
-        outputBuffers.current.delete(id)
-        window.electronAPI.killTerminal(id)
-        setTerminals(prev => {
-            const next = prev.filter(t => t.id !== id)
-            if (activeId === id) setActiveId(next.length > 0 ? next[next.length - 1].id : null)
-            if (next.length <= 1) setIsSplitView(false)
-            return next
-        })
+        terminalManager.closeTerminal(id)
+        if (managerState.terminals.length <= 2) {
+            setTerminalLayout('tabs')
+        }
     }
 
     const handleFixWithAI = () => {
-        if (!activeId) return
-        const term = terminalRefs.current.get(activeId)
-        if (!term) return
-        const selectedText = term.getSelection()?.trim()
-        const content = selectedText || (outputBuffers.current.get(activeId) || []).join('').replace(/\u001b\[[0-9;]*m/g, '').slice(-2000).trim()
+        if (!managerState.activeId) return
+        const buffer = terminalManager.getOutputBuffer(managerState.activeId)
+        const content = buffer.join('').replace(/\u001b\[[0-9;]*m/g, '').slice(-2000).trim()
         if (!content) return
         setMode('chat')
         setInputPrompt(`I'm getting this error in the terminal. Please analyze it and fix the code:\n\n\`\`\`\n${content}\n\`\`\``)
@@ -368,38 +261,49 @@ export default function TerminalPanel() {
     const runScript = async (name: string) => {
         setShowScriptMenu(false)
         if (!terminalVisible) setTerminalVisible(true)
-        if (!activeId && terminals.length === 0) await createTerminal()
-        const targetId = activeId || terminals[terminals.length - 1]?.id
+        
+        let targetId = managerState.activeId
+        if (!targetId && managerState.terminals.length === 0) {
+            targetId = await createTerminal() as unknown as string
+        }
+        targetId = targetId || managerState.terminals[managerState.terminals.length - 1]?.id
+        
         if (targetId) {
-            terminalRefs.current.get(targetId)?.focus()
-            window.electronAPI.writeTerminal(targetId, `npm run ${name}\r`)
+            terminalManager.focusTerminal(targetId)
+            terminalManager.writeToTerminal(targetId, `npm run ${name}\r`)
         }
     }
 
+    // ===== 渲染 =====
+    
     if (!terminalVisible) return null
+
+    const { terminals, activeId } = managerState
 
     return (
         <>
             <style>{XTERM_STYLE}</style>
             <div className="bg-transparent flex flex-col transition-none relative z-10" style={{ height: isCollapsed ? 40 : height }}>
+                {/* 拖拽调整高度的区域 */}
                 <div className="absolute top-0 left-0 right-0 h-1 cursor-row-resize z-50 hover:bg-accent/50 transition-colors" onMouseDown={startResizing} />
+                
+                {/* 标题栏 */}
                 <div className="h-10 min-h-[40px] flex items-center justify-between border-b border-border-subtle bg-background/40 backdrop-blur-md select-none relative z-20">
-                    {/* Left Section: Icon & Tabs */}
+                    {/* 左侧：图标和标签页 */}
                     <div className="flex items-center flex-1 min-w-0 overflow-hidden h-full">
                         <div className="flex-shrink-0 flex items-center justify-center px-3 cursor-pointer hover:text-text-primary text-text-muted transition-colors h-full" onClick={() => setIsCollapsed(!isCollapsed)}>
                             <TerminalIcon className="w-3.5 h-3.5" />
                         </div>
                         <div className="flex items-center overflow-x-auto no-scrollbar flex-1 h-full pl-1">
                             {terminals.map(term => (
-                                <div key={term.id} onClick={() => setActiveId(term.id)} className={`relative flex items-center gap-2 px-3 h-full my-auto text-xs cursor-pointer min-w-[120px] max-w-[200px] flex-shrink-0 group transition-all mr-1 border-r border-white/5 ${activeId === term.id ? 'bg-surface/50 text-text-primary' : 'text-text-muted hover:bg-surface-hover/50 hover:text-text-secondary'}`}>
+                                <div
+                                    key={term.id}
+                                    onClick={() => terminalManager.setActiveTerminal(term.id)}
+                                    className={`relative flex items-center gap-2 px-3 h-full my-auto text-xs cursor-pointer min-w-[120px] max-w-[200px] flex-shrink-0 group transition-all mr-1 border-r border-white/5 ${activeId === term.id ? 'bg-surface/50 text-text-primary' : 'text-text-muted hover:bg-surface-hover/50 hover:text-text-secondary'}`}
+                                >
                                     <span className="truncate flex-1">{term.name}</span>
                                     {activeId === term.id && <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-accent shadow-[0_0_8px_rgba(139,92,246,0.6)]" />}
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={(e) => closeTerminal(term.id, e)}
-                                        className="h-4 w-4 opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-400 hover:bg-white/10"
-                                    >
+                                    <Button variant="ghost" size="icon" onClick={(e) => closeTerminal(term.id, e)} className="h-4 w-4 opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-400 hover:bg-white/10">
                                         <X className="w-3 h-3" />
                                     </Button>
                                 </div>
@@ -407,26 +311,15 @@ export default function TerminalPanel() {
                         </div>
                     </div>
 
-                    {/* Middle Section: Root Selector & New Terminal */}
+                    {/* 中间：工作区选择和新建终端 */}
                     <div className="relative flex-shrink-0 h-full flex items-center px-1 gap-1 border-l border-white/5 mx-1">
                         {workspace && workspace.roots.length > 1 && (
                             <div className="w-[120px]">
-                                <Select
-                                    value={selectedRoot}
-                                    onChange={setSelectedRoot}
-                                    options={workspace.roots.map(root => ({ value: root, label: root.split(/[\\/]/).pop() || root }))}
-                                    className="h-7 text-xs border-transparent bg-transparent hover:bg-white/5"
-                                />
+                                <Select value={selectedRoot} onChange={setSelectedRoot} options={workspace.roots.map(root => ({ value: root, label: root.split(/[\\/]/).pop() || root }))} className="h-7 text-xs border-transparent bg-transparent hover:bg-white/5" />
                             </div>
                         )}
                         <div className="relative">
-                            <Button
-                                ref={shellButtonRef}
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setShowShellMenu(!showShellMenu)}
-                                className="h-7 w-7"
-                            >
+                            <Button ref={shellButtonRef} variant="ghost" size="icon" onClick={() => setShowShellMenu(!showShellMenu)} className="h-7 w-7">
                                 <Plus className="w-3.5 h-3.5" />
                             </Button>
                             {showShellMenu && (
@@ -441,17 +334,10 @@ export default function TerminalPanel() {
                         </div>
                     </div>
 
-                    {/* Right Section: Actions */}
+                    {/* 右侧：操作按钮 */}
                     <div className="flex items-center gap-1 px-2 flex-shrink-0">
                         <div className="relative">
-                            <Button
-                                ref={scriptButtonRef}
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setShowScriptMenu(!showScriptMenu)}
-                                className="h-7 px-2 gap-1.5 text-xs font-normal"
-                                title="Run Task"
-                            >
+                            <Button ref={scriptButtonRef} variant="ghost" size="sm" onClick={() => setShowScriptMenu(!showScriptMenu)} className="h-7 px-2 gap-1.5 text-xs font-normal" title="Run Task">
                                 <Play className="w-3.5 h-3.5" />
                                 Run
                             </Button>
@@ -466,30 +352,33 @@ export default function TerminalPanel() {
                                 </div>
                             )}
                         </div>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleFixWithAI}
-                            className="h-7 px-2 gap-1.5 text-xs font-normal mr-2"
-                            title="Fix with AI"
-                        >
+                        <Button variant="ghost" size="sm" onClick={handleFixWithAI} className="h-7 px-2 gap-1.5 text-xs font-normal mr-2" title="Fix with AI">
                             <Sparkles className="w-3.5 h-3.5" />
                             Fix
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => { createTerminal(); setIsSplitView(true); }} className="h-7 w-7" title="Split Terminal"><SplitSquareHorizontal className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => setIsSplitView(!isSplitView)} className={`h-7 w-7 ${isSplitView ? 'text-accent' : ''}`} title="Toggle Split View"><LayoutTemplate className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => activeId && terminalRefs.current.get(activeId)?.clear()} className="h-7 w-7" title="Clear"><Trash2 className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => { createTerminal(); setTerminalLayout('split'); }} className="h-7 w-7" title="Split Terminal"><SplitSquareHorizontal className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => setTerminalLayout(isSplitView ? 'tabs' : 'split')} className={`h-7 w-7 ${isSplitView ? 'text-accent' : ''}`} title="Toggle Split View"><LayoutTemplate className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => activeId && terminalManager.getXterm(activeId)?.clear()} className="h-7 w-7" title="Clear"><Trash2 className="w-3.5 h-3.5" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => setIsCollapsed(!isCollapsed)} className="h-7 w-7">{isCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}</Button>
                         <Button variant="ghost" size="icon" onClick={() => setTerminalVisible(false)} className="h-7 w-7" title="Close"><X className="w-3.5 h-3.5" /></Button>
                     </div>
                 </div>
+
+                {/* 终端内容区域 */}
                 <div className={`flex-1 p-0 min-h-0 relative bg-surface/30 backdrop-blur-sm ${isCollapsed ? 'hidden' : 'block'}`}>
                     <div className={`h-full w-full ${isSplitView ? 'grid grid-cols-2 gap-1' : ''}`}>
                         {terminals.map(term => (
-                            <div key={term.id} ref={el => { if (el) containerRefs.current.set(term.id, el) }} className={`h-full w-full pl-2 pt-1 relative group/term ${isSplitView ? 'border border-border-subtle' : (activeId === term.id ? 'block' : 'hidden')} ${isSplitView && activeId === term.id ? 'ring-1 ring-accent' : ''}`} onClick={() => setActiveId(term.id)}>
+                            <div
+                                key={term.id}
+                                ref={el => { if (el) containerRefs.current.set(term.id, el) }}
+                                className={`h-full w-full pl-2 pt-1 relative group/term ${isSplitView ? 'border border-border-subtle' : (activeId === term.id ? 'block' : 'hidden')} ${isSplitView && activeId === term.id ? 'ring-1 ring-accent' : ''}`}
+                                onClick={() => terminalManager.setActiveTerminal(term.id)}
+                            >
                                 {isSplitView && (
                                     <div className="absolute top-0 right-0 p-1 z-10 opacity-0 group-hover/term:opacity-100 transition-opacity">
-                                        <Button variant="ghost" size="icon" onClick={(e) => closeTerminal(term.id, e)} className="h-6 w-6 bg-background/80 hover:bg-red-500 hover:text-white"><X className="w-3 h-3" /></Button>
+                                        <Button variant="ghost" size="icon" onClick={(e) => closeTerminal(term.id, e)} className="h-6 w-6 bg-background/80 hover:bg-red-500 hover:text-white">
+                                            <X className="w-3 h-3" />
+                                        </Button>
                                     </div>
                                 )}
                             </div>

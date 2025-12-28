@@ -360,6 +360,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createTerminal: (options: { id: string; cwd?: string; shell?: string }) =>
     ipcRenderer.invoke('terminal:interactive', options),
   writeTerminal: (id: string, data: string) => ipcRenderer.invoke('terminal:input', { id, data }),
+  executeBackground: (params: { command: string; cwd?: string; timeout?: number; shell?: string }) =>
+    ipcRenderer.invoke('shell:executeBackground', params),
+  onShellOutput: (callback: (event: { command: string; type: 'stdout' | 'stderr'; data: string; timestamp: number }) => void) => {
+    const handler = (_: IpcRendererEvent, event: { command: string; type: 'stdout' | 'stderr'; data: string; timestamp: number }) => callback(event)
+    ipcRenderer.on('shell:output', handler)
+    return () => ipcRenderer.removeListener('shell:output', handler)
+  },
   resizeTerminal: (id: string, cols: number, rows: number) =>
     ipcRenderer.invoke('terminal:resize', { id, cols, rows }),
   killTerminal: (id?: string) => ipcRenderer.send('terminal:kill', id),

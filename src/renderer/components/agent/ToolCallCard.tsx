@@ -12,13 +12,13 @@ import { useStore } from '@store'
 import { t } from '@renderer/i18n'
 import { ToolCall } from '@renderer/agent/types'
 import { JsonHighlight } from '@utils/jsonHighlight'
+import { terminalManager } from '@/renderer/services/TerminalManager'
 
 interface ToolCallCardProps {
   toolCall: ToolCall
   isAwaitingApproval?: boolean
   onApprove?: () => void
   onReject?: () => void
-  onApproveAll?: () => void
 }
 
 
@@ -43,10 +43,9 @@ const ToolCallCard = memo(function ToolCallCard({
   isAwaitingApproval,
   onApprove,
   onReject,
-  onApproveAll,
 }: ToolCallCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const { language, setTerminalVisible, setPendingTerminalCommand } = useStore()
+  const { language, setTerminalVisible } = useStore()
 
   const args = toolCall.arguments as Record<string, unknown>
   const isStreaming = args._streaming === true
@@ -111,15 +110,18 @@ const ToolCallCard = memo(function ToolCallCard({
             </span>
             {isSuccess && (
               <button
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation()
-                  const cwd = (toolCall as any).meta?.cwd || args.cwd
-                  setPendingTerminalCommand({
-                    command: cmd,
-                    cwd: cwd,
-                    autoRun: false
-                  })
+                  const cwd = (toolCall as any).meta?.cwd || args.cwd as string || ''
                   setTerminalVisible(true)
+                  // 创建新终端并写入命令（不自动执行）
+                  const state = terminalManager.getState()
+                  let terminalId = state.activeId
+                  if (!terminalId) {
+                    terminalId = await terminalManager.createTerminal({ cwd, name: 'Terminal' })
+                  }
+                  terminalManager.writeToTerminal(terminalId, cmd)
+                  terminalManager.focusTerminal(terminalId)
                 }}
                 className="text-[10px] px-1.5 py-0.5 bg-white/5 hover:bg-white/10 rounded text-text-muted hover:text-accent transition-colors"
               >
@@ -285,14 +287,6 @@ const ToolCallCard = memo(function ToolCallCard({
           >
             {t('toolReject', language)}
           </button>
-          {onApproveAll && (
-            <button
-              onClick={onApproveAll}
-              className="px-3 py-1 text-[11px] font-medium text-text-muted hover:text-accent hover:bg-accent/10 rounded transition-colors"
-            >
-              {t('toolApproveAll', language)}
-            </button>
-          )}
           <button
             onClick={onApprove}
             className="px-3 py-1 text-[11px] font-medium bg-accent text-white hover:bg-accent-hover rounded transition-colors shadow-sm shadow-accent/20"

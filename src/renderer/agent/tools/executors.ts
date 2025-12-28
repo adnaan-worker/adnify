@@ -294,23 +294,43 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         const cwd = args.cwd ? resolvePath(args.cwd, ctx.workspacePath, true) : ctx.workspacePath
         const timeout = ((args.timeout as number) || 30) * 1000
 
-        const cmdStr = command.trim()
-        const firstSpace = cmdStr.indexOf(' ')
-        const cmdName = firstSpace > -1 ? cmdStr.substring(0, firstSpace) : cmdStr
-        const argsStr = firstSpace > -1 ? cmdStr.substring(firstSpace + 1) : ''
-
-        const cmdArgs: string[] = []
-        const regex = /[^\s"]+|"([^"]*)"/gi
-        let match
-        while ((match = regex.exec(argsStr)) !== null) {
-            cmdArgs.push(match[1] ?? match[0])
-        }
-
-        const result = await window.electronAPI.executeSecureCommand({
-            command: cmdName, args: cmdArgs, cwd: cwd || undefined, timeout, requireConfirm: false
+        // 使用后台执行（不依赖 PTY，更可靠）
+        const result = await window.electronAPI.executeBackground({
+            command,
+            cwd: cwd || ctx.workspacePath || undefined,
+            timeout,
         })
 
-        return { success: true, result: result.output || (result.success ? 'Command executed' : 'Command failed'), meta: { command, cwd, exitCode: result.success ? 0 : 1 }, error: result.error }
+        // 构建结果信息
+        const output = result.output || ''
+        const hasOutput = output.trim().length > 0
+        
+        let resultText = output
+        if (result.error) {
+            resultText = hasOutput 
+                ? `${output}\n\n[Note: ${result.error}]`
+                : result.error
+        } else if (!hasOutput) {
+            resultText = result.exitCode === 0 ? 'Command executed successfully (no output)' : `Command exited with code ${result.exitCode} (no output)`
+        }
+
+        // 判断成功：
+        // 1. 退出码为 0 一定是成功
+        // 2. 有正常输出且没有明确错误也视为成功（让 AI 判断内容）
+        // 3. 超时或执行错误才是失败
+        const isSuccess = result.exitCode === 0 || (hasOutput && !result.error)
+
+        return {
+            success: isSuccess,
+            result: resultText,
+            meta: { 
+                command, 
+                cwd, 
+                exitCode: result.exitCode ?? (result.success ? 0 : 1),
+                timedOut: result.error?.includes('timed out')
+            },
+            error: undefined // 不设置 error，让 AI 从 result 中判断
+        }
     },
 
     async get_lint_errors(args, ctx) {

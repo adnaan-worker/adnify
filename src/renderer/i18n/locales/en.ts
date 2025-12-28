@@ -259,7 +259,6 @@ export const en = {
   'toolStreaming': 'Streaming',
   'toolWaitingApproval': 'Waiting for approval',
   'toolApprove': 'Approve',
-  'toolApproveAll': 'Approve All',
   'toolReject': 'Reject',
   'toolCopyResult': 'Copy result',
   'toolTruncated': '... (truncated)',

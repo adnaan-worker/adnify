@@ -205,10 +205,7 @@ class AgentServiceClass {
     toolExecutionService.reject()
   }
 
-  approveAndEnableAuto(): void {
-    const streamState = useAgentStore.getState().streamState
-    toolExecutionService.approveAndEnableAuto(streamState.currentToolCall || undefined)
-  }
+
 
   abort(): void {
     if (this.abortController) {
@@ -277,18 +274,8 @@ class AgentServiceClass {
         break
       }
 
-      if (this.currentAssistantId && result.content !== undefined) {
-        const currentMsg = store.getMessages().find(m => m.id === this.currentAssistantId)
-        if (currentMsg && currentMsg.role === 'assistant' && currentMsg.content !== result.content) {
-          const newParts = currentMsg.parts.map(p =>
-            p.type === 'text' ? { ...p, content: result.content! } : p
-          )
-          store.updateMessage(this.currentAssistantId, {
-            content: result.content,
-            parts: newParts
-          })
-        }
-      }
+      // 注意：消息内容的更新已在 handleLLMDone 中处理（包括 XML 工具调用清理）
+      // 这里不再重复更新，避免内容不一致
 
       if (!result.toolCalls || result.toolCalls.length === 0) {
         // 只有在 plan 模式下才提醒更新 plan

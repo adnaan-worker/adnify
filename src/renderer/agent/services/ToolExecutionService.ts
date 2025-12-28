@@ -268,19 +268,7 @@ export class ToolExecutionService {
     }
   }
 
-  /**
-   * 批准并启用自动批准
-   */
-  approveAndEnableAuto(currentToolCall?: { name: string }): void {
-    if (currentToolCall) {
-      const approvalType = getToolApprovalType(currentToolCall.name)
-      if (approvalType) {
-        useStore.getState().setAutoApprove({ [approvalType]: true })
-        logger.agent.info(`[ToolExecutionService] Auto-approve enabled for type: ${approvalType}`)
-      }
-    }
-    this.approve()
-  }
+
 }
 
 // 单例导出

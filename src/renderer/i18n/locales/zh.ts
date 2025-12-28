@@ -259,7 +259,6 @@ export const zh = {
   'toolStreaming': '流式传输中',
   'toolWaitingApproval': '等待确认',
   'toolApprove': '批准',
-  'toolApproveAll': '批准所有',
   'toolReject': '拒绝',
   'toolCopyResult': '复制结果',
   'toolTruncated': '... (已截断)',

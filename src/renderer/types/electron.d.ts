@@ -229,13 +229,22 @@ export interface ElectronAPI {
   onLLMError: (callback: (error: LLMError) => void) => () => void
   onLLMDone: (callback: (result: LLMResult) => void) => () => void
 
-  // Interactive Terminal (安全 - 可控的交互终端)
+  // Interactive Terminal (用户交互终端)
   createTerminal: (options: { id: string; cwd?: string; shell?: string }) => Promise<boolean>
   writeTerminal: (id: string, data: string) => Promise<void>
   resizeTerminal: (id: string, cols: number, rows: number) => Promise<void>
   killTerminal: (id?: string) => void
   getAvailableShells: () => Promise<{ label: string; path: string }[]>
   onTerminalData: (callback: (event: { id: string; data: string }) => void) => () => void
+
+  // 后台命令执行（Agent 专用）
+  executeBackground: (params: { command: string; cwd?: string; timeout?: number; shell?: string }) => Promise<{
+    success: boolean
+    output: string
+    exitCode: number
+    error?: string
+  }>
+  onShellOutput: (callback: (event: { command: string; type: 'stdout' | 'stderr'; data: string; timestamp: number }) => void) => () => void
 
   // ✅ Secure Execution - 新的安全命令执行接口
   executeSecureCommand: (request: SecureCommandRequest) => Promise<{

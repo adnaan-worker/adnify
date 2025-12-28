@@ -550,6 +550,127 @@ export function registerSecureTerminalHandlers(
   })
 
   /**
+   * 后台执行命令（Agent 专用）
+   * 使用 child_process.spawn，不依赖 PTY
+   * 实时推送输出到前端，精确捕获 exit code
+   */
+  ipcMain.handle('shell:executeBackground', async (
+    _,
+    { command, cwd, timeout = 30000, shell: customShell }: { 
+      command: string
+      cwd?: string
+      timeout?: number
+      shell?: string 
+    }
+  ): Promise<{ success: boolean; output: string; exitCode: number; error?: string }> => {
+    const mainWindow = getMainWindow()
+    const workspace = getWorkspace()
+    const workingDir = cwd || workspace?.roots[0] || process.cwd()
+    
+    // 验证工作目录
+    if (workspace && !securityManager.validateWorkspacePath(workingDir, workspace.roots)) {
+      return { success: false, output: '', exitCode: 1, error: 'Working directory outside workspace' }
+    }
+    
+    return new Promise((resolve) => {
+      const isWindows = process.platform === 'win32'
+      const shell = customShell || (isWindows ? 'powershell.exe' : '/bin/bash')
+      const shellArgs = isWindows 
+        ? ['-NoProfile', '-NoLogo', '-Command', command]
+        : ['-c', command]
+      
+      logger.security.info(`[Shell] Executing: ${command} in ${workingDir}`)
+      
+      const child = spawn(shell, shellArgs, {
+        cwd: workingDir,
+        env: { ...process.env, TERM: 'dumb' }, // 禁用颜色输出
+        windowsHide: true,
+      })
+      
+      let stdout = ''
+      let stderr = ''
+      let timedOut = false
+      
+      // 超时处理
+      const timeoutId = setTimeout(() => {
+        timedOut = true
+        child.kill('SIGTERM')
+        // Windows 上 SIGTERM 可能不够，延迟后强制 kill
+        setTimeout(() => {
+          if (!child.killed) {
+            child.kill('SIGKILL')
+          }
+        }, 1000)
+      }, timeout)
+      
+      // 实时推送输出
+      child.stdout?.on('data', (data: Buffer) => {
+        const text = data.toString()
+        stdout += text
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('shell:output', { 
+            command, 
+            type: 'stdout', 
+            data: text,
+            timestamp: Date.now()
+          })
+        }
+      })
+      
+      child.stderr?.on('data', (data: Buffer) => {
+        const text = data.toString()
+        stderr += text
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('shell:output', { 
+            command, 
+            type: 'stderr', 
+            data: text,
+            timestamp: Date.now()
+          })
+        }
+      })
+      
+      child.on('close', (code, signal) => {
+        clearTimeout(timeoutId)
+        
+        // 清理输出（移除 ANSI 序列）
+        const cleanOutput = (stdout + (stderr ? `\n${stderr}` : ''))
+          .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+          .replace(/\r\n/g, '\n')
+          .trim()
+        
+        logger.security.info(`[Shell] Command finished: exit=${code}, signal=${signal}`)
+        
+        if (timedOut) {
+          resolve({
+            success: false,
+            output: cleanOutput || `Command timed out after ${timeout / 1000}s`,
+            exitCode: code ?? 124, // 124 是 timeout 的标准退出码
+            error: `Command timed out after ${timeout / 1000}s`
+          })
+        } else {
+          resolve({
+            success: code === 0,
+            output: cleanOutput,
+            exitCode: code ?? 0,
+          })
+        }
+      })
+      
+      child.on('error', (err) => {
+        clearTimeout(timeoutId)
+        logger.security.error(`[Shell] Command error:`, err)
+        resolve({
+          success: false,
+          output: stdout + stderr,
+          exitCode: 1,
+          error: err.message
+        })
+      })
+    })
+  })
+
+  /**
    * Resize terminal
    */
   ipcMain.handle('terminal:resize', async (_, { id, cols, rows }: { id: string; cols: number; rows: number }) => {

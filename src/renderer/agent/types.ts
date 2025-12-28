@@ -295,27 +295,6 @@ export interface StreamingEditState {
     endTime?: number
 }
 
-/** 持久化终端 */
-export interface PersistentTerminal {
-    id: string
-    name: string
-    cwd: string
-    isRunning: boolean
-    lastOutput: string
-    createdAt: number
-    output: string[]
-}
-
-/** 终端命令结果 */
-export interface TerminalCommandResult {
-    success: boolean
-    output: string
-    exitCode: number
-    duration: number
-    terminalId?: string
-    isComplete?: boolean
-}
-
 // ============================================
 // 类型守卫函数
 // ============================================

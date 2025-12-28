@@ -36,7 +36,6 @@ interface ChatMessageProps {
   onRestore?: (messageId: string) => void
   onApproveTool?: () => void
   onRejectTool?: () => void
-  onApproveAll?: () => void  // 批准全部
   onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
   pendingToolId?: string
   hasCheckpoint?: boolean
@@ -303,7 +302,6 @@ const ChatMessage = React.memo(({
   onRestore,
   onApproveTool,
   onRejectTool,
-  onApproveAll,
   onOpenDiff,
   pendingToolId,
   hasCheckpoint,
@@ -513,7 +511,6 @@ const ChatMessage = React.memo(({
                               pendingToolId={pendingToolId}
                               onApproveTool={onApproveTool}
                               onRejectTool={onRejectTool}
-                              onApproveAll={onApproveAll}
                               onOpenDiff={onOpenDiff}
                             />
                           )

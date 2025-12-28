@@ -174,10 +174,7 @@ export function useAgent() {
     AgentService.reject()
   }, [])
 
-  // 批准当前工具并开启会话级自动审批（批准全部）
-  const approveAllCurrentTool = useCallback(() => {
-    AgentService.approveAndEnableAuto()
-  }, [])
+
 
   // 获取当前等待审批的工具调用
   const pendingToolCall = useMemo((): ToolCall | undefined => {
@@ -220,7 +217,6 @@ export function useAgent() {
     // 工具审批
     approveCurrentTool,
     rejectCurrentTool,
-    approveAllCurrentTool,  // 批准全部
 
     // 待确认更改操作
     acceptAllChanges,

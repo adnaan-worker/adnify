@@ -76,7 +76,6 @@ export default function ChatPanel() {
     deleteMessagesAfter,
     approveCurrentTool,
     rejectCurrentTool,
-    approveAllCurrentTool,
     acceptAllChanges,
     undoAllChanges,
     acceptChange,
@@ -608,13 +607,12 @@ export default function ChatPanel() {
         onRestore={handleRestore}
         onApproveTool={approveCurrentTool}
         onRejectTool={rejectCurrentTool}
-        onApproveAll={approveAllCurrentTool}
         onOpenDiff={handleShowDiff}
         pendingToolId={pendingToolCall?.id}
         hasCheckpoint={hasCheckpoint}
       />
     )
-  }, [handleEditMessage, handleRegenerate, handleRestore, approveCurrentTool, rejectCurrentTool, approveAllCurrentTool, handleShowDiff, pendingToolCall, messageCheckpoints])
+  }, [handleEditMessage, handleRegenerate, handleRestore, approveCurrentTool, rejectCurrentTool, handleShowDiff, pendingToolCall, messageCheckpoints])
 
   const getStreamingStatus = useCallback(() => {
     if (streamState.phase === 'streaming') return 'Thinking...'

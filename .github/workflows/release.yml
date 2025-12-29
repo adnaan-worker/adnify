@@ -20,18 +20,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
+      - name: Rebuild native modules
+        run: npm run postinstall
+        continue-on-error: true
+      
       - name: Build and Package
         run: npm run dist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
+      - name: List release files
+        run: dir release
+        
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-builds
-          path: |
-            release/*.exe
-            release/*.zip
+          path: release/*
+          if-no-files-found: error
 
   build-macos:
     runs-on: macos-latest
@@ -47,18 +53,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
+      - name: Rebuild native modules
+        run: npm run postinstall
+        continue-on-error: true
+      
       - name: Build and Package
         run: npm run dist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
+      - name: List release files
+        run: ls -la release/
+        
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-builds
-          path: |
-            release/*.dmg
-            release/*.zip
+          path: release/*
+          if-no-files-found: error
 
   build-linux:
     runs-on: ubuntu-latest
@@ -74,18 +86,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
+      - name: Rebuild native modules
+        run: npm run postinstall
+        continue-on-error: true
+      
       - name: Build and Package
         run: npm run dist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
+      - name: List release files
+        run: ls -la release/
+        
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: linux-builds
-          path: |
-            release/*.AppImage
-            release/*.tar.gz
+          path: release/*
+          if-no-files-found: error
 
   release:
     needs: [build-windows, build-macos, build-linux]
@@ -95,39 +113,61 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Download all artifacts
+      - name: Download Windows artifacts
         uses: actions/download-artifact@v4
         with:
+          name: windows-builds
           path: release-files
-          merge-multiple: true
+          
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-builds
+          path: release-files
+          
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-builds
+          path: release-files
+      
+      - name: List all release files
+        run: ls -la release-files/
       
       - name: Get version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          name: Adnify ${{ steps.version.outputs.VERSION }}
+          name: Adnify v${{ steps.version.outputs.VERSION }}
           body: |
-            ## Adnify ${{ steps.version.outputs.VERSION }}
+            ## Adnify v${{ steps.version.outputs.VERSION }}
             
             ### 下载 / Downloads
             
-            | 平台 | 安装包 | 便携版 |
-            |------|--------|--------|
-            | Windows | `.exe` 安装程序 | `-Portable.exe` |
-            | macOS | `.dmg` | `.zip` |
-            | Linux | `.AppImage` | `.tar.gz` |
+            | 平台 | 文件 |
+            |------|------|
+            | Windows 安装版 | `Adnify-Setup-${{ steps.version.outputs.VERSION }}.exe` |
+            | Windows 便携版 | `Adnify-${{ steps.version.outputs.VERSION }}-Portable.exe` |
+            | macOS | `Adnify-${{ steps.version.outputs.VERSION }}.dmg` |
+            | Linux | `Adnify-${{ steps.version.outputs.VERSION }}.AppImage` |
             
             ### 安装说明
-            - **Windows**: 下载 `.exe` 运行安装，或下载 Portable 版本直接运行
-            - **macOS**: 下载 `.dmg` 拖入 Applications
-            - **Linux**: 下载 `.AppImage`，添加执行权限后运行
+            - **Windows**: 下载 Setup.exe 运行安装，或下载 Portable 版本直接运行
+            - **macOS**: 下载 .dmg 拖入 Applications
+            - **Linux**: 下载 .AppImage，`chmod +x` 后运行
             
             ---
-            [Gitee 镜像下载](https://gitee.com/adnaan/adnify/releases/tag/${{ steps.version.outputs.VERSION }})
-          files: release-files/*
+            📦 [Gitee 镜像](https://gitee.com/adnaan/adnify/releases/tag/v${{ steps.version.outputs.VERSION }})
+          files: |
+            release-files/*.exe
+            release-files/*.dmg
+            release-files/*.zip
+            release-files/*.AppImage
+            release-files/*.tar.gz
+          fail_on_unmatched_files: false
           draft: false
           prerelease: false
         env:

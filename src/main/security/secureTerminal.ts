@@ -338,7 +338,7 @@ export function registerSecureTerminalHandlers(
     }
 
     try {
-      // 5. 尝试使用 dugite（安全）
+      // 使用 dugite（安全）
       const { GitProcess } = require('dugite')
       const result = await GitProcess.exec(args, cwd)
 
@@ -487,7 +487,12 @@ export function registerSecureTerminalHandlers(
     // 检查命令是否可执行
     const canExecute = (cmd: string): boolean => {
       try {
-        execSync(`${cmd} --version`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 3000 })
+        execSync(`${cmd} --version`, { 
+          encoding: 'utf-8', 
+          stdio: ['pipe', 'pipe', 'ignore'], 
+          timeout: 3000,
+          windowsHide: true,  // Windows 上隐藏控制台窗口
+        })
         return true
       } catch {
         return false
@@ -503,7 +508,11 @@ export function registerSecureTerminalHandlers(
 
       // Git Bash - 通过 git --exec-path 动态获取
       try {
-        const gitExecPath = execSync('git --exec-path', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }).trim()
+        const gitExecPath = execSync('git --exec-path', { 
+          encoding: 'utf-8', 
+          stdio: ['pipe', 'pipe', 'ignore'],
+          windowsHide: true,
+        }).trim()
         if (gitExecPath) {
           // e.g., C:\Program Files\Git\mingw64\libexec\git-core -> C:\Program Files\Git\bin\bash.exe
           const gitRoot = pathModule.resolve(gitExecPath, '..', '..', '..')
@@ -530,7 +539,11 @@ export function registerSecureTerminalHandlers(
       const unixShells = ['bash', 'zsh', 'fish']
       for (const sh of unixShells) {
         try {
-          const result = execSync(`which ${sh}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] })
+          const result = execSync(`which ${sh}`, { 
+            encoding: 'utf-8', 
+            stdio: ['pipe', 'pipe', 'ignore'],
+            windowsHide: true,
+          })
           if (result.trim()) {
             shells.push({ label: sh.charAt(0).toUpperCase() + sh.slice(1), path: result.trim() })
           }

@@ -74,7 +74,23 @@ export async function setupFileWatcher(
     maxWaitTimeMs: mergedConfig.maxWaitTimeMs,
   })
 
-  // 使用 @parcel/watcher
+  // @parcel/watcher 配置
+  // ignore: 要忽略的 glob 模式（只支持字符串）
+  // backend: 根据平台选择最佳后端，避免尝试 watchman 导致的问题
+  const getBackend = (): watcher.BackendType | undefined => {
+    switch (process.platform) {
+      case 'win32': return 'windows'
+      case 'darwin': return 'fs-events'
+      case 'linux': return 'inotify'
+      default: return undefined
+    }
+  }
+  
+  const watcherOptions: watcher.Options = {
+    ignore: mergedConfig.ignored.filter((p): p is string => typeof p === 'string'),
+    backend: getBackend(),
+  }
+  
   watcherSubscription = await watcher.subscribe(workspace.roots[0], (err, events) => {
     if (err) {
       logger.security.error('[Watcher] Error:', err)
@@ -88,7 +104,7 @@ export async function setupFileWatcher(
       callback({ event: eventType, path: event.path })
       fileChangeBuffer?.add({ type: eventType, path: event.path, timestamp: Date.now() })
     }
-  })
+  }, watcherOptions)
 
   logger.security.info('[Watcher] File watcher started for:', workspace.roots[0])
 }

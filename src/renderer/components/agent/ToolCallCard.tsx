@@ -5,7 +5,7 @@
 
 import { useState, useMemo, useEffect, memo } from 'react'
 import {
-  Check, X, ChevronDown, ChevronRight, Loader2,
+  Check, X, ChevronDown, Loader2,
   Terminal, Search, Copy, AlertTriangle
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'

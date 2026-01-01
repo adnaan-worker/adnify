@@ -305,7 +305,6 @@ export default function ChatInput({
           <ModeButton
             active={chatMode === 'agent'}
             onClick={() => setChatMode('agent')}
-            accent
           >
             <Sparkles className="w-3 h-3" />
             Agent
@@ -313,7 +312,6 @@ export default function ChatInput({
           <ModeButton
             active={chatMode === 'plan'}
             onClick={() => setChatMode('plan')}
-            accent
           >
             <ClipboardList className="w-3 h-3" />
             Plan
@@ -331,12 +329,10 @@ export default function ChatInput({
 function ModeButton({
   active,
   onClick,
-  accent,
   children
 }: {
   active: boolean
   onClick: () => void
-  accent?: boolean
   children: React.ReactNode
 }) {
   return (

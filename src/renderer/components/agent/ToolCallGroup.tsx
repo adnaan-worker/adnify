@@ -5,7 +5,7 @@
  */
 
 import { useState, useMemo } from 'react'
-import { ChevronDown, ChevronRight, Layers } from 'lucide-react'
+import { ChevronDown, Layers } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@/renderer/agent/types'
 import ToolCallCard from './ToolCallCard'

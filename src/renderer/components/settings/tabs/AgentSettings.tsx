@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react'
-import { getPromptTemplates, getPromptTemplateSummary } from '@renderer/agent/prompts/promptTemplates'
+import { getPromptTemplates } from '@renderer/agent/prompts/promptTemplates'
 import { Button, Input, Select, Switch } from '@components/ui'
 import { AgentSettingsProps } from '../types'
 import { PromptPreviewModal } from './PromptPreviewModal'

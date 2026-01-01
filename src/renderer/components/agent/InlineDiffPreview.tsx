@@ -7,9 +7,10 @@
  * 1. 异步 Diff 计算，避免阻塞 UI
  * 2. 大文件保护，避免计算耗时过长
  * 3. 限制渲染行数，避免 DOM 过多
+ * 4. 流式模式：内容变化时只显示新增行，避免频繁 diff 计算
  */
 
-import React, { useMemo, useState, useEffect } from 'react'
+import React, { useMemo, useState, useEffect, useRef } from 'react'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import * as Diff from 'diff'
@@ -25,14 +26,15 @@ interface InlineDiffPreviewProps {
     oldContent: string
     newContent: string
     filePath: string
+    /** 是否处于流式更新模式（工具正在执行中） */
     isStreaming?: boolean
     maxLines?: number
 }
 
 // 超过此字符数则视为大文件，降级处理或截断
-const MAX_FILE_SIZE_FOR_DIFF = 50000;
-// Diff 计算超时时间 (ms)
-const DIFF_TIMEOUT = 1000;
+const MAX_FILE_SIZE_FOR_DIFF = 50000
+// 流式模式下的更新节流间隔 (ms)
+const STREAMING_THROTTLE_MS = 100
 
 // 根据文件路径推断语言
 function getLanguageFromPath(path: string): string {
@@ -50,11 +52,78 @@ function getLanguageFromPath(path: string): string {
     return langMap[ext || ''] || 'text'
 }
 
-// 异步计算 diff
-function useAsyncDiff(oldContent: string, newContent: string, enabled: boolean) {
+/**
+ * 流式模式下的简化 diff：只显示新内容为新增行
+ * 不做完整 diff 计算，性能更好
+ */
+function createStreamingDiff(newContent: string): DiffLine[] {
+    if (!newContent) return []
+    
+    const lines = newContent.split('\n')
+    return lines.map((content, idx) => ({
+        type: 'add' as const,
+        content,
+        newLineNumber: idx + 1,
+    }))
+}
+
+/**
+ * 完整 diff 计算（异步）
+ */
+function computeFullDiff(oldContent: string, newContent: string): DiffLine[] {
+    const changes = Diff.diffLines(oldContent, newContent)
+    const result: DiffLine[] = []
+    
+    let oldLineNum = 1
+    let newLineNum = 1
+
+    for (const change of changes) {
+        const lines = change.value.split('\n')
+        // 移除最后一个空行（split 产生的）
+        if (lines[lines.length - 1] === '') {
+            lines.pop()
+        }
+
+        for (const line of lines) {
+            if (change.added) {
+                result.push({
+                    type: 'add',
+                    content: line,
+                    newLineNumber: newLineNum++
+                })
+            } else if (change.removed) {
+                result.push({
+                    type: 'remove',
+                    content: line,
+                    oldLineNumber: oldLineNum++
+                })
+            } else {
+                result.push({
+                    type: 'unchanged',
+                    content: line,
+                    oldLineNumber: oldLineNum++,
+                    newLineNumber: newLineNum++
+                })
+            }
+        }
+    }
+    return result
+}
+
+// 异步计算 diff（支持流式模式优化）
+function useAsyncDiff(
+    oldContent: string, 
+    newContent: string, 
+    isStreaming: boolean,
+    enabled: boolean
+) {
     const [diffLines, setDiffLines] = useState<DiffLine[] | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    
+    // 节流控制
+    const lastUpdateRef = useRef<number>(0)
+    const pendingUpdateRef = useRef<NodeJS.Timeout | null>(null)
 
     useEffect(() => {
         if (!enabled) {
@@ -67,60 +136,59 @@ function useAsyncDiff(oldContent: string, newContent: string, enabled: boolean) 
             return
         }
 
-        // 简单的输入检查
+        // 清理待处理的更新
+        if (pendingUpdateRef.current) {
+            clearTimeout(pendingUpdateRef.current)
+            pendingUpdateRef.current = null
+        }
+
+        // 流式模式：使用简化 diff，带节流
+        if (isStreaming) {
+            const now = Date.now()
+            const timeSinceLastUpdate = now - lastUpdateRef.current
+
+            const doStreamingUpdate = () => {
+                lastUpdateRef.current = Date.now()
+                // 流式模式：如果没有旧内容，直接显示新内容为新增
+                // 如果有旧内容，也只显示新内容（避免频繁 diff）
+                const streamingLines = createStreamingDiff(newContent)
+                setDiffLines(streamingLines)
+                setIsLoading(false)
+                setError(null)
+            }
+
+            if (timeSinceLastUpdate >= STREAMING_THROTTLE_MS) {
+                // 立即更新
+                doStreamingUpdate()
+            } else {
+                // 节流：延迟更新
+                pendingUpdateRef.current = setTimeout(
+                    doStreamingUpdate, 
+                    STREAMING_THROTTLE_MS - timeSinceLastUpdate
+                )
+            }
+            return
+        }
+
+        // 非流式模式：完整 diff 计算
+        // 大文件检查
         if (oldContent.length + newContent.length > MAX_FILE_SIZE_FOR_DIFF * 2) {
-             setError("File too large for inline diff. Open in editor to view changes.")
-             setIsLoading(false)
-             return
+            setError("File too large for inline diff. Open in editor to view changes.")
+            setIsLoading(false)
+            return
         }
 
         setIsLoading(true)
         setError(null)
 
-        // 使用 setTimeout 将计算移出当前事件循环，让 UI 先响应展开动画
+        // 使用 setTimeout 将计算移出当前事件循环，让 UI 先响应
         const timerId = setTimeout(() => {
             try {
-                // 再次检查长度，防止在 timeout 期间数据变得巨大
                 if (oldContent.length + newContent.length > MAX_FILE_SIZE_FOR_DIFF * 2) {
-                     throw new Error("File too large");
+                    throw new Error("File too large")
                 }
 
-                const changes = Diff.diffLines(oldContent, newContent)
-                const result: DiffLine[] = []
-                
-                let oldLineNum = 1
-                let newLineNum = 1
-            
-                for (const change of changes) {
-                    const lines = change.value.split('\n')
-                    // 移除最后一个空行（split 产生的）
-                    if (lines[lines.length - 1] === '') {
-                        lines.pop()
-                    }
-            
-                    for (const line of lines) {
-                        if (change.added) {
-                            result.push({
-                                type: 'add',
-                                content: line,
-                                newLineNumber: newLineNum++
-                            })
-                        } else if (change.removed) {
-                            result.push({
-                                type: 'remove',
-                                content: line,
-                                oldLineNumber: oldLineNum++
-                            })
-                        } else {
-                            result.push({
-                                type: 'unchanged',
-                                content: line,
-                                oldLineNumber: oldLineNum++,
-                                newLineNumber: newLineNum++
-                            })
-                        }
-                    }
-                }
+                const result = computeFullDiff(oldContent, newContent)
                 setDiffLines(result)
             } catch (err) {
                 console.error("Diff calculation failed:", err)
@@ -128,10 +196,15 @@ function useAsyncDiff(oldContent: string, newContent: string, enabled: boolean) 
             } finally {
                 setIsLoading(false)
             }
-        }, 50) // 50ms 延迟，给 UI 足够的时间做动画
+        }, 50)
 
-        return () => clearTimeout(timerId)
-    }, [oldContent, newContent, enabled])
+        return () => {
+            clearTimeout(timerId)
+            if (pendingUpdateRef.current) {
+                clearTimeout(pendingUpdateRef.current)
+            }
+        }
+    }, [oldContent, newContent, isStreaming, enabled])
 
     return { diffLines, isLoading, error }
 }
@@ -226,7 +299,7 @@ export const DiffSkeleton = () => (
                     className="h-3 bg-white/20 rounded-sm" 
                     style={{ 
                         width: `${Math.max(30, 85 - (i * 15) % 50)}%`,
-                        opacity: 0.7 - (i * 0.1) // 渐变透明度，更自然
+                        opacity: 0.7 - (i * 0.1)
                     }} 
                 />
             </div>
@@ -243,8 +316,13 @@ export default function InlineDiffPreview({
 }: InlineDiffPreviewProps) {
     const language = useMemo(() => getLanguageFromPath(filePath), [filePath])
     
-    // 只有在组件挂载后才计算，不需要额外的 enabled 标志，useEffect 会自动处理
-    const { diffLines, isLoading, error } = useAsyncDiff(oldContent, newContent, true)
+    // 使用优化后的异步 diff hook
+    const { diffLines, isLoading, error } = useAsyncDiff(
+        oldContent, 
+        newContent, 
+        isStreaming,
+        true
+    )
 
     // 智能过滤：只显示变更行及其上下文
     const displayLines = useMemo(() => {
@@ -255,21 +333,27 @@ export default function InlineDiffPreview({
             return diffLines
         }
 
-        // 2. 如果是纯新增/纯删除文件（或几乎全是变更），直接截断显示前 N 行
-        // 这里的逻辑是：如果变更行数非常多（接近总行数），说明可能是新文件或重写，
-        // 这种情况下计算上下文没有意义，直接截断最有效率且符合直觉。
-        const changedCount = diffLines.filter(l => l.type !== 'unchanged').length
-        if (changedCount > maxLines * 0.8) { // 阈值：80% 以上是变更
-             const truncated = diffLines.slice(0, maxLines)
-             // 必须手动添加 ellipsis 类型，注意类型断言
-             return [...truncated, { type: 'ellipsis', count: diffLines.length - maxLines }] as (DiffLine | { type: 'ellipsis'; count: number })[]
+        // 2. 流式模式或纯新增文件：直接截断显示
+        // 流式模式下不需要计算上下文，因为全是新增行
+        if (isStreaming) {
+            const truncated = diffLines.slice(0, maxLines)
+            if (diffLines.length > maxLines) {
+                return [...truncated, { type: 'ellipsis', count: diffLines.length - maxLines }] as (DiffLine | { type: 'ellipsis'; count: number })[]
+            }
+            return truncated
         }
 
-        // 3. 常规 Diff：计算上下文
+        // 3. 如果是纯新增/纯删除文件（或几乎全是变更），直接截断
+        const changedCount = diffLines.filter(l => l.type !== 'unchanged').length
+        if (changedCount > maxLines * 0.8) {
+            const truncated = diffLines.slice(0, maxLines)
+            return [...truncated, { type: 'ellipsis', count: diffLines.length - maxLines }] as (DiffLine | { type: 'ellipsis'; count: number })[]
+        }
+
+        // 4. 常规 Diff：计算上下文
         const contextSize = 3 
         const changedIndices = new Set<number>()
 
-        // 标记所有变更行及其上下文
         diffLines.forEach((line, idx) => {
             if (line.type === 'add' || line.type === 'remove') {
                 for (let i = Math.max(0, idx - contextSize); i <= Math.min(diffLines.length - 1, idx + contextSize); i++) {
@@ -278,7 +362,6 @@ export default function InlineDiffPreview({
             }
         })
 
-        // 构建显示结果，添加省略号
         const result: (DiffLine | { type: 'ellipsis'; count: number })[] = []
         let lastIdx = -1
         const sortedIndices = Array.from(changedIndices).sort((a, b) => a - b)
@@ -290,7 +373,6 @@ export default function InlineDiffPreview({
             result.push(diffLines[idx])
             lastIdx = idx
             
-            // 安全保护：如果上下文展开后依然太多，强制截断
             if (result.length >= maxLines) {
                 result.push({ type: 'ellipsis', count: diffLines.length - idx - 1 })
                 return result
@@ -302,9 +384,10 @@ export default function InlineDiffPreview({
         }
 
         return result
-    }, [diffLines, maxLines])
+    }, [diffLines, maxLines, isStreaming])
 
-    if (isLoading) {
+    // 流式模式下不显示 loading（因为有节流，会有短暂延迟）
+    if (isLoading && !isStreaming) {
         return <DiffSkeleton />
     }
 
@@ -319,18 +402,26 @@ export default function InlineDiffPreview({
     if (!diffLines || displayLines.length === 0) {
         return (
             <div className="text-[10px] text-text-muted italic px-2 py-1">
-                No changes
+                {isStreaming ? 'Waiting for content...' : 'No changes'}
             </div>
         )
     }
 
     return (
         <div className="font-mono text-[11px] leading-relaxed">
+            {/* 流式模式指示器 */}
+            {isStreaming && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-accent/10 border-b border-accent/20 text-accent text-[10px]">
+                    <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                    <span>Streaming changes...</span>
+                </div>
+            )}
+            
             {displayLines.map((line, idx) => {
                 if ('count' in line && line.type === 'ellipsis') {
                     return (
                         <div key={`ellipsis-${idx}`} className="text-text-muted/40 text-center py-1 text-[10px] bg-white/5">
-                            ··· {line.count} unchanged lines ···
+                            ··· {line.count} {isStreaming ? 'more' : 'unchanged'} lines ···
                         </div>
                     )
                 }
@@ -347,12 +438,10 @@ export default function InlineDiffPreview({
     )
 }
 
-// 导出统计工具函数 - 使用 diff 库计算准确的统计 (同步版，用于卡片头部快速显示)
-// 注意：如果文件过大，这个函数仍然可能慢。但在 header 中我们通常优先使用 meta 数据。
+// 导出统计工具函数
 export function getDiffStats(oldContent: string, newContent: string): { added: number; removed: number } {
-    // 快速检查
     if (oldContent.length + newContent.length > MAX_FILE_SIZE_FOR_DIFF * 2) {
-        return { added: 0, removed: 0 } // 太大就不算了
+        return { added: 0, removed: 0 }
     }
 
     try {
@@ -363,12 +452,11 @@ export function getDiffStats(oldContent: string, newContent: string): { added: n
         
         for (const change of changes) {
             const lineCount = change.value.split('\n').filter(l => l !== '' || change.value === '\n').length
-            const actualLines = change.value.endsWith('\n') ? lineCount : lineCount
             
             if (change.added) {
-                added += actualLines
+                added += lineCount
             } else if (change.removed) {
-                removed += actualLines
+                removed += lineCount
             }
         }
     

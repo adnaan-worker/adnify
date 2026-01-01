@@ -205,7 +205,7 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
   setHasExistingConfig: (hasConfig) => set({ hasExistingConfig: hasConfig }),
   setAiInstructions: (instructions) => set({ aiInstructions: instructions }),
 
-  loadSettings: async (isEmptyWindow = false) => {
+  loadSettings: async (_isEmptyWindow = false) => {
     try {
       // 使用统一的 settingsService 加载设置
       const settings = await settingsService.loadAll()

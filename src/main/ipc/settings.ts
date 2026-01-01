@@ -19,7 +19,7 @@ let securityRef: SecurityModuleRef | null = null
 
 export function registerSettingsHandlers(
   mainStore: Store,
-  bootstrapStore: Store,
+  _bootstrapStore: Store,
   setMainStore: (store: Store) => void,
   securityModule?: SecurityModuleRef
 ) {

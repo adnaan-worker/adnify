@@ -7,8 +7,8 @@
  * - 与多文件 Diff 面板联动
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Check, X, ChevronDown, ChevronRight, ExternalLink, Loader2, FileCode } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Check, X, ChevronDown, ExternalLink, Loader2, FileCode } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@renderer/agent/types'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'

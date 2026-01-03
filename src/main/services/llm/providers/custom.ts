@@ -435,7 +435,7 @@ export class CustomProvider extends BaseProvider {
         onToolCall: ChatParams['onToolCall'],
         onComplete: ChatParams['onComplete']
     ): Promise<void> {
-        const data = await httpResponse.json()
+        const data = await httpResponse.json() as Record<string, any>
         
         const contentField = responseConfig.contentField || 'message.content'
         const reasoningField = responseConfig.reasoningField

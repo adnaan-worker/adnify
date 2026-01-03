@@ -1,127 +1,114 @@
 /**
  * Anthropic Provider
  * 支持 Claude 系列模型
- * 
+ *
  * 认证方式：
  * - 官方 API: x-api-key header
  * - 自定义 baseUrl (代理): Bearer token (可通过 advanced.auth 配置)
+ *
+ * 特性：
+ * - 支持流式/非流式响应
+ * - 支持 Claude Code CLI 兼容模式（用于代理）
+ * - 支持 thinking 模式
+ * - 支持工具调用
  */
 
 import { logger } from '@shared/utils/Logger'
 import Anthropic from '@anthropic-ai/sdk'
 import { BaseProvider } from './base'
-import { ChatParams, ToolDefinition, LLMToolCall, MessageContent, LLMErrorCode, LLMConfig } from '../types'
+import {
+  ChatParams,
+  ToolDefinition,
+  LLMToolCall,
+  MessageContent,
+  LLMErrorCode,
+  LLMConfig,
+} from '../types'
 import { adapterService } from '../adapterService'
 import { AGENT_DEFAULTS } from '@shared/constants'
 
+// Claude Code CLI 兼容请求头
+const CLAUDE_CODE_HEADERS: Record<string, string> = {
+  'x-app': 'cli',
+  'User-Agent': 'claude-cli/2.0.76 (external, cli)',
+  'anthropic-beta': 'claude-code-20250219,interleaved-thinking-2025-05-14',
+}
+
+// 支持的图片类型
+type SupportedMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+
 export class AnthropicProvider extends BaseProvider {
   private client: Anthropic
-  private apiKey: string
-  private baseUrl?: string
-  private timeout: number
-  private useBearer: boolean  // 是否使用 Bearer token 认证
 
   constructor(config: LLMConfig) {
     super('Anthropic')
-    this.apiKey = config.apiKey
-    this.timeout = config.timeout || AGENT_DEFAULTS.DEFAULT_LLM_TIMEOUT
-    
-    // 处理 baseUrl
-    let baseUrl = config.baseUrl
-    if (baseUrl) {
-      // 去掉末尾的 /v1（Anthropic SDK 会自动加）
-      baseUrl = baseUrl.replace(/\/v1\/?$/, '')
-      this.baseUrl = baseUrl
-    }
-    
-    // 判断认证方式
-    // 1. 如果配置了 advanced.auth，使用配置的认证方式
-    // 2. 如果是自定义 baseUrl（代理），默认使用 Bearer token
-    // 3. 否则使用 Anthropic 默认的 x-api-key
-    const authConfig = config.advanced?.auth
-    if (authConfig) {
-      this.useBearer = authConfig.type === 'bearer'
-    } else {
-      // 自定义 baseUrl 默认使用 Bearer token
-      this.useBearer = !!this.baseUrl
-    }
-    
-    this.log('info', 'Initialized', { baseUrl: this.baseUrl || 'default', useBearer: this.useBearer })
-    
-    // 创建 Anthropic client
-    const clientOptions: ConstructorParameters<typeof Anthropic>[0] = {
-      apiKey: this.apiKey,
-      timeout: this.timeout,
-    }
-    
-    if (this.baseUrl) {
-      clientOptions.baseURL = this.baseUrl
-    }
-    
-    // 如果使用 Bearer token，添加 Authorization header
-    if (this.useBearer) {
-      clientOptions.defaultHeaders = {
-        Authorization: `Bearer ${this.apiKey}`,
-        'anthropic-beta': 'interleaved-thinking-2025-05-14',
-      }
-    } else {
-      // 即使不用 Bearer，也需要 beta header 来支持 thinking
-      clientOptions.defaultHeaders = {
-        'anthropic-beta': 'interleaved-thinking-2025-05-14',
-      }
-    }
-    
-    // 应用自定义请求头
-    if (config.advanced?.request?.headers) {
-      clientOptions.defaultHeaders = {
-        ...clientOptions.defaultHeaders,
-        ...config.advanced.request.headers,
-      }
-    }
-    
-    this.client = new Anthropic(clientOptions)
+    const { apiKey, baseUrl, useBearer } = this.parseConfig(config)
+
+    this.client = this.createClient(config, apiKey, baseUrl, useBearer)
+
+    this.log('info', 'Initialized', { baseUrl: baseUrl || 'default', useBearer })
   }
 
+  /** 解析配置 */
+  private parseConfig(config: LLMConfig) {
+    let baseUrl = config.baseUrl?.replace(/\/v1\/?$/, '') || undefined
+
+    // 判断认证方式：配置优先 > 有代理则用 Bearer > 默认 x-api-key
+    const authConfig = config.advanced?.auth
+    const useBearer = authConfig ? authConfig.type === 'bearer' : !!baseUrl
+
+    return { apiKey: config.apiKey, baseUrl, useBearer }
+  }
+
+  /** 创建 Anthropic 客户端 */
+  private createClient(
+    config: LLMConfig,
+    apiKey: string,
+    baseUrl?: string,
+    useBearer?: boolean
+  ): Anthropic {
+    const defaultHeaders: Record<string, string> = {
+      ...CLAUDE_CODE_HEADERS,
+      ...(useBearer ? { Authorization: `Bearer ${apiKey}` } : {}),
+      ...config.advanced?.request?.headers,
+    }
+
+    return new Anthropic({
+      apiKey,
+      timeout: config.timeout || AGENT_DEFAULTS.DEFAULT_LLM_TIMEOUT,
+      ...(baseUrl ? { baseURL: baseUrl } : {}),
+      defaultHeaders,
+    })
+  }
+
+  /** 转换消息内容为 Anthropic 格式 */
   private convertContent(
     content: MessageContent
   ): string | Array<Anthropic.TextBlockParam | Anthropic.ImageBlockParam> {
     if (typeof content === 'string') return content
-    
-    // 处理空数组
-    if (!content || content.length === 0) {
-      logger.system.warn('[Anthropic] Empty content array, returning empty string')
-      return ''
-    }
+    if (!content?.length) return ''
 
     return content.map((part) => {
       if (part.type === 'text') {
-        // 确保 text 不是 undefined 或 null
-        if (part.text === undefined || part.text === null) {
-          logger.system.warn('[Anthropic] Text part has invalid text:', part)
-          return { type: 'text', text: '' }
-        }
-        return { type: 'text', text: part.text }
-      } else {
-        if (part.source.type === 'url') {
-          logger.system.warn('Anthropic provider received URL image, which is not directly supported.')
-          return { type: 'text', text: '[Image URL not supported]' }
-        }
-        return {
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: part.source.media_type as
-              | 'image/jpeg'
-              | 'image/png'
-              | 'image/gif'
-              | 'image/webp',
-            data: part.source.data,
-          },
-        }
+        return { type: 'text' as const, text: part.text ?? '' }
+      }
+      // 图片处理
+      if (part.source.type === 'url') {
+        logger.system.warn('[Anthropic] URL image not supported')
+        return { type: 'text' as const, text: '[Image URL not supported]' }
+      }
+      return {
+        type: 'image' as const,
+        source: {
+          type: 'base64' as const,
+          media_type: part.source.media_type as SupportedMediaType,
+          data: part.source.data,
+        },
       }
     })
   }
 
+  /** 转换工具定义 */
   private convertTools(tools?: ToolDefinition[], adapterId?: string): Anthropic.Tool[] | undefined {
     if (!tools?.length) return undefined
 
@@ -136,24 +123,290 @@ export class AnthropicProvider extends BaseProvider {
     }))
   }
 
+  /** 安全解析 JSON 参数 */
+  private parseToolArguments(argsStr: string): Record<string, unknown> {
+    try {
+      const firstBrace = argsStr.indexOf('{')
+      const lastBrace = argsStr.lastIndexOf('}')
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        return JSON.parse(argsStr.slice(firstBrace, lastBrace + 1))
+      }
+      return JSON.parse(argsStr || '{}')
+    } catch {
+      logger.system.warn('[Anthropic] Failed to parse tool arguments')
+      return {}
+    }
+  }
+
+  /** 转换消息列表为 Anthropic 格式 */
+  private convertMessages(messages: ChatParams['messages']): {
+    anthropicMessages: Anthropic.MessageParam[]
+    systemPrompt: string
+  } {
+    const anthropicMessages: Anthropic.MessageParam[] = []
+    let systemPrompt = ''
+
+    for (const msg of messages) {
+      // system 消息提取为 system prompt
+      if (msg.role === 'system') {
+        const content =
+          typeof msg.content === 'string'
+            ? msg.content
+            : Array.isArray(msg.content)
+              ? msg.content
+                  .filter((p) => p.type === 'text')
+                  .map((p) => (p as { type: 'text'; text: string }).text)
+                  .join('')
+              : ''
+        if (content) {
+          systemPrompt = systemPrompt ? `${systemPrompt}\n\n${content}` : content
+        }
+        continue
+      }
+
+      // tool 结果消息
+      if (msg.role === 'tool') {
+        const toolCallId = msg.toolCallId || (msg as unknown as Record<string, unknown>).tool_call_id
+        if (toolCallId) {
+          anthropicMessages.push({
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: toolCallId as string,
+                content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+              },
+            ],
+          })
+        }
+        continue
+      }
+
+      // assistant 消息带 tool_calls（OpenAI 格式）
+      const toolCalls = (msg as unknown as Record<string, unknown>).tool_calls as
+        | Array<{ id: string; function: { name: string; arguments: string } }>
+        | undefined
+      if (msg.role === 'assistant' && toolCalls?.length) {
+        const contentBlocks: Anthropic.ContentBlockParam[] = []
+
+        if (typeof msg.content === 'string' && msg.content) {
+          contentBlocks.push({ type: 'text', text: msg.content })
+        }
+
+        for (const tc of toolCalls) {
+          contentBlocks.push({
+            type: 'tool_use',
+            id: tc.id,
+            name: tc.function.name,
+            input: this.parseToolArguments(tc.function.arguments),
+          })
+        }
+
+        anthropicMessages.push({ role: 'assistant', content: contentBlocks })
+        continue
+      }
+
+      // assistant 消息带 toolName（旧格式）
+      if (msg.role === 'assistant' && msg.toolName && msg.toolCallId) {
+        const contentStr = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+        anthropicMessages.push({
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: msg.toolCallId,
+              name: msg.toolName,
+              input: this.parseToolArguments(contentStr || '{}'),
+            },
+          ],
+        })
+        continue
+      }
+
+      // 普通 user/assistant 消息
+      if ((msg.role === 'user' || msg.role === 'assistant') && msg.content != null) {
+        anthropicMessages.push({
+          role: msg.role,
+          content: this.convertContent(msg.content),
+        })
+      }
+    }
+
+    return { anthropicMessages, systemPrompt }
+  }
+
+  /** 构建请求参数 */
+  private buildRequestParams(
+    params: ChatParams,
+    anthropicMessages: Anthropic.MessageParam[],
+    systemPrompt: string,
+    convertedTools?: Anthropic.Tool[]
+  ): Record<string, unknown> {
+    const requestParams: Record<string, unknown> = {
+      model: params.model,
+      max_tokens: params.maxTokens || AGENT_DEFAULTS.DEFAULT_MAX_TOKENS,
+      messages: anthropicMessages,
+    }
+
+    // 温度和 top_p
+    if (params.temperature !== undefined) requestParams.temperature = params.temperature
+    if (params.topP !== undefined) requestParams.top_p = params.topP
+
+    // system prompt（Claude Code CLI 格式：数组）
+    const finalSystemPrompt = params.systemPrompt
+      ? params.systemPrompt + (systemPrompt ? `\n\n${systemPrompt}` : '')
+      : systemPrompt
+
+    if (finalSystemPrompt) {
+      requestParams.system = [{ type: 'text', text: finalSystemPrompt }]
+    }
+
+    // 工具
+    if (convertedTools?.length) {
+      requestParams.tools = convertedTools
+    }
+
+    // 适配器模板参数（排除核心字段）
+    const template = params.adapterConfig?.request?.bodyTemplate
+    if (template) {
+      const excludeKeys = ['model', 'messages', 'system', 'tools', 'stream']
+      for (const [key, value] of Object.entries(template)) {
+        if (!excludeKeys.includes(key) && !(typeof value === 'string' && value.startsWith('{{'))) {
+          requestParams[key] = value
+        }
+      }
+    }
+
+    // thinking 模式下移除 temperature 和 top_p
+    if (requestParams.thinking) {
+      delete requestParams.temperature
+      delete requestParams.top_p
+    }
+
+    return requestParams
+  }
+
+  /** 处理流式响应 */
+  private async handleStreamResponse(
+    requestParams: Record<string, unknown>,
+    signal?: AbortSignal,
+    onStream?: ChatParams['onStream'],
+    onToolCall?: ChatParams['onToolCall'],
+    onComplete?: ChatParams['onComplete']
+  ): Promise<void> {
+    const streamResponse = this.client.messages.stream(
+      requestParams as unknown as Anthropic.MessageCreateParamsStreaming,
+      { signal }
+    )
+
+    let fullContent = ''
+    const toolCalls: LLMToolCall[] = []
+
+    streamResponse.on('text', (text) => {
+      fullContent += text
+      onStream?.({ type: 'text', content: text })
+    })
+
+    // thinking 块支持
+    streamResponse.on('streamEvent', (event) => {
+      if (event.type === 'content_block_delta' && event.delta.type === 'thinking_delta') {
+        onStream?.({ type: 'reasoning', content: (event.delta as { thinking?: string }).thinking || '' })
+      }
+    })
+
+    const finalMessage = await streamResponse.finalMessage()
+
+    for (const block of finalMessage.content) {
+      if (block.type === 'tool_use') {
+        const toolCall: LLMToolCall = {
+          id: block.id,
+          name: block.name,
+          arguments: block.input as Record<string, unknown>,
+        }
+        toolCalls.push(toolCall)
+        onToolCall?.(toolCall)
+      }
+    }
+
+    onComplete?.({
+      content: fullContent,
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      usage: {
+        promptTokens: finalMessage.usage.input_tokens,
+        completionTokens: finalMessage.usage.output_tokens,
+        totalTokens: finalMessage.usage.input_tokens + finalMessage.usage.output_tokens,
+      },
+    })
+  }
+
+  /** 处理非流式响应 */
+  private async handleNonStreamResponse(
+    requestParams: Record<string, unknown>,
+    signal?: AbortSignal,
+    onStream?: ChatParams['onStream'],
+    onToolCall?: ChatParams['onToolCall'],
+    onComplete?: ChatParams['onComplete']
+  ): Promise<void> {
+    const response = await this.client.messages.create(
+      requestParams as unknown as Anthropic.MessageCreateParamsNonStreaming,
+      { signal }
+    )
+
+    let fullContent = ''
+    const toolCalls: LLMToolCall[] = []
+
+    for (const block of response.content) {
+      if (block.type === 'text') {
+        fullContent += block.text
+        onStream?.({ type: 'text', content: block.text })
+      } else if (block.type === 'tool_use') {
+        const toolCall: LLMToolCall = {
+          id: block.id,
+          name: block.name,
+          arguments: block.input as Record<string, unknown>,
+        }
+        toolCalls.push(toolCall)
+        onToolCall?.(toolCall)
+      }
+    }
+
+    onComplete?.({
+      content: fullContent,
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      usage: {
+        promptTokens: response.usage.input_tokens,
+        completionTokens: response.usage.output_tokens,
+        totalTokens: response.usage.input_tokens + response.usage.output_tokens,
+      },
+    })
+  }
+
+  /** 调试日志 */
+  private logRequest(requestParams: Record<string, unknown>, stream: boolean, toolCount: number) {
+    const systemArr = requestParams.system as Array<{ text: string }> | undefined
+    const systemLength = systemArr?.reduce((acc, item) => acc + (item.text?.length || 0), 0) || 0
+
+    logger.system.debug(
+      '[Anthropic] Request:',
+      JSON.stringify(
+        {
+          ...requestParams,
+          stream,
+          system: systemLength ? `[${systemLength} chars]` : undefined,
+          tools: toolCount ? `[${toolCount} tools]` : undefined,
+        },
+        null,
+        2
+      )
+    )
+  }
+
   async chat(params: ChatParams): Promise<void> {
-    const {
-      model,
-      messages,
-      tools,
-      systemPrompt,
-      stream = true,  // 默认流式
-      signal,
-      adapterConfig,
-      onStream,
-      onToolCall,
-      onComplete,
-      onError,
-    } = params
+    const { model, messages, tools, stream = true, signal, adapterConfig, onStream, onToolCall, onComplete, onError } = params
 
     try {
-      this.log('info', 'Chat', { 
-        model, 
+      this.log('info', 'Chat', {
+        model,
         messageCount: messages.length,
         stream,
         temperature: params.temperature,
@@ -161,249 +414,23 @@ export class AnthropicProvider extends BaseProvider {
         maxTokens: params.maxTokens,
       })
 
-      const anthropicMessages: Anthropic.MessageParam[] = []
-      let extractedSystemPrompt = systemPrompt || ''
+      // 转换消息
+      const { anthropicMessages, systemPrompt } = this.convertMessages(messages)
 
-      for (const msg of messages) {
-        // 提取 system 消息作为 system prompt
-        if (msg.role === 'system') {
-          const content = typeof msg.content === 'string' 
-            ? msg.content 
-            : Array.isArray(msg.content) 
-              ? msg.content.map(p => p.type === 'text' ? p.text : '').join('')
-              : ''
-          if (content) {
-            extractedSystemPrompt = extractedSystemPrompt ? `${extractedSystemPrompt}\n\n${content}` : content
-          }
-          continue
-        }
-        
-        if (msg.role === 'tool') {
-          // 获取 tool_call_id（可能在 toolCallId 或 tool_call_id 字段）
-          const toolCallId = msg.toolCallId || (msg as any).tool_call_id
-          if (!toolCallId) {
-            continue
-          }
-          anthropicMessages.push({
-            role: 'user',
-            content: [
-              {
-                type: 'tool_result',
-                tool_use_id: toolCallId,
-                content:
-                  typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-              },
-            ],
-          })
-        } else if (msg.role === 'assistant' && (msg as any).tool_calls?.length > 0) {
-          // OpenAI 格式的 tool_calls
-          const toolCalls = (msg as any).tool_calls as Array<{
-            id: string
-            type: string
-            function: { name: string; arguments: string }
-          }>
-          
-          const contentBlocks: Anthropic.ContentBlockParam[] = []
-          
-          // 如果有文本内容，先添加
-          if (msg.content) {
-            const textContent = typeof msg.content === 'string' ? msg.content : ''
-            if (textContent) {
-              contentBlocks.push({ type: 'text', text: textContent })
-            }
-          }
-          
-          // 添加 tool_use blocks
-          for (const tc of toolCalls) {
-            let input: Record<string, unknown> = {}
-            try {
-              let argsStr = tc.function.arguments || '{}'
-              // 清理可能的多余字符
-              const firstBrace = argsStr.indexOf('{')
-              const lastBrace = argsStr.lastIndexOf('}')
-              if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-                argsStr = argsStr.slice(firstBrace, lastBrace + 1)
-              }
-              input = JSON.parse(argsStr)
-            } catch (e) {
-              logger.system.warn('[Anthropic] Failed to parse tool arguments:', e)
-            }
-            contentBlocks.push({
-              type: 'tool_use',
-              id: tc.id,
-              name: tc.function.name,
-              input,
-            })
-          }
-          
-          anthropicMessages.push({
-            role: 'assistant',
-            content: contentBlocks,
-          })
-        } else if (msg.role === 'assistant' && msg.toolName) {
-          // 旧格式：单个工具调用
-          let input: Record<string, unknown> = {}
-          try {
-            const contentStr = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-            let argsStr = contentStr || '{}'
-            const firstBrace = argsStr.indexOf('{')
-            const lastBrace = argsStr.lastIndexOf('}')
-            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-              argsStr = argsStr.slice(firstBrace, lastBrace + 1)
-            }
-            input = JSON.parse(argsStr)
-          } catch (e) {
-            logger.system.warn('[Anthropic] Failed to parse tool content:', e)
-          }
-          anthropicMessages.push({
-            role: 'assistant',
-            content: [
-              {
-                type: 'tool_use',
-                id: msg.toolCallId!,
-                name: msg.toolName,
-                input,
-              },
-            ],
-          })
-        } else if (msg.role === 'user' || msg.role === 'assistant') {
-          // 跳过内容为空的消息
-          if (msg.content === undefined || msg.content === null) {
-            continue
-          }
-          anthropicMessages.push({
-            role: msg.role,
-            content: this.convertContent(msg.content),
-          })
-        }
-      }
+      // 转换工具
+      const convertedTools = this.convertTools(tools, adapterConfig?.id)
 
       // 构建请求参数
-      const requestParams: Record<string, unknown> = {
-        model,
-        max_tokens: params.maxTokens || AGENT_DEFAULTS.DEFAULT_MAX_TOKENS,
-        messages: anthropicMessages,
-      }
+      const requestParams = this.buildRequestParams(params, anthropicMessages, systemPrompt, convertedTools)
 
-      // 添加 LLM 参数（稍后会根据 thinking 模式调整）
-      if (params.temperature !== undefined) {
-        requestParams.temperature = params.temperature
-      }
-      if (params.topP !== undefined) {
-        requestParams.top_p = params.topP
-      }
+      // 调试日志
+      this.logRequest(requestParams, stream, convertedTools?.length || 0)
 
-      if (extractedSystemPrompt) {
-        requestParams.system = extractedSystemPrompt
-      }
-
-      const convertedTools = this.convertTools(tools, adapterConfig?.id)
-      if (convertedTools && convertedTools.length > 0) {
-        requestParams.tools = convertedTools
-      }
-
-      // 应用适配器的请求体模板参数
-      if (adapterConfig?.request?.bodyTemplate) {
-        const template = adapterConfig.request.bodyTemplate
-        for (const [key, value] of Object.entries(template)) {
-          if (typeof value === 'string' && value.startsWith('{{')) continue
-          if (['model', 'messages', 'system', 'tools', 'stream'].includes(key)) continue
-          requestParams[key] = value
-        }
-      }
-      
-      // 如果启用了 thinking 模式，必须移除 temperature 和 top_p（Anthropic API 要求）
-      if (requestParams.thinking) {
-        delete requestParams.temperature
-        delete requestParams.top_p
-      }
-
-      // 打印请求体用于调试（不含 system 和 tools 详情）
-      const debugParams = {
-        ...requestParams,
-        stream,
-        system: requestParams.system ? `[${(requestParams.system as string).length} chars]` : undefined,
-        tools: convertedTools ? `[${convertedTools.length} tools]` : undefined,
-      }
-      logger.system.info('[Anthropic] Request body:', JSON.stringify(debugParams, null, 2))
-
-      let fullContent = ''
-      const toolCalls: LLMToolCall[] = []
-
+      // 发送请求
       if (stream) {
-        // 流式响应
-        const streamResponse = this.client.messages.stream(
-          requestParams as unknown as Anthropic.MessageCreateParamsStreaming,
-          { signal }
-        )
-
-        streamResponse.on('text', (text) => {
-          fullContent += text
-          onStream({ type: 'text', content: text })
-        })
-
-        // 支持 Anthropic 的原生思考块
-        streamResponse.on('streamEvent', (event) => {
-          if (event.type === 'content_block_delta' && event.delta.type === 'thinking_delta') {
-            const thinking = (event.delta as any).thinking
-            onStream({ type: 'reasoning', content: thinking })
-          }
-        })
-
-        const finalMessage = await streamResponse.finalMessage()
-
-        for (const block of finalMessage.content) {
-          if (block.type === 'tool_use') {
-            const toolCall: LLMToolCall = {
-              id: block.id,
-              name: block.name,
-              arguments: block.input as Record<string, unknown>,
-            }
-            toolCalls.push(toolCall)
-            onToolCall(toolCall)
-          }
-        }
-
-        onComplete({
-          content: fullContent,
-          toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-          usage: {
-            promptTokens: finalMessage.usage.input_tokens,
-            completionTokens: finalMessage.usage.output_tokens,
-            totalTokens: finalMessage.usage.input_tokens + finalMessage.usage.output_tokens,
-          },
-        })
+        await this.handleStreamResponse(requestParams, signal, onStream, onToolCall, onComplete)
       } else {
-        // 非流式响应
-        const response = await this.client.messages.create(
-          requestParams as unknown as Anthropic.MessageCreateParamsNonStreaming,
-          { signal }
-        )
-
-        for (const block of response.content) {
-          if (block.type === 'text') {
-            fullContent += block.text
-            onStream({ type: 'text', content: block.text })
-          } else if (block.type === 'tool_use') {
-            const toolCall: LLMToolCall = {
-              id: block.id,
-              name: block.name,
-              arguments: block.input as Record<string, unknown>,
-            }
-            toolCalls.push(toolCall)
-            onToolCall(toolCall)
-          }
-        }
-
-        onComplete({
-          content: fullContent,
-          toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-          usage: {
-            promptTokens: response.usage.input_tokens,
-            completionTokens: response.usage.output_tokens,
-            totalTokens: response.usage.input_tokens + response.usage.output_tokens,
-          },
-        })
+        await this.handleNonStreamResponse(requestParams, signal, onStream, onToolCall, onComplete)
       }
     } catch (error: unknown) {
       const llmError = this.parseError(error)

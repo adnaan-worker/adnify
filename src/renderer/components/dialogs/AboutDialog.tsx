@@ -136,7 +136,7 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
                         {/* Footer Actions */}
                         <div className="flex gap-3">
                             <a
-                                href="https://github.com/AInfinityLikeYou/adnify"
+                                href="https://github.com/adnaan-worker/adnify"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-surface/40 hover:bg-surface/60 border border-border-subtle text-text-primary transition-all duration-300 group"
@@ -145,7 +145,7 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
                                 <span className="text-sm font-bold">GitHub</span>
                             </a>
                             <a
-                                href="https://adnify.dev"
+                                href="https://adnify.vercel.app"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-accent/10 hover:bg-accent/20 border border-accent/20 text-accent transition-all duration-300 group"

@@ -16,6 +16,7 @@ import { registerLspHandlers } from './lsp'
 import { registerHttpHandlers } from './http'
 import { registerMcpHandlers, cleanupMcpHandlers } from './mcp'
 import { registerResourcesHandlers } from './resources'
+import { registerDebugHandlers } from './debug'
 
 // 安全模块
 import {
@@ -91,6 +92,9 @@ export function registerAllHandlers(context: IPCContext) {
 
   // 静态资源
   registerResourcesHandlers()
+
+  // 调试服务
+  registerDebugHandlers()
 
   logger.ipc.info('[Security] 所有安全IPC处理器已注册')
 }

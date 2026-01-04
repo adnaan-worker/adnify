@@ -13,6 +13,7 @@ import {
   Coins,
   Minimize2,
   MessageSquare,
+  Bug,
 } from 'lucide-react'
 import { useStore } from '@store'
 import { t } from '@renderer/i18n'
@@ -30,8 +31,8 @@ import { useDiagnosticsStore, getFileStats } from '@services/diagnosticsStore'
 export default function StatusBar() {
   const {
     activeFilePath, workspacePath, setShowSettings, language,
-    terminalVisible, setTerminalVisible, cursorPosition, isGitRepo, gitStatus,
-    setActiveSidePanel
+    terminalVisible, setTerminalVisible, debugVisible, setDebugVisible,
+    cursorPosition, isGitRepo, gitStatus, setActiveSidePanel
   } = useStore()
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null)
   const [workerProgress, setWorkerProgress] = useState<IndexProgress | null>(null)
@@ -266,6 +267,15 @@ export default function StatusBar() {
             title={`${t('terminal', language)} (Ctrl+\`)`}
           >
             <Terminal className={`w-3 h-3 ${terminalVisible ? 'text-accent drop-shadow-[0_0_5px_rgba(var(--accent)/0.5)]' : ''}`} />
+          </button>
+
+          {/* 调试切换按钮 */}
+          <button
+            onClick={() => setDebugVisible(!debugVisible)}
+            className={`flex items-center gap-1.5 transition-colors ${debugVisible ? 'text-text-primary' : 'hover:text-text-primary'}`}
+            title={`${language === 'zh' ? '调试' : 'Debug'} (Ctrl+Shift+D)`}
+          >
+            <Bug className={`w-3 h-3 ${debugVisible ? 'text-accent drop-shadow-[0_0_5px_rgba(var(--accent)/0.5)]' : ''}`} />
           </button>
 
           <BottomBarPopover

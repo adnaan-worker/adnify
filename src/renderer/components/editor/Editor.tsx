@@ -34,6 +34,7 @@ import { getEditorConfig } from '@renderer/config/editorConfig'
 import { keybindingService } from '@services/keybindingService'
 import { monaco } from '@renderer/monacoWorker'
 import type { ThemeName } from '@store/slices/themeSlice'
+import { useEditorBreakpoints } from '@hooks/useEditorBreakpoints'
 
 // 从工具模块导入
 import { getLanguage } from './utils/languageMap'
@@ -89,6 +90,9 @@ export default function Editor() {
 
   // 文件类型检测
   const activeFileType = activeFile ? getFileType(activeFile.path) : 'text'
+
+  // 断点管理
+  useEditorBreakpoints(editorRef.current, activeFilePath)
 
   // Markdown 预览模式状态
   const [markdownMode, setMarkdownMode] = useState<'edit' | 'preview' | 'split'>('edit')
@@ -1134,8 +1138,10 @@ export default function Editor() {
                   padding: { top: 16 },
                   lineNumbers: getEditorConfig().lineNumbers,
                   renderLineHighlight: 'all',
-                  bracketPairColorization: { enabled: getEditorConfig().bracketPairColorization },
                   automaticLayout: true,
+                  glyphMargin: true, // 启用断点区域
+                  
+                  // 代码补全和建议
                   inlineSuggest: { enabled: true },
                   suggest: {
                     showKeywords: true,
@@ -1144,25 +1150,85 @@ export default function Editor() {
                     showFunctions: true,
                     showVariables: true,
                     showModules: true,
+                    showProperties: true,
+                    showEvents: true,
+                    showOperators: true,
+                    showUnits: true,
+                    showValues: true,
+                    showConstants: true,
+                    showEnumMembers: true,
+                    showStructs: true,
+                    showTypeParameters: true,
+                    showWords: true,
+                    showColors: true,
+                    showFiles: true,
+                    showReferences: true,
+                    showFolders: true,
+                    showInterfaces: true,
+                    showIssues: true,
+                    showUsers: false,
+                    insertMode: 'insert',
+                    filterGraceful: true,
+                    snippetsPreventQuickSuggestions: false,
+                    localityBonus: true,
+                    shareSuggestSelections: true,
+                    showStatusBar: true,
+                    preview: true,
+                    previewMode: 'subwordSmart',
                   },
                   quickSuggestions: {
                     other: true,
                     comments: false,
                     strings: true,
                   },
-                  parameterHints: { enabled: true },
+                  acceptSuggestionOnCommitCharacter: true,
+                  acceptSuggestionOnEnter: 'on',
+                  tabCompletion: 'on',
+                  wordBasedSuggestions: 'matchingDocuments',
+                  
+                  // 参数提示
+                  parameterHints: { enabled: true, cycle: true },
+                  
+                  // 代码折叠
                   folding: true,
-                  foldingStrategy: 'indentation',
+                  foldingStrategy: 'auto',
+                  foldingHighlight: true,
+                  foldingImportsByDefault: true,
                   showFoldingControls: 'mouseover',
+                  unfoldOnClickAfterEndOfLine: true,
+                  
+                  // 括号匹配和高亮
                   matchBrackets: 'always',
-                  renderWhitespace: 'selection',
+                  bracketPairColorization: { enabled: true, independentColorPoolPerBracketType: true },
                   guides: {
                     bracketPairs: true,
+                    bracketPairsHorizontal: 'active',
+                    highlightActiveBracketPair: true,
                     indentation: true,
+                    highlightActiveIndentation: true,
                   },
-                  stickyScroll: { enabled: true },
-                  inlayHints: { enabled: 'on' },
+                  
+                  // 渲染选项
+                  renderWhitespace: 'selection',
+                  renderControlCharacters: true,
+                  renderLineHighlightOnlyWhenFocus: false,
+                  
+                  // 滚动和导航
+                  stickyScroll: { enabled: true, maxLineCount: 5 },
+                  scrollbar: {
+                    vertical: 'auto',
+                    horizontal: 'auto',
+                    verticalScrollbarSize: 10,
+                    horizontalScrollbarSize: 10,
+                    useShadows: false,
+                  },
+                  
+                  // 内联提示 (类型提示等)
+                  inlayHints: { enabled: 'on', fontSize: 11, padding: true },
+                  
+                  // 链接和跳转
                   links: true,
+                  colorDecorators: true,
                   gotoLocation: {
                     multiple: 'goto',
                     multipleDefinitions: 'goto',
@@ -1171,6 +1237,37 @@ export default function Editor() {
                     multipleImplementations: 'goto',
                     multipleReferences: 'goto',
                   },
+                  
+                  // 查找和替换
+                  find: {
+                    addExtraSpaceOnTop: true,
+                    autoFindInSelection: 'multiline',
+                    seedSearchStringFromSelection: 'selection',
+                    loop: true,
+                  },
+                  
+                  // 多光标
+                  multiCursorModifier: 'ctrlCmd',
+                  multiCursorMergeOverlapping: true,
+                  multiCursorPaste: 'spread',
+                  
+                  // 拖放
+                  dragAndDrop: true,
+                  dropIntoEditor: { enabled: true },
+                  
+                  // 其他高级功能
+                  linkedEditing: true,
+                  renameOnType: true,
+                  smartSelect: { selectLeadingAndTrailingWhitespace: true },
+                  copyWithSyntaxHighlighting: true,
+                  emptySelectionClipboard: true,
+                  columnSelection: true,
+                  
+                  // 光标
+                  cursorStyle: 'line',
+                  cursorWidth: 2,
+                  
+                  // 禁用自定义右键菜单（使用我们自己的）
                   contextmenu: false,
                   ...(activeFileInfo ? getLargeFileEditorOptions(activeFileInfo) : {}),
                 }}

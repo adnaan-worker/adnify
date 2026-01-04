@@ -192,6 +192,85 @@ export interface EmbeddingConfigInput {
   dimensions?: number
 }
 
+// Debug types
+export interface DebugConfig {
+  type: string  // 'node' | 'python' | 'go' | 'lldb' | etc.
+  name: string
+  request: 'launch' | 'attach'
+  program?: string
+  args?: string[]
+  cwd?: string
+  env?: Record<string, string>
+  port?: number
+  host?: string
+  stopOnEntry?: boolean
+  console?: 'internalConsole' | 'integratedTerminal' | 'externalTerminal'
+  // 其他配置
+  [key: string]: unknown
+}
+
+export interface DebugBreakpointInput {
+  line: number
+  column?: number
+  condition?: string
+}
+
+export interface DebugBreakpoint {
+  id: string
+  file: string
+  line: number
+  column?: number
+  condition?: string
+  hitCount?: number
+  enabled: boolean
+}
+
+export interface DebugStackFrame {
+  id: number
+  name: string
+  line: number
+  column: number
+  /** @deprecated Use source.path instead */
+  file?: string
+  source?: {
+    name?: string
+    path?: string
+    sourceReference?: number
+  }
+}
+
+export interface DebugScope {
+  name: string
+  variablesReference: number
+  expensive: boolean
+}
+
+export interface DebugVariable {
+  name: string
+  value: string
+  type: string
+  variablesReference: number
+  children?: DebugVariable[]
+}
+
+export type DebuggerState = 'idle' | 'running' | 'paused' | 'stopped'
+
+export interface DebugSessionState {
+  id: string
+  config: DebugConfig
+  state: DebuggerState
+}
+
+export type DebugEvent =
+  | { type: 'started' }
+  | { type: 'stopped'; reason: string; threadId?: number }
+  | { type: 'continued'; threadId?: number }
+  | { type: 'exited'; exitCode: number }
+  | { type: 'terminated' }
+  | { type: 'breakpoint'; breakpoint: DebugBreakpoint; reason: 'new' | 'changed' | 'removed' }
+  | { type: 'output'; category: 'console' | 'stdout' | 'stderr'; output: string }
+  | { type: 'error'; message: string }
+
 export interface ElectronAPI {
   // App lifecycle
   appReady: () => void
@@ -390,6 +469,25 @@ export interface ElectronAPI {
   resourcesReadText: (relativePath: string) => Promise<{ success: boolean; data?: string; error?: string }>
   resourcesExists: (relativePath: string) => Promise<boolean>
   resourcesClearCache: (prefix?: string) => Promise<{ success: boolean }>
+
+  // Debug API
+  debugCreateSession: (config: DebugConfig) => Promise<{ success: boolean; sessionId?: string; error?: string }>
+  debugLaunch: (sessionId: string) => Promise<{ success: boolean; error?: string }>
+  debugAttach: (sessionId: string) => Promise<{ success: boolean; error?: string }>
+  debugStop: (sessionId: string) => Promise<{ success: boolean; error?: string }>
+  debugContinue: (sessionId: string) => Promise<{ success: boolean; error?: string }>
+  debugStepOver: (sessionId: string) => Promise<{ success: boolean; error?: string }>
+  debugStepInto: (sessionId: string) => Promise<{ success: boolean; error?: string }>
+  debugStepOut: (sessionId: string) => Promise<{ success: boolean; error?: string }>
+  debugPause: (sessionId: string) => Promise<{ success: boolean; error?: string }>
+  debugSetBreakpoints: (sessionId: string, file: string, breakpoints: DebugBreakpointInput[]) => Promise<{ success: boolean; breakpoints?: DebugBreakpoint[]; error?: string }>
+  debugGetStackTrace: (sessionId: string, threadId: number) => Promise<{ success: boolean; frames?: DebugStackFrame[]; error?: string }>
+  debugGetScopes: (sessionId: string, frameId: number) => Promise<{ success: boolean; scopes?: DebugScope[]; error?: string }>
+  debugGetVariables: (sessionId: string, variablesReference: number) => Promise<{ success: boolean; variables?: DebugVariable[]; error?: string }>
+  debugEvaluate: (sessionId: string, expression: string, frameId?: number) => Promise<{ success: boolean; result?: { result: string; type: string }; error?: string }>
+  debugGetSessionState: (sessionId: string) => Promise<DebugSessionState | null>
+  debugGetAllSessions: () => Promise<DebugSessionState[]>
+  onDebugEvent: (callback: (event: { sessionId: string; event: DebugEvent }) => void) => () => void
 }
 export interface LspPosition {
   line: number

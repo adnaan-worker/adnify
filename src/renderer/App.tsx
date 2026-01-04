@@ -9,6 +9,7 @@ import StatusBar from './components/layout/StatusBar'
 import { ToastProvider, useToast, setGlobalToast } from './components/common/ToastProvider'
 import { GlobalConfirmDialog } from './components/common/ConfirmDialog'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
+import { GlobalErrorHandler } from './components/common/GlobalErrorHandler'
 import { initEditorConfig } from './config/editorConfig'
 import { themeManager } from './config/themeConfig'
 import { restoreWorkspaceState, initWorkspaceStateSync } from './services/workspaceStateService'
@@ -31,6 +32,7 @@ startupMetrics.mark('app-module-loaded')
 // 懒加载大组件以优化首屏性能
 const Editor = lazy(() => import('./components/editor/Editor'))
 const TerminalPanel = lazy(() => import('./components/panels/TerminalPanel'))
+const DebugPanel = lazy(() => import('./components/panels/DebugPanel'))
 const ComposerPanel = lazy(() => import('./components/panels/ComposerPanel'))
 const OnboardingWizard = lazy(() => import('./components/dialogs/OnboardingWizard'))
 const SettingsModal = lazy(() => import('./components/settings/SettingsModal'))
@@ -74,7 +76,7 @@ function ToastInitializer() {
 function AppContent() {
   const {
     showSettings, setLLMConfig, setLanguage, setAutoApprove, setPromptTemplateId, setShowSettings,
-    setTerminalVisible, terminalVisible, setWorkspace, setFiles,
+    setTerminalVisible, terminalVisible, setDebugVisible, debugVisible, setWorkspace, setFiles,
     activeSidePanel, showComposer, setShowComposer,
     sidebarWidth, setSidebarWidth, chatWidth, setChatWidth,
     showQuickOpen, setShowQuickOpen, showAbout, setShowAbout,
@@ -385,6 +387,21 @@ function AppContent() {
       e.preventDefault()
       setTerminalVisible(!terminalVisible)
     }
+    else if (keybindingService.matches(e, 'view.toggleDebug')) {
+      e.preventDefault()
+      setDebugVisible(!debugVisible)
+    }
+    // Debug shortcuts - F5, F9, F10, F11
+    else if (keybindingService.matches(e, 'debug.start') || e.key === 'F5') {
+      e.preventDefault()
+      // 打开调试面板并触发启动
+      if (!debugVisible) setDebugVisible(true)
+      window.dispatchEvent(new CustomEvent('debug:start'))
+    }
+    else if (keybindingService.matches(e, 'debug.toggleBreakpoint') || e.key === 'F9') {
+      e.preventDefault()
+      window.dispatchEvent(new CustomEvent('debug:toggleBreakpoint'))
+    }
     else if (keybindingService.matches(e, 'workbench.action.showShortcuts')) {
       const target = e.target as HTMLElement
       if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
@@ -407,7 +424,7 @@ function AppContent() {
       e.preventDefault()
       setShowAbout(true)
     }
-  }, [setShowSettings, setTerminalVisible, terminalVisible, showCommandPalette, showKeyboardShortcuts, showQuickOpen, showComposer, showAbout, setShowQuickOpen, setShowAbout])
+  }, [setShowSettings, setTerminalVisible, terminalVisible, setDebugVisible, debugVisible, showCommandPalette, showKeyboardShortcuts, showQuickOpen, showComposer, showAbout, setShowQuickOpen, setShowAbout])
 
   useEffect(() => {
     window.addEventListener('keydown', handleGlobalKeyDown)
@@ -462,6 +479,11 @@ function AppContent() {
               <ErrorBoundary>
                 <Suspense fallback={null}>
                   <TerminalPanel />
+                </Suspense>
+              </ErrorBoundary>
+              <ErrorBoundary>
+                <Suspense fallback={null}>
+                  <DebugPanel />
                 </Suspense>
               </ErrorBoundary>
             </div>
@@ -531,9 +553,11 @@ export default function App() {
   return (
     <ToastProvider>
       <ToastInitializer />
-      <ThemeManager>
-        <AppContent />
-      </ThemeManager>
+      <GlobalErrorHandler>
+        <ThemeManager>
+          <AppContent />
+        </ThemeManager>
+      </GlobalErrorHandler>
     </ToastProvider>
   )
 }

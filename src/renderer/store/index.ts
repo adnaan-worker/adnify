@@ -11,6 +11,7 @@ import { UISlice, createUISlice } from './slices/uiSlice'
 import { ThemeSlice, createThemeSlice } from './slices/themeSlice'
 import { LogSlice, createLogSlice } from './slices/logSlice'
 import { McpSlice, createMcpSlice } from './slices/mcpSlice'
+import { DebugSlice, createDebugSlice } from './slices/debugSlice'
 
 // 导出类型
 export type { OpenFile, WorkspaceConfig } from './slices/fileSlice'
@@ -20,13 +21,14 @@ export type { SidePanel, DiffView } from './slices/uiSlice'
 export type { ThemeName } from './slices/themeSlice'
 export type { ToolCallLogEntry } from './slices/logSlice'
 export type { McpSlice } from './slices/mcpSlice'
+export type { DebugSlice, Breakpoint } from './slices/debugSlice'
 
 // 模式管理统一从 modeStore 导出
 export { useModeStore } from '@/renderer/modes/modeStore'
 export type { WorkMode } from '@/renderer/modes/types'
 
 // 组合所有 slices
-type StoreState = FileSlice & SettingsSlice & UISlice & ThemeSlice & LogSlice & McpSlice
+type StoreState = FileSlice & SettingsSlice & UISlice & ThemeSlice & LogSlice & McpSlice & DebugSlice
 
 export const useStore = create<StoreState>()((...args) => ({
   ...createFileSlice(...args),
@@ -35,4 +37,5 @@ export const useStore = create<StoreState>()((...args) => ({
   ...createThemeSlice(...args),
   ...createLogSlice(...args),
   ...createMcpSlice(...args),
+  ...createDebugSlice(...args),
 }))

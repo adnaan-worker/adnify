@@ -7,9 +7,18 @@ export const registerCoreCommands = () => {
         { id: 'file.open', title: 'Open File', category: 'File', defaultKey: 'Ctrl+O' },
         { id: 'view.toggleSidebar', title: 'Toggle Sidebar', category: 'View', defaultKey: 'Ctrl+B' },
         { id: 'view.toggleTerminal', title: 'Toggle Terminal', category: 'View', defaultKey: 'Ctrl+`' },
+        { id: 'view.toggleDebug', title: 'Toggle Debug Panel', category: 'View', defaultKey: 'Ctrl+Shift+D' },
         { id: 'editor.find', title: 'Find', category: 'Editor', defaultKey: 'Ctrl+F' },
         { id: 'editor.replace', title: 'Replace', category: 'Editor', defaultKey: 'Ctrl+H' },
         { id: 'terminal.new', title: 'New Terminal', category: 'Terminal', defaultKey: 'Ctrl+Shift+`' },
+
+        // Debug
+        { id: 'debug.start', title: 'Start Debugging', category: 'Debug', defaultKey: 'F5' },
+        { id: 'debug.stop', title: 'Stop Debugging', category: 'Debug', defaultKey: 'Shift+F5' },
+        { id: 'debug.stepOver', title: 'Step Over', category: 'Debug', defaultKey: 'F10' },
+        { id: 'debug.stepInto', title: 'Step Into', category: 'Debug', defaultKey: 'F11' },
+        { id: 'debug.stepOut', title: 'Step Out', category: 'Debug', defaultKey: 'Shift+F11' },
+        { id: 'debug.toggleBreakpoint', title: 'Toggle Breakpoint', category: 'Debug', defaultKey: 'F9' },
 
         // Chat
         { id: 'chat.send', title: 'Send Message', category: 'Chat', defaultKey: 'Enter' },

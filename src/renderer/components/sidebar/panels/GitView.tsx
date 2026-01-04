@@ -17,8 +17,9 @@ import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashE
 import { getEditorConfig } from '@renderer/config/editorConfig'
 import { toast } from '@components/common/ToastProvider'
 import { keybindingService } from '@services/keybindingService'
-import { Input, Button } from '@components/ui'
+import { Input, Button, Modal } from '@components/ui'
 import { getFileName } from '@utils/pathUtils'
+import { ConflictResolver } from '@components/git/ConflictResolver'
 
 // ==================== 类型定义 ====================
 type GitTab = 'changes' | 'branches' | 'stash' | 'history'
@@ -416,6 +417,9 @@ export function GitView() {
     // Stash 消息
     const [showStashInput, setShowStashInput] = useState(false)
     const [stashMessage, setStashMessage] = useState('')
+    
+    // 冲突解决
+    const [conflictFile, setConflictFile] = useState<string | null>(null)
 
     // 国际化辅助函数
     const tt = useCallback((key: TranslationKey) => t(key, language), [language])
@@ -1058,7 +1062,7 @@ Commit message:`
                                         onStage={() => handleStage(path)}
                                         onUnstage={() => {}}
                                         onDiscard={() => handleDiscard(path)}
-                                        onClick={() => handleFileClick(path, 'unmerged', false)}
+                                        onClick={() => setConflictFile(`${workspacePath}/${path}`.replace(/\\/g, '/'))}
                                     />
                                 ))}
                             </div>
@@ -1329,6 +1333,20 @@ Commit message:`
                     </div>
                 )}
             </div>
+
+            {/* Conflict Resolver Modal */}
+            {conflictFile && (
+                <Modal isOpen={true} onClose={() => setConflictFile(null)} title="" size="5xl" noPadding>
+                    <ConflictResolver
+                        filePath={conflictFile}
+                        onResolved={() => {
+                            setConflictFile(null)
+                            refreshStatus()
+                        }}
+                        onCancel={() => setConflictFile(null)}
+                    />
+                </Modal>
+            )}
         </div>
     )
 }

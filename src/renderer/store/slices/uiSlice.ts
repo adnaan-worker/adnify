@@ -16,6 +16,7 @@ export interface UISlice {
   isInitialized: boolean
   activeSidePanel: SidePanel
   terminalVisible: boolean
+  debugVisible: boolean
   chatVisible: boolean
   showSettings: boolean
   showCommandPalette: boolean
@@ -35,6 +36,7 @@ export interface UISlice {
   setIsInitialized: (initialized: boolean) => void
   setActiveSidePanel: (panel: SidePanel) => void
   setTerminalVisible: (visible: boolean) => void
+  setDebugVisible: (visible: boolean) => void
   setChatVisible: (visible: boolean) => void
   setShowSettings: (show: boolean) => void
   setShowCommandPalette: (show: boolean) => void
@@ -59,6 +61,7 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   isLspReady: false,
   activeSidePanel: 'explorer',
   terminalVisible: false,
+  debugVisible: false,
   chatVisible: true,
   showSettings: false,
   showCommandPalette: false,
@@ -79,6 +82,7 @@ export const createUISlice: StateCreator<UISlice, [], [], UISlice> = (set) => ({
   setIsLspReady: (ready) => set({ isLspReady: ready }),
   setActiveSidePanel: (panel) => set({ activeSidePanel: panel }),
   setTerminalVisible: (visible) => set({ terminalVisible: visible }),
+  setDebugVisible: (visible) => set({ debugVisible: visible }),
   setChatVisible: (visible) => set({ chatVisible: visible }),
   setShowSettings: (show) => set({ showSettings: show }),
   setShowCommandPalette: (show) => set({ showCommandPalette: show }),

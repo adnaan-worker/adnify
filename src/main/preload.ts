@@ -551,4 +551,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resourcesReadText: (relativePath: string) => ipcRenderer.invoke('resources:readText', relativePath),
   resourcesExists: (relativePath: string) => ipcRenderer.invoke('resources:exists', relativePath),
   resourcesClearCache: (prefix?: string) => ipcRenderer.invoke('resources:clearCache', prefix),
+
+  // Debug API
+  debugCreateSession: (config: any) => ipcRenderer.invoke('debug:createSession', config),
+  debugLaunch: (sessionId: string) => ipcRenderer.invoke('debug:launch', sessionId),
+  debugAttach: (sessionId: string) => ipcRenderer.invoke('debug:attach', sessionId),
+  debugStop: (sessionId: string) => ipcRenderer.invoke('debug:stop', sessionId),
+  debugContinue: (sessionId: string) => ipcRenderer.invoke('debug:continue', sessionId),
+  debugStepOver: (sessionId: string) => ipcRenderer.invoke('debug:stepOver', sessionId),
+  debugStepInto: (sessionId: string) => ipcRenderer.invoke('debug:stepInto', sessionId),
+  debugStepOut: (sessionId: string) => ipcRenderer.invoke('debug:stepOut', sessionId),
+  debugPause: (sessionId: string) => ipcRenderer.invoke('debug:pause', sessionId),
+  debugSetBreakpoints: (sessionId: string, file: string, breakpoints: any[]) =>
+    ipcRenderer.invoke('debug:setBreakpoints', sessionId, file, breakpoints),
+  debugGetStackTrace: (sessionId: string, threadId: number) =>
+    ipcRenderer.invoke('debug:getStackTrace', sessionId, threadId),
+  debugGetScopes: (sessionId: string, frameId: number) =>
+    ipcRenderer.invoke('debug:getScopes', sessionId, frameId),
+  debugGetVariables: (sessionId: string, variablesReference: number) =>
+    ipcRenderer.invoke('debug:getVariables', sessionId, variablesReference),
+  debugEvaluate: (sessionId: string, expression: string, frameId?: number) =>
+    ipcRenderer.invoke('debug:evaluate', sessionId, expression, frameId),
+  debugGetSessionState: (sessionId: string) => ipcRenderer.invoke('debug:getSessionState', sessionId),
+  debugGetAllSessions: () => ipcRenderer.invoke('debug:getAllSessions'),
+  onDebugEvent: (callback: (event: { sessionId: string; event: any }) => void) => {
+    const handler = (_: IpcRendererEvent, data: { sessionId: string; event: any }) => callback(data)
+    ipcRenderer.on('debug:event', handler)
+    return () => ipcRenderer.removeListener('debug:event', handler)
+  },
 })

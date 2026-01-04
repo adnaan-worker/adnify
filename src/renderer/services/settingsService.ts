@@ -251,6 +251,9 @@ const LOCAL_STORAGE_KEY = 'adnify-app-settings'
 class SettingsService {
   private cache: AppSettings | null = null
 
+  /**
+   * 加载全部设置
+   */
   async loadAll(): Promise<AppSettings> {
     // 优先从 localStorage 读取（快速）
     try {
@@ -263,7 +266,7 @@ class SettingsService {
         this.syncFromFile().catch(() => {})
         return merged
       }
-    } catch (e) {
+    } catch {
       // localStorage 读取失败，继续从文件读取
     }
 

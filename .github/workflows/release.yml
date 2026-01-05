@@ -6,10 +6,30 @@ on:
       - 'v*'
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from package.json
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+  build-windows:
+    needs: get-version
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -22,25 +42,42 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Package
-        run: npm run dist
+      - name: Build
+        run: npm run build
+
+      - name: Package Windows ${{ matrix.arch }}
+        run: npx electron-builder --win --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: List release files
-        run: dir release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-builds
-          path: release/*
-          if-no-files-found: error
+          name: windows-${{ matrix.arch }}
+          path: |
+            release/*.exe
+            release/*.zip
+            release/*.yml
+            release/*.blockmap
+          if-no-files-found: ignore
 
   build-macos:
+    needs: get-version
     runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install setuptools (for node-gyp)
+        run: pip install setuptools
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -53,25 +90,42 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Package
-        run: npm run dist
+      - name: Build
+        run: npm run build
+
+      - name: Package macOS ${{ matrix.arch }}
+        run: npx electron-builder --mac --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: List release files
-        run: ls -la release/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-builds
-          path: release/*
-          if-no-files-found: error
+          name: macos-${{ matrix.arch }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.yml
+            release/*.blockmap
+          if-no-files-found: ignore
 
   build-linux:
+    needs: get-version
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install setuptools (for node-gyp)
+        run: pip install setuptools
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -84,73 +138,80 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Package
-        run: npm run dist
+      - name: Build
+        run: npm run build
+
+      - name: Package Linux ${{ matrix.arch }}
+        run: npx electron-builder --linux --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: List release files
-        run: ls -la release/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-builds
-          path: release/*
-          if-no-files-found: error
+          name: linux-${{ matrix.arch }}
+          path: |
+            release/*.AppImage
+            release/*.tar.gz
+            release/*.yml
+            release/*.blockmap
+          if-no-files-found: ignore
 
   release:
-    needs: [build-windows, build-macos, build-linux]
+    needs: [get-version, build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Download Windows artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: windows-builds
-          path: release-files
+          path: artifacts
 
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-builds
-          path: release-files
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
 
-      - name: Download Linux artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-builds
-          path: release-files
-
-      - name: List all release files
-        run: ls -la release-files/
-
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Deduplicate update metadata files
+        run: |
+          find artifacts -name "builder-debug.yml" -delete 2>/dev/null || true
+          
+          find artifacts -name "latest.yml" | head -1 | xargs -I {} cp {} artifacts/latest.yml 2>/dev/null || true
+          find artifacts -path "*/windows-*/*" -name "latest.yml" -delete 2>/dev/null || true
+          
+          find artifacts -name "latest-mac.yml" | head -1 | xargs -I {} cp {} artifacts/latest-mac.yml 2>/dev/null || true
+          find artifacts -path "*/macos-*/*" -name "latest-mac.yml" -delete 2>/dev/null || true
+          
+          find artifacts -name "latest-linux.yml" | head -1 | xargs -I {} cp {} artifacts/latest-linux.yml 2>/dev/null || true
+          find artifacts -path "*/linux-*/*" -name "latest-linux.yml" -delete 2>/dev/null || true
+          
+          find artifacts -name "latest-linux-arm64.yml" | head -1 | xargs -I {} cp {} artifacts/latest-linux-arm64.yml 2>/dev/null || true
+          find artifacts -path "*/linux-*/*" -name "latest-linux-arm64.yml" -delete 2>/dev/null || true
+          
+          echo "After deduplication:"
+          find artifacts -name "*.yml" -type f
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Adnify v${{ steps.version.outputs.VERSION }}
+          name: Adnify v${{ needs.get-version.outputs.version }}
           body: |
-            ## Adnify v${{ steps.version.outputs.VERSION }}
+            ## Adnify v${{ needs.get-version.outputs.version }}
             
             ### 下载 / Downloads
             
             | 平台 | 架构 | 文件 |
             |------|------|------|
-            | Windows 安装版 | x64 | `Adnify-Setup-${{ steps.version.outputs.VERSION }}.exe` |
-            | Windows 安装版 | arm64 | `Adnify-Setup-${{ steps.version.outputs.VERSION }}-arm64.exe` |
-            | Windows 便携版 | x64 | `Adnify-${{ steps.version.outputs.VERSION }}-Portable.exe` |
-            | Windows 便携版 | arm64 | `Adnify-${{ steps.version.outputs.VERSION }}-arm64-Portable.exe` |
-            | macOS | Intel (x64) | `Adnify-${{ steps.version.outputs.VERSION }}.dmg` |
-            | macOS | Apple Silicon (arm64) | `Adnify-${{ steps.version.outputs.VERSION }}-arm64.dmg` |
-            | Linux | x64 | `Adnify-${{ steps.version.outputs.VERSION }}.AppImage` |
-            | Linux | arm64 | `Adnify-${{ steps.version.outputs.VERSION }}-arm64.AppImage` |
+            | Windows 安装版 | x64 | `Adnify-Setup-${{ needs.get-version.outputs.version }}.exe` |
+            | Windows 安装版 | arm64 | `Adnify-Setup-${{ needs.get-version.outputs.version }}-arm64.exe` |
+            | Windows 便携版 | x64 | `Adnify-${{ needs.get-version.outputs.version }}-Portable.exe` |
+            | Windows 便携版 | arm64 | `Adnify-${{ needs.get-version.outputs.version }}-arm64-Portable.exe` |
+            | macOS | Intel (x64) | `Adnify-${{ needs.get-version.outputs.version }}.dmg` |
+            | macOS | Apple Silicon (arm64) | `Adnify-${{ needs.get-version.outputs.version }}-arm64.dmg` |
+            | Linux | x64 | `Adnify-${{ needs.get-version.outputs.version }}.AppImage` |
+            | Linux | arm64 | `Adnify-${{ needs.get-version.outputs.version }}-arm64.AppImage` |
             
             ### 安装说明
             - **Windows**: 下载对应架构的 Setup.exe 运行安装，或下载 Portable 版本直接运行
@@ -160,13 +221,15 @@ jobs:
             > 💡 不确定架构？Windows 大多数电脑选 x64，M1/M2/M3 Mac 选 arm64，Intel Mac 选 x64
             
             ---
-            📦 [Gitee 镜像](https://gitee.com/adnaan/adnify/releases/tag/v${{ steps.version.outputs.VERSION }})
+            📦 [Gitee 镜像](https://gitee.com/adnaan/adnify/releases/tag/v${{ needs.get-version.outputs.version }})
           files: |
-            release-files/*.exe
-            release-files/*.dmg
-            release-files/*.zip
-            release-files/*.AppImage
-            release-files/*.tar.gz
+            artifacts/**/*.exe
+            artifacts/**/*.dmg
+            artifacts/**/*.zip
+            artifacts/**/*.AppImage
+            artifacts/**/*.tar.gz
+            artifacts/**/*.yml
+            artifacts/**/*.blockmap
           fail_on_unmatched_files: false
           draft: false
           prerelease: false
@@ -177,7 +240,8 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 

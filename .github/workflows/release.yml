@@ -230,23 +230,15 @@ jobs:
           git push gitee --tags --force
         continue-on-error: true
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: assets
-
-      - name: Flatten assets
-        run: |
-          mkdir -p release-files
-          find assets -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.tar.gz" \) -exec cp {} release-files/ \;
-          ls -la release-files/
-
-      - name: Create Gitee Release and Upload
+      - name: Create Gitee Release
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           VERSION: ${{ needs.get-version.outputs.version }}
         run: |
           TAG="v$VERSION"
+          GITHUB_RELEASE_URL="https://github.com/adnaan-worker/adnify/releases/tag/$TAG"
+          
+          BODY="## Adnify v$VERSION\n\n### 下载 / Downloads\n\n请前往 GitHub Release 下载：\n\n👉 **[$GITHUB_RELEASE_URL]($GITHUB_RELEASE_URL)**\n\n| 平台 | 架构 | 文件 |\n|------|------|------|\n| Windows 安装版 | x64 | [Adnify-Setup-$VERSION-x64.exe]($GITHUB_RELEASE_URL) |\n| Windows 安装版 | arm64 | [Adnify-Setup-$VERSION-arm64.exe]($GITHUB_RELEASE_URL) |\n| Windows 便携版 | x64 | [Adnify-$VERSION-x64-Portable.exe]($GITHUB_RELEASE_URL) |\n| Windows 便携版 | arm64 | [Adnify-$VERSION-arm64-Portable.exe]($GITHUB_RELEASE_URL) |\n| macOS | Intel (x64) | [Adnify-$VERSION-x64-mac.dmg]($GITHUB_RELEASE_URL) |\n| macOS | Apple Silicon | [Adnify-$VERSION-arm64-mac.dmg]($GITHUB_RELEASE_URL) |\n| Linux | x64 | [Adnify-$VERSION-x86_64-linux.AppImage]($GITHUB_RELEASE_URL) |\n| Linux | arm64 | [Adnify-$VERSION-arm64-linux.AppImage]($GITHUB_RELEASE_URL) |"
           
           RESPONSE=$(curl -s -X POST \
             "https://gitee.com/api/v5/repos/adnaan/adnify/releases" \
@@ -256,7 +248,7 @@ jobs:
               \"tag_name\": \"$TAG\",
               \"target_commitish\": \"master\",
               \"name\": \"Adnify v$VERSION\",
-              \"body\": \"## Adnify v$VERSION\n\n从 GitHub 自动同步\n\n详细说明请查看 [GitHub Release](https://github.com/adnaan-worker/adnify/releases/tag/$TAG)\",
+              \"body\": \"$BODY\",
               \"prerelease\": false
             }")
           
@@ -264,31 +256,8 @@ jobs:
           
           RELEASE_ID=$(echo $RESPONSE | jq -r '.id // empty')
           
-          if [ -z "$RELEASE_ID" ]; then
-            echo "Release may already exist, trying to get existing release..."
-            RELEASE_ID=$(curl -s "https://gitee.com/api/v5/repos/adnaan/adnify/releases/tags/$TAG?access_token=$GITEE_TOKEN" | jq -r '.id // empty')
+          if [ -n "$RELEASE_ID" ]; then
+            echo "✅ Gitee Release created successfully, ID: $RELEASE_ID"
+          else
+            echo "Release may already exist or creation failed"
           fi
-          
-          if [ -z "$RELEASE_ID" ]; then
-            echo "Failed to get release ID, skipping asset upload"
-            exit 0
-          fi
-          
-          echo "Release ID: $RELEASE_ID"
-          
-          for file in release-files/*; do
-            if [ -f "$file" ]; then
-              filename=$(basename "$file")
-              echo "Uploading $filename..."
-              
-              curl -s -X POST \
-                "https://gitee.com/api/v5/repos/adnaan/adnify/releases/$RELEASE_ID/attach_files" \
-                -H "Content-Type: multipart/form-data" \
-                -F "access_token=$GITEE_TOKEN" \
-                -F "file=@$file" || echo "Failed to upload $filename"
-              
-              echo "Done: $filename"
-            fi
-          done
-          
-          echo "All assets uploaded to Gitee!"

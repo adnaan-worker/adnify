@@ -38,6 +38,10 @@ export interface EditorSettingsState {
     completionTriggerChars: string[]
     largeFileWarningThresholdMB: number
     commandTimeoutMs: number
+    // 新增性能配置
+    maxProjectFiles: number
+    maxFileTreeDepth: number
+    terminalScrollback: number
 }
 
 export interface EditorSettingsProps {

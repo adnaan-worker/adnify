@@ -5,17 +5,11 @@
 
 import { useState } from 'react'
 import { getPromptTemplates } from '@renderer/agent/prompts/promptTemplates'
+import { DEFAULT_AGENT_CONFIG } from '@shared/config/agentConfig'
 import { Button, Input, Select, Switch } from '@components/ui'
 import { AgentSettingsProps } from '../types'
 import { PromptPreviewModal } from './PromptPreviewModal'
 import { Bot, FileText, Zap, BrainCircuit, AlertOctagon, Terminal } from 'lucide-react'
-
-// 默认忽略目录
-const DEFAULT_IGNORED_DIRS = [
-    'node_modules', '.git', 'dist', 'build', '.next',
-    '__pycache__', '.venv', 'venv', '.cache', 'coverage',
-    '.nyc_output', 'tmp', 'temp', '.idea', '.vscode',
-]
 
 export function AgentSettings({
     autoApprove, setAutoApprove, aiInstructions, setAiInstructions,
@@ -25,8 +19,11 @@ export function AgentSettings({
     const [showPreview, setShowPreview] = useState(false)
     const [selectedTemplateForPreview, setSelectedTemplateForPreview] = useState<string | null>(null)
     const [showAdvanced, setShowAdvanced] = useState(false)
+    
+    // 使用 DEFAULT_AGENT_CONFIG 中的忽略目录作为默认值
+    const defaultIgnoredDirs = DEFAULT_AGENT_CONFIG.ignoredDirectories
     const [ignoredDirsInput, setIgnoredDirsInput] = useState(
-        (agentConfig.ignoredDirectories || DEFAULT_IGNORED_DIRS).join(', ')
+        (agentConfig.ignoredDirectories || defaultIgnoredDirs).join(', ')
     )
 
     const handlePreviewTemplate = (templateId: string) => {
@@ -41,8 +38,8 @@ export function AgentSettings({
     }
 
     const resetIgnoredDirs = () => {
-        setIgnoredDirsInput(DEFAULT_IGNORED_DIRS.join(', '))
-        setAgentConfig({ ...agentConfig, ignoredDirectories: DEFAULT_IGNORED_DIRS })
+        setIgnoredDirsInput(defaultIgnoredDirs.join(', '))
+        setAgentConfig({ ...agentConfig, ignoredDirectories: defaultIgnoredDirs })
     }
 
     const t = (zh: string, en: string) => language === 'zh' ? zh : en

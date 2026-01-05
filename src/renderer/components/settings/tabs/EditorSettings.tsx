@@ -11,6 +11,22 @@ import { themes } from '@components/editor/ThemeManager'
 import { Input, Select, Switch } from '@components/ui'
 import { EditorSettingsProps } from '../types'
 
+// 预定义的触发字符选项
+const TRIGGER_CHAR_OPTIONS = [
+    { char: '.', label: '.' },
+    { char: '(', label: '(' },
+    { char: '{', label: '{' },
+    { char: '[', label: '[' },
+    { char: '"', label: '"' },
+    { char: "'", label: "'" },
+    { char: '/', label: '/' },
+    { char: ' ', label: '␣' }, // 空格用特殊符号显示
+    { char: ':', label: ':' },
+    { char: '<', label: '<' },
+    { char: '@', label: '@' },
+    { char: '#', label: '#' },
+]
+
 export function EditorSettings({ settings, setSettings, language }: EditorSettingsProps) {
     const [advancedConfig, setAdvancedConfig] = useState<EditorConfig>(getEditorConfig())
     const { currentTheme, setTheme } = useStore()
@@ -19,6 +35,15 @@ export function EditorSettings({ settings, setSettings, language }: EditorSettin
     const handleThemeChange = (themeId: string) => {
         setTheme(themeId as any)
         api.settings.set('currentTheme', themeId)
+    }
+
+    const toggleTriggerChar = (char: string) => {
+        const current = settings.completionTriggerChars
+        if (current.includes(char)) {
+            setSettings({ ...settings, completionTriggerChars: current.filter(c => c !== char) })
+        } else {
+            setSettings({ ...settings, completionTriggerChars: [...current, char] })
+        }
     }
 
     return (
@@ -196,13 +221,29 @@ export function EditorSettings({ settings, setSettings, language }: EditorSettin
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-medium text-text-secondary">{language === 'zh' ? '触发字符' : 'Trigger Characters'}</label>
-                                    <Input 
-                                        value={settings.completionTriggerChars.join(' ')} 
-                                        onChange={(e) => setSettings({ ...settings, completionTriggerChars: e.target.value.split(' ').filter(c => c.length > 0) })} 
-                                        placeholder=". ( { [ ..."
-                                        className="bg-black/20 border-white/10 text-xs font-mono"
-                                    />
-                                    <p className="text-[10px] text-text-muted opacity-70">{language === 'zh' ? '用空格分隔触发字符' : 'Separate trigger characters with spaces'}</p>
+                                    <div className="flex flex-wrap gap-1.5 p-2 bg-black/20 rounded-lg border border-white/10">
+                                        {TRIGGER_CHAR_OPTIONS.map(({ char, label }) => {
+                                            const isSelected = settings.completionTriggerChars.includes(char)
+                                            return (
+                                                <button
+                                                    key={char}
+                                                    type="button"
+                                                    onClick={() => toggleTriggerChar(char)}
+                                                    className={`w-8 h-8 rounded-md text-sm font-mono flex items-center justify-center transition-all ${
+                                                        isSelected
+                                                            ? 'bg-accent text-white shadow-sm'
+                                                            : 'bg-surface/50 text-text-muted hover:bg-surface hover:text-text-primary border border-white/5'
+                                                    }`}
+                                                    title={char === ' ' ? 'Space' : char}
+                                                >
+                                                    {label}
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                    <p className="text-[10px] text-text-muted opacity-70">
+                                        {language === 'zh' ? '点击选择/取消触发字符' : 'Click to toggle trigger characters'}
+                                    </p>
                                 </div>
                             </div>
                         )}
@@ -222,6 +263,10 @@ export function EditorSettings({ settings, setSettings, language }: EditorSettin
                             <div className="space-y-1.5">
                                 <label className="text-xs font-medium text-text-secondary">{language === 'zh' ? '行高' : 'Line Height'}</label>
                                 <Input type="number" value={advancedConfig.terminal.lineHeight} onChange={(e) => { const newConfig = { ...advancedConfig, terminal: { ...advancedConfig.terminal, lineHeight: parseFloat(e.target.value) || 1.2 } }; setAdvancedConfig(newConfig); saveEditorConfig(newConfig) }} min={1} max={2} step={0.1} className="bg-black/20 border-white/10 text-xs" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-text-secondary">{language === 'zh' ? '滚动缓冲行数' : 'Scrollback Lines'}</label>
+                                <Input type="number" value={settings.terminalScrollback} onChange={(e) => setSettings({ ...settings, terminalScrollback: parseInt(e.target.value) || 1000 })} min={100} max={10000} step={100} className="bg-black/20 border-white/10 text-xs" />
                             </div>
                         </div>
                         <div className="pt-2">
@@ -243,6 +288,14 @@ export function EditorSettings({ settings, setSettings, language }: EditorSettin
                             <div className="flex items-center justify-between">
                                 <label className="text-xs text-text-secondary">{language === 'zh' ? '命令超时 (秒)' : 'Command Timeout (s)'}</label>
                                 <Input type="number" value={settings.commandTimeoutMs / 1000} onChange={(e) => setSettings({ ...settings, commandTimeoutMs: (parseInt(e.target.value) || 30) * 1000 })} min={10} max={300} step={10} className="w-24 bg-black/20 border-white/10 text-xs h-7" />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs text-text-secondary">{language === 'zh' ? '最大扫描文件数' : 'Max Project Files'}</label>
+                                <Input type="number" value={settings.maxProjectFiles} onChange={(e) => setSettings({ ...settings, maxProjectFiles: parseInt(e.target.value) || 500 })} min={100} max={2000} step={100} className="w-24 bg-black/20 border-white/10 text-xs h-7" />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs text-text-secondary">{language === 'zh' ? '文件树最大深度' : 'File Tree Max Depth'}</label>
+                                <Input type="number" value={settings.maxFileTreeDepth} onChange={(e) => setSettings({ ...settings, maxFileTreeDepth: parseInt(e.target.value) || 5 })} min={2} max={15} step={1} className="w-24 bg-black/20 border-white/10 text-xs h-7" />
                             </div>
                         </div>
                     </section>

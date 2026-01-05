@@ -7,6 +7,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import type * as Monaco from 'monaco-editor'
 import { getEditorConfig } from '@renderer/config/editorConfig'
+import { getAgentConfig } from '@renderer/agent/utils/AgentConfig'
 
 // Monaco 实例引用
 let monacoInstance: typeof Monaco | null = null
@@ -156,13 +157,15 @@ async function getProjectFiles(
   maxDepth?: number,
   currentDepth = 0
 ): Promise<string[]> {
-  const config = getEditorConfig()
-  const actualMaxDepth = maxDepth ?? config.performance.maxFileTreeDepth
+  const editorConfig = getEditorConfig()
+  const agentConfig = getAgentConfig()
+  const actualMaxDepth = maxDepth ?? editorConfig.performance.maxFileTreeDepth
   
   if (currentDepth >= actualMaxDepth) return []
 
   const files: string[] = []
-  const ignoredDirs = config.ignoredDirectories
+  // 使用 agentConfig 中的忽略目录（与 Agent 设置统一）
+  const ignoredDirs = agentConfig.ignoredDirectories
 
   try {
     const entries = await api.file.readDir(dirPath)

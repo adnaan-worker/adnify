@@ -59,6 +59,10 @@ export default function SettingsModal() {
         completionTriggerChars: editorConfig.ai.completionTriggerChars,
         largeFileWarningThresholdMB: editorConfig.performance.largeFileWarningThresholdMB,
         commandTimeoutMs: editorConfig.performance.commandTimeoutMs,
+        // 新增性能配置
+        maxProjectFiles: editorConfig.performance.maxProjectFiles,
+        maxFileTreeDepth: editorConfig.performance.maxFileTreeDepth,
+        terminalScrollback: editorConfig.terminal.scrollback,
     })
 
     // Sync store state to local state
@@ -128,11 +132,17 @@ export default function SettingsModal() {
                 completionMaxTokens: editorSettings.completionMaxTokens,
                 completionTriggerChars: editorSettings.completionTriggerChars,
             },
+            terminal: {
+                ...getEditorConfig().terminal,
+                scrollback: editorSettings.terminalScrollback,
+            },
             performance: {
                 ...getEditorConfig().performance,
                 completionDebounceMs: editorSettings.completionDebounceMs,
                 largeFileWarningThresholdMB: editorSettings.largeFileWarningThresholdMB,
                 commandTimeoutMs: editorSettings.commandTimeoutMs,
+                maxProjectFiles: editorSettings.maxProjectFiles,
+                maxFileTreeDepth: editorSettings.maxFileTreeDepth,
             }
         }
         saveEditorConfig(newEditorConfig)

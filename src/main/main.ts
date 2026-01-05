@@ -121,6 +121,7 @@ function createWindow(isEmpty = false): BrowserWindow {
   }
   const iconPath = getIconPath()
 
+  // 初始使用正常窗口尺寸，引导页作为遮罩层显示
   const win = new BrowserWindow({
     width: isEmpty ? WINDOW_CONFIG.EMPTY_WIDTH : WINDOW_CONFIG.WIDTH,
     height: isEmpty ? WINDOW_CONFIG.EMPTY_HEIGHT : WINDOW_CONFIG.HEIGHT,

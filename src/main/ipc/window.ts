@@ -54,13 +54,16 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
       return BrowserWindow.fromWebContents(event.sender)?.id
     })
 
-    // 调整窗口大小（用于从欢迎页切换到工作区时）
+    // 调整窗口大小
     ipcMain.handle('window:resize', (event, width: number, height: number, minWidth?: number, minHeight?: number) => {
       const win = BrowserWindow.fromWebContents(event.sender)
       if (win && !win.isDestroyed()) {
+        // 先设置最小尺寸
         if (minWidth !== undefined && minHeight !== undefined) {
           win.setMinimumSize(minWidth, minHeight)
         }
+        
+        // 使用 Electron 内置的动画参数
         win.setSize(width, height, true)
         win.center()
       }

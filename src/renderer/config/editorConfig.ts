@@ -6,7 +6,6 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { IGNORED_DIRECTORIES } from '@shared/languages'
 
 export interface EditorConfig {
   // 编辑器外观
@@ -61,16 +60,13 @@ export interface EditorConfig {
     largeFileWarningThresholdMB: number
   }
 
-  // AI 代码补全相关（Agent/上下文配置已迁移到 agentConfig）
+  // AI 代码补全相关
   ai: {
     completionEnabled: boolean   // 是否启用 AI 代码补全
     completionMaxTokens: number  // 补全最大 token 数
     completionTemperature: number // 补全温度
     completionTriggerChars: string[] // 补全触发字符
   }
-
-  // 忽略的目录
-  ignoredDirectories: string[]
 }
 
 // 默认配置
@@ -116,16 +112,13 @@ export const defaultEditorConfig: EditorConfig = {
     largeFileWarningThresholdMB: 5,
   },
 
-  // AI 代码补全相关（Agent/上下文配置已迁移到 agentConfig）
+  // AI 代码补全相关
   ai: {
     completionEnabled: true,
     completionMaxTokens: 256,
     completionTemperature: 0.1,
     completionTriggerChars: ['.', '(', '{', '[', '"', "'", '/', ' '],
   },
-
-  // 忽略的目录（使用共享常量）
-  ignoredDirectories: [...IGNORED_DIRECTORIES],
 }
 
 // 存储 key
@@ -196,9 +189,10 @@ export async function initEditorConfig(): Promise<EditorConfig> {
   const localConfig = readFromLocalStorage()
   if (localConfig) {
     const merged = deepMerge(defaultEditorConfig, localConfig)
+    const cleaned = cleanConfig(merged)
     // 异步同步到文件（不阻塞）
-    api.settings.set(FILE_STORAGE_KEY, merged).catch(console.error)
-    return merged
+    api.settings.set(FILE_STORAGE_KEY, cleaned).catch(console.error)
+    return cleaned
   }
 
   // 2. localStorage 没有，从文件读取
@@ -206,9 +200,10 @@ export async function initEditorConfig(): Promise<EditorConfig> {
     const fileConfig = await api.settings.get(FILE_STORAGE_KEY)
     if (fileConfig) {
       const merged = deepMerge(defaultEditorConfig, fileConfig as Partial<EditorConfig>)
+      const cleaned = cleanConfig(merged)
       // 同步到 localStorage
-      writeToLocalStorage(merged)
-      return merged
+      writeToLocalStorage(cleaned)
+      return cleaned
     }
   } catch (e) {
     logger.settings.error('[EditorConfig] Failed to read from file:', e)
@@ -227,9 +222,33 @@ export async function initEditorConfig(): Promise<EditorConfig> {
 export function getEditorConfig(): EditorConfig {
   const localConfig = readFromLocalStorage()
   if (localConfig) {
-    return deepMerge(defaultEditorConfig, localConfig)
+    const merged = deepMerge(defaultEditorConfig, localConfig)
+    return cleanConfig(merged)
   }
   return defaultEditorConfig
+}
+
+/**
+ * 清理配置，只保留 EditorConfig 接口定义的字段
+ */
+function cleanConfig(config: EditorConfig): EditorConfig {
+  return {
+    fontSize: config.fontSize,
+    fontFamily: config.fontFamily,
+    tabSize: config.tabSize,
+    wordWrap: config.wordWrap,
+    lineHeight: config.lineHeight,
+    minimap: config.minimap,
+    minimapScale: config.minimapScale,
+    lineNumbers: config.lineNumbers,
+    bracketPairColorization: config.bracketPairColorization,
+    formatOnSave: config.formatOnSave,
+    autoSave: config.autoSave,
+    autoSaveDelay: config.autoSaveDelay,
+    terminal: config.terminal,
+    performance: config.performance,
+    ai: config.ai,
+  }
 }
 
 /**
@@ -238,12 +257,14 @@ export function getEditorConfig(): EditorConfig {
 export function saveEditorConfig(config: Partial<EditorConfig>): void {
   const current = getEditorConfig()
   const merged = deepMerge(current, config)
+  // 清理掉不属于 EditorConfig 的字段
+  const cleaned = cleanConfig(merged)
 
   // 同步写入 localStorage（快速）
-  writeToLocalStorage(merged)
+  writeToLocalStorage(cleaned)
 
   // 异步写入文件（持久化备份，不阻塞）
-  api.settings.set(FILE_STORAGE_KEY, merged).catch((e) => {
+  api.settings.set(FILE_STORAGE_KEY, cleaned).catch((e) => {
     logger.settings.error('[EditorConfig] Failed to save to file:', e)
   })
 }
@@ -264,8 +285,9 @@ export async function restoreFromFile(): Promise<EditorConfig> {
     const fileConfig = await api.settings.get(FILE_STORAGE_KEY)
     if (fileConfig) {
       const merged = deepMerge(defaultEditorConfig, fileConfig as Partial<EditorConfig>)
-      writeToLocalStorage(merged)
-      return merged
+      const cleaned = cleanConfig(merged)
+      writeToLocalStorage(cleaned)
+      return cleaned
     }
   } catch (e) {
     logger.settings.error('[EditorConfig] Failed to restore from file:', e)

@@ -5,6 +5,16 @@
 import { logger } from '@shared/utils/Logger'
 import { ipcMain } from 'electron'
 import { lspManager, LanguageId } from '../lspManager'
+import { 
+  getLspServerStatus, 
+  installTypeScriptServer, 
+  installVscodeLanguageServers,
+  installPyright,
+  installVueServer,
+  installGopls,
+  installBasicServers,
+  getLspBinDir,
+} from '../lsp/installer'
 
 // 文件扩展名到语言 ID 的映射
 const EXT_TO_LANGUAGE: Record<string, LanguageId> = {
@@ -21,8 +31,19 @@ const EXT_TO_LANGUAGE: Record<string, LanguageId> = {
   less: 'less',
   json: 'json',
   jsonc: 'jsonc',
-  py: 'python',  // Python 支持
+  py: 'python',
   pyw: 'python',
+  // 新增语言支持
+  go: 'go',
+  rs: 'rust',
+  c: 'c',
+  h: 'c',
+  cpp: 'cpp',
+  cc: 'cpp',
+  cxx: 'cpp',
+  hpp: 'cpp',
+  hxx: 'cpp',
+  vue: 'vue',
 }
 
 function getLanguageId(filePath: string): LanguageId | null {
@@ -48,7 +69,8 @@ async function getServerForUri(uri: string, workspacePath: string): Promise<stri
   const languageId = getLanguageId(filePath)
   if (!languageId) return null
 
-  return lspManager.ensureServerForLanguage(languageId, workspacePath)
+  // 使用智能根目录检测启动服务器
+  return lspManager.ensureServerForFile(filePath, languageId, workspacePath)
 }
 
 export function registerLspHandlers(): void {
@@ -307,6 +329,134 @@ export function registerLspHandlers(): void {
       ? `file:///${normalizedPath}`
       : `file://${normalizedPath}`
     return lspManager.getDiagnostics(uri)
+  })
+
+  // ============ Call Hierarchy 支持 ============
+
+  ipcMain.handle('lsp:prepareCallHierarchy', async (_, params: { uri: string; line: number; character: number; workspacePath?: string }) => {
+    const serverName = await getServerForUri(params.uri, params.workspacePath || '')
+    if (!serverName) return null
+
+    try {
+      return await lspManager.prepareCallHierarchy(serverName, params.uri, params.line, params.character)
+    } catch {
+      return null
+    }
+  })
+
+  ipcMain.handle('lsp:incomingCalls', async (_, params: { uri: string; line: number; character: number; workspacePath?: string }) => {
+    const serverName = await getServerForUri(params.uri, params.workspacePath || '')
+    if (!serverName) return null
+
+    try {
+      // 先获取 call hierarchy item
+      const items = await lspManager.prepareCallHierarchy(serverName, params.uri, params.line, params.character)
+      if (!items || items.length === 0) return []
+      
+      // 获取 incoming calls
+      return await lspManager.getIncomingCalls(serverName, items[0])
+    } catch {
+      return null
+    }
+  })
+
+  ipcMain.handle('lsp:outgoingCalls', async (_, params: { uri: string; line: number; character: number; workspacePath?: string }) => {
+    const serverName = await getServerForUri(params.uri, params.workspacePath || '')
+    if (!serverName) return null
+
+    try {
+      // 先获取 call hierarchy item
+      const items = await lspManager.prepareCallHierarchy(serverName, params.uri, params.line, params.character)
+      if (!items || items.length === 0) return []
+      
+      // 获取 outgoing calls
+      return await lspManager.getOutgoingCalls(serverName, items[0])
+    } catch {
+      return null
+    }
+  })
+
+  // ============ waitForDiagnostics 支持 ============
+
+  ipcMain.handle('lsp:waitForDiagnostics', async (_, params: { uri: string }) => {
+    try {
+      await lspManager.waitForDiagnostics(params.uri)
+      return { success: true }
+    } catch {
+      return { success: false }
+    }
+  })
+
+  // ============ 智能根目录检测 ============
+
+  ipcMain.handle('lsp:findBestRoot', async (_, params: { filePath: string; languageId: LanguageId; workspacePath: string }) => {
+    try {
+      return await lspManager.findBestRoot(params.filePath, params.languageId, params.workspacePath)
+    } catch {
+      return params.workspacePath
+    }
+  })
+
+  ipcMain.handle('lsp:ensureServerForFile', async (_, params: { filePath: string; languageId: LanguageId; workspacePath: string }) => {
+    const serverName = await lspManager.ensureServerForFile(params.filePath, params.languageId, params.workspacePath)
+    return { success: !!serverName, serverName }
+  })
+
+  // ============ 文件监视通知 ============
+
+  ipcMain.handle('lsp:didChangeWatchedFiles', async (_, params: { changes: Array<{ uri: string; type: number }>; workspacePath?: string }) => {
+    const running = lspManager.getRunningServers()
+    for (const serverKey of running) {
+      lspManager.notifyDidChangeWatchedFiles(serverKey, params.changes)
+    }
+  })
+
+  // ============ 获取支持的语言 ============
+
+  ipcMain.handle('lsp:getSupportedLanguages', () => {
+    return lspManager.getSupportedLanguages()
+  })
+
+  // ============ LSP 服务器安装管理 ============
+
+  ipcMain.handle('lsp:getServerStatus', () => {
+    return getLspServerStatus()
+  })
+
+  ipcMain.handle('lsp:getBinDir', () => {
+    return getLspBinDir()
+  })
+
+  ipcMain.handle('lsp:installServer', async (_, serverType: string) => {
+    try {
+      switch (serverType) {
+        case 'typescript':
+          return await installTypeScriptServer()
+        case 'html':
+        case 'css':
+        case 'json':
+          return await installVscodeLanguageServers()
+        case 'python':
+          return await installPyright()
+        case 'vue':
+          return await installVueServer()
+        case 'go':
+          return await installGopls()
+        default:
+          return { success: false, error: `Unknown server type: ${serverType}` }
+      }
+    } catch (error: any) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('lsp:installBasicServers', async () => {
+    try {
+      await installBasicServers()
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message }
+    }
   })
 
   logger.lsp.info('[LSP IPC] Handlers registered')

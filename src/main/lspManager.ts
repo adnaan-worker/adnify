@@ -1,6 +1,13 @@
 /**
  * 内置 LSP 管理器
  * 支持多根目录工作区（为每个根目录启动独立的服务器实例）
+ * 
+ * 增强功能：
+ * - 智能根目录检测
+ * - Call Hierarchy 支持
+ * - waitForDiagnostics 机制
+ * - 更多语言服务器支持
+ * - 自动下载安装 LSP 服务器
  */
 
 import { logger } from '@shared/utils/Logger'
@@ -8,18 +15,28 @@ import { spawn, ChildProcess } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
 import { BrowserWindow, app } from 'electron'
+import { SERVICE_DEFAULTS } from '@shared/constants'
+import {
+  getLspBinDir,
+  getInstalledServerPath,
+  commandExists,
+} from './lsp/installer'
 
 // ============ 类型定义 ============
 
 export type LanguageId =
   | 'typescript' | 'typescriptreact' | 'javascript' | 'javascriptreact'
   | 'html' | 'css' | 'scss' | 'less' | 'json' | 'jsonc'
-  | 'python'  // 添加 Python 支持
+  | 'python' | 'go' | 'rust' | 'cpp' | 'c' | 'vue'
 
 interface LspServerConfig {
   name: string
   languages: LanguageId[]
-  getCommand: () => { command: string; args: string[] } | null
+  getCommand: () => Promise<{ command: string; args: string[] } | null>
+  /** 智能根目录检测函数 */
+  findRoot?: (filePath: string, workspacePath: string) => Promise<string>
+  /** 自动安装函数 */
+  install?: () => Promise<{ success: boolean; path?: string; error?: string }>
 }
 
 interface LspServerInstance {
@@ -36,10 +53,53 @@ interface LspServerInstance {
   lastCrashTime: number
 }
 
+// ============ 智能根目录检测辅助函数 ============
+
+/**
+ * 向上查找包含指定文件的目录
+ */
+async function findNearestRoot(
+  startDir: string,
+  stopDir: string,
+  patterns: string[],
+  excludePatterns?: string[]
+): Promise<string | undefined> {
+  let currentDir = startDir
+  
+  while (currentDir.length >= stopDir.length) {
+    // 检查排除模式
+    if (excludePatterns) {
+      for (const pattern of excludePatterns) {
+        const excludePath = path.join(currentDir, pattern)
+        if (fs.existsSync(excludePath)) {
+          return undefined // 被排除
+        }
+      }
+    }
+    
+    // 检查目标模式
+    for (const pattern of patterns) {
+      const targetPath = path.join(currentDir, pattern)
+      if (fs.existsSync(targetPath)) {
+        return currentDir
+      }
+    }
+    
+    const parentDir = path.dirname(currentDir)
+    if (parentDir === currentDir) break
+    currentDir = parentDir
+  }
+  
+  return undefined
+}
+
 // ============ 辅助函数 ============
 
 function findModulePath(moduleName: string, subPath: string): string | null {
   const possiblePaths = [
+    // 优先检查 LSP 安装目录
+    path.join(getLspBinDir(), 'node_modules', moduleName, subPath),
+    // 然后检查项目目录
     path.join(process.cwd(), 'node_modules', moduleName, subPath),
     path.join(__dirname, '..', '..', 'node_modules', moduleName, subPath),
     path.join(app.getAppPath(), 'node_modules', moduleName, subPath),
@@ -53,49 +113,142 @@ function findModulePath(moduleName: string, subPath: string): string | null {
   return null
 }
 
-function getTypeScriptServerCommand(): { command: string; args: string[] } | null {
-  const serverPath = findModulePath('typescript-language-server', 'lib/cli.mjs')
-    || findModulePath('typescript-language-server', 'lib/cli.js')
+async function getTypeScriptServerCommand(): Promise<{ command: string; args: string[] } | null> {
+  // 先检查已安装的路径
+  let serverPath = getInstalledServerPath('typescript')
+
+  if (!serverPath) {
+    // 检查项目内的路径
+    serverPath =
+      findModulePath('typescript-language-server', 'lib/cli.mjs') ||
+      findModulePath('typescript-language-server', 'lib/cli.js')
+  }
+
+  // 不自动安装，只返回找到的路径
   logger.lsp.debug('[LSP Manager] TypeScript server path:', serverPath)
-  // 使用 process.execPath 配合 ELECTRON_RUN_AS_NODE=1 环境变量
   if (serverPath) return { command: process.execPath, args: [serverPath, '--stdio'] }
   return null
 }
 
-function getHtmlServerCommand(): { command: string; args: string[] } | null {
-  const jsPath = findModulePath('vscode-langservers-extracted', 'bin/vscode-html-language-server.js')
-  if (jsPath) return { command: process.execPath, args: [jsPath, '--stdio'] }
-  return null
-}
+async function getHtmlServerCommand(): Promise<{ command: string; args: string[] } | null> {
+  let jsPath = getInstalledServerPath('html')
 
-function getCssServerCommand(): { command: string; args: string[] } | null {
-  const jsPath = findModulePath('vscode-langservers-extracted', 'bin/vscode-css-language-server.js')
-  if (jsPath) return { command: process.execPath, args: [jsPath, '--stdio'] }
-  return null
-}
-
-function getJsonServerCommand(): { command: string; args: string[] } | null {
-  const jsPath = findModulePath('vscode-langservers-extracted', 'bin/vscode-json-language-server.js')
-  if (jsPath) return { command: process.execPath, args: [jsPath, '--stdio'] }
-  return null
-}
-
-// Python LSP (pylsp)
-function getPythonServerCommand(): { command: string; args: string[] } | null {
-  // pylsp 通常通过 pip install python-lsp-server 安装
-  // 尝试多个可能的路径
-  const isWindows = process.platform === 'win32'
-  const pylspNames = isWindows ? ['pylsp.exe', 'pylsp'] : ['pylsp']
-
-  // 检查 PATH 中是否存在 pylsp
-  for (const name of pylspNames) {
-    try {
-      // 尝试运行 pylsp --version 检查是否可用
-      return { command: name, args: [] }
-    } catch {
-      continue
-    }
+  if (!jsPath) {
+    jsPath = findModulePath('vscode-langservers-extracted', 'bin/vscode-html-language-server.js')
   }
+
+  if (jsPath) return { command: process.execPath, args: [jsPath, '--stdio'] }
+  return null
+}
+
+async function getCssServerCommand(): Promise<{ command: string; args: string[] } | null> {
+  let jsPath = getInstalledServerPath('css')
+
+  if (!jsPath) {
+    jsPath = findModulePath('vscode-langservers-extracted', 'bin/vscode-css-language-server.js')
+  }
+
+  if (jsPath) return { command: process.execPath, args: [jsPath, '--stdio'] }
+  return null
+}
+
+async function getJsonServerCommand(): Promise<{ command: string; args: string[] } | null> {
+  let jsPath = getInstalledServerPath('json')
+
+  if (!jsPath) {
+    jsPath = findModulePath('vscode-langservers-extracted', 'bin/vscode-json-language-server.js')
+  }
+
+  if (jsPath) return { command: process.execPath, args: [jsPath, '--stdio'] }
+  return null
+}
+
+// Python LSP (pyright)
+async function getPythonServerCommand(): Promise<{ command: string; args: string[] } | null> {
+  // 优先使用 pyright（通过 npm 安装）
+  const serverPath = getInstalledServerPath('python')
+
+  if (serverPath) {
+    return { command: process.execPath, args: [serverPath, '--stdio'] }
+  }
+
+  // 检查系统是否有 pylsp
+  if (commandExists('pylsp')) {
+    return { command: 'pylsp', args: [] }
+  }
+
+  return null
+}
+
+// Go LSP (gopls)
+async function getGoplsCommand(): Promise<{ command: string; args: string[] } | null> {
+  // 检查已安装的 gopls
+  const goplsPath = getInstalledServerPath('go')
+
+  if (goplsPath) {
+    return { command: goplsPath, args: [] }
+  }
+
+  // 检查系统 PATH
+  if (commandExists('gopls')) {
+    return { command: 'gopls', args: [] }
+  }
+
+  // 检查 GOPATH/bin
+  const isWindows = process.platform === 'win32'
+  const goplsName = isWindows ? 'gopls.exe' : 'gopls'
+  const goPathBin = process.env.GOPATH ? path.join(process.env.GOPATH, 'bin', goplsName) : null
+
+  if (goPathBin && fs.existsSync(goPathBin)) {
+    return { command: goPathBin, args: [] }
+  }
+
+  return null
+}
+
+// Rust LSP (rust-analyzer)
+async function getRustAnalyzerCommand(): Promise<{ command: string; args: string[] } | null> {
+  if (commandExists('rust-analyzer')) {
+    return { command: 'rust-analyzer', args: [] }
+  }
+
+  const isWindows = process.platform === 'win32'
+  const raName = isWindows ? 'rust-analyzer.exe' : 'rust-analyzer'
+  const cargoHome =
+    process.env.CARGO_HOME || path.join(process.env.HOME || process.env.USERPROFILE || '', '.cargo')
+  const raPath = path.join(cargoHome, 'bin', raName)
+
+  if (fs.existsSync(raPath)) {
+    return { command: raPath, args: [] }
+  }
+
+  return null
+}
+
+// C/C++ LSP (clangd)
+async function getClangdCommand(): Promise<{ command: string; args: string[] } | null> {
+  if (commandExists('clangd')) {
+    return { command: 'clangd', args: ['--background-index', '--clang-tidy'] }
+  }
+
+  return null
+}
+
+// Vue LSP (vue-language-server)
+async function getVueServerCommand(): Promise<{ command: string; args: string[] } | null> {
+  let jsPath = getInstalledServerPath('vue')
+
+  if (!jsPath) {
+    jsPath = findModulePath('@vue/language-server', 'bin/vue-language-server.js')
+  }
+
+  if (jsPath) return { command: process.execPath, args: [jsPath, '--stdio'] }
+
+  // 尝试全局安装的 vue-language-server
+  if (commandExists('vue-language-server')) {
+    return { command: 'vue-language-server', args: ['--stdio'] }
+  }
+  
   return null
 }
 
@@ -106,6 +259,17 @@ const LSP_SERVERS: LspServerConfig[] = [
     name: 'typescript',
     languages: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
     getCommand: getTypeScriptServerCommand,
+    // 智能根目录检测：查找 package.json 或 lock 文件，排除 deno 项目
+    findRoot: async (filePath, workspacePath) => {
+      const fileDir = path.dirname(filePath)
+      const root = await findNearestRoot(
+        fileDir,
+        workspacePath,
+        ['package-lock.json', 'bun.lockb', 'bun.lock', 'pnpm-lock.yaml', 'yarn.lock', 'package.json'],
+        ['deno.json', 'deno.jsonc'] // 排除 Deno 项目
+      )
+      return root || workspacePath
+    },
   },
   {
     name: 'html',
@@ -126,6 +290,90 @@ const LSP_SERVERS: LspServerConfig[] = [
     name: 'python',
     languages: ['python'],
     getCommand: getPythonServerCommand,
+    // 智能根目录检测：查找 Python 项目配置文件
+    findRoot: async (filePath, workspacePath) => {
+      const fileDir = path.dirname(filePath)
+      const root = await findNearestRoot(
+        fileDir,
+        workspacePath,
+        ['pyproject.toml', 'setup.py', 'setup.cfg', 'requirements.txt', 'Pipfile', 'pyrightconfig.json']
+      )
+      return root || workspacePath
+    },
+  },
+  {
+    name: 'go',
+    languages: ['go'],
+    getCommand: getGoplsCommand,
+    // 智能根目录检测：优先查找 go.work，然后 go.mod
+    findRoot: async (filePath, workspacePath) => {
+      const fileDir = path.dirname(filePath)
+      // 先查找 go.work（工作区模式）
+      const workRoot = await findNearestRoot(fileDir, workspacePath, ['go.work'])
+      if (workRoot) return workRoot
+      // 再查找 go.mod
+      const modRoot = await findNearestRoot(fileDir, workspacePath, ['go.mod', 'go.sum'])
+      return modRoot || workspacePath
+    },
+  },
+  {
+    name: 'rust',
+    languages: ['rust'],
+    getCommand: getRustAnalyzerCommand,
+    // 智能根目录检测：查找 Cargo.toml，优先查找 workspace
+    findRoot: async (filePath, workspacePath) => {
+      const fileDir = path.dirname(filePath)
+      const crateRoot = await findNearestRoot(fileDir, workspacePath, ['Cargo.toml', 'Cargo.lock'])
+      if (!crateRoot) return workspacePath
+      
+      // 向上查找 workspace 根目录
+      let currentDir = crateRoot
+      while (currentDir.length >= workspacePath.length) {
+        const cargoTomlPath = path.join(currentDir, 'Cargo.toml')
+        if (fs.existsSync(cargoTomlPath)) {
+          try {
+            const content = fs.readFileSync(cargoTomlPath, 'utf-8')
+            if (content.includes('[workspace]')) {
+              return currentDir
+            }
+          } catch { }
+        }
+        const parentDir = path.dirname(currentDir)
+        if (parentDir === currentDir) break
+        currentDir = parentDir
+      }
+      
+      return crateRoot
+    },
+  },
+  {
+    name: 'clangd',
+    languages: ['cpp', 'c'],
+    getCommand: getClangdCommand,
+    // 智能根目录检测：查找编译数据库或构建配置
+    findRoot: async (filePath, workspacePath) => {
+      const fileDir = path.dirname(filePath)
+      const root = await findNearestRoot(
+        fileDir,
+        workspacePath,
+        ['compile_commands.json', 'compile_flags.txt', '.clangd', 'CMakeLists.txt', 'Makefile']
+      )
+      return root || workspacePath
+    },
+  },
+  {
+    name: 'vue',
+    languages: ['vue'],
+    getCommand: getVueServerCommand,
+    findRoot: async (filePath, workspacePath) => {
+      const fileDir = path.dirname(filePath)
+      const root = await findNearestRoot(
+        fileDir,
+        workspacePath,
+        ['package-lock.json', 'bun.lockb', 'bun.lock', 'pnpm-lock.yaml', 'yarn.lock', 'package.json']
+      )
+      return root || workspacePath
+    },
   },
 ]
 
@@ -146,9 +394,14 @@ class LspManager {
   private idleCheckInterval: NodeJS.Timeout | null = null
   private static readonly IDLE_TIMEOUT_MS = 5 * 60 * 1000 // 5 分钟无活动则关闭
 
-  // 自动重启配置
+  // 自动重启配置（使用 constants.ts 中的值）
   private static readonly MAX_CRASH_COUNT = 3
-  private static readonly CRASH_COOLDOWN_MS = 5000
+  private static readonly CRASH_COOLDOWN_MS = SERVICE_DEFAULTS.LSP_CRASH_COOLDOWN_MS
+
+  // waitForDiagnostics 相关
+  private diagnosticsWaiters: Map<string, { resolve: () => void; timeout: NodeJS.Timeout }[]> = new Map()
+  private static readonly DIAGNOSTICS_DEBOUNCE_MS = 100
+  private static readonly DIAGNOSTICS_TIMEOUT_MS = 3000
 
   constructor() {
     for (const config of LSP_SERVERS) {
@@ -213,8 +466,11 @@ class LspManager {
   }
 
   private async spawnServer(config: LspServerConfig, workspacePath: string): Promise<boolean> {
-    const cmdInfo = config.getCommand()
-    if (!cmdInfo) return false
+    const cmdInfo = await config.getCommand()
+    if (!cmdInfo) {
+      logger.lsp.warn(`[LSP ${config.name}] No command available for server`)
+      return false
+    }
 
     const { command, args } = cmdInfo
     const key = this.getInstanceKey(config.name, workspacePath)
@@ -364,6 +620,9 @@ class LspManager {
         logger.lsp.debug(`[LSP ${key}] Diagnostics: ${uri} (${diagnostics.length} items)`)
       }
 
+      // 通知等待诊断的调用者
+      this.notifyDiagnosticsWaiters(uri)
+
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) {
           try {
@@ -373,6 +632,50 @@ class LspManager {
       })
     }
     // 忽略其他通知类型的日志，太频繁了
+  }
+
+  /**
+   * 通知等待诊断的调用者（带防抖）
+   */
+  private notifyDiagnosticsWaiters(uri: string): void {
+    const waiters = this.diagnosticsWaiters.get(uri)
+    if (!waiters || waiters.length === 0) return
+
+    // 使用防抖，等待 LSP 发送后续诊断（如语义诊断在语法诊断之后）
+    for (const waiter of waiters) {
+      clearTimeout(waiter.timeout)
+      waiter.timeout = setTimeout(() => {
+        waiter.resolve()
+        // 从等待列表中移除
+        const idx = waiters.indexOf(waiter)
+        if (idx >= 0) waiters.splice(idx, 1)
+        if (waiters.length === 0) this.diagnosticsWaiters.delete(uri)
+      }, LspManager.DIAGNOSTICS_DEBOUNCE_MS)
+    }
+  }
+
+  /**
+   * 等待指定文件的诊断信息
+   * 参考 OpenCode 的 waitForDiagnostics 实现
+   */
+  async waitForDiagnostics(uri: string): Promise<void> {
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        // 超时后自动 resolve
+        const waiters = this.diagnosticsWaiters.get(uri)
+        if (waiters) {
+          const idx = waiters.findIndex(w => w.resolve === resolve)
+          if (idx >= 0) waiters.splice(idx, 1)
+          if (waiters.length === 0) this.diagnosticsWaiters.delete(uri)
+        }
+        resolve()
+      }, LspManager.DIAGNOSTICS_TIMEOUT_MS)
+
+      if (!this.diagnosticsWaiters.has(uri)) {
+        this.diagnosticsWaiters.set(uri, [])
+      }
+      this.diagnosticsWaiters.get(uri)!.push({ resolve, timeout })
+    })
   }
 
   sendRequest(key: string, method: string, params: any, timeoutMs = 30000): Promise<any> {
@@ -450,8 +753,24 @@ class LspManager {
         rename: { prepareSupport: true },
         foldingRange: {},
         publishDiagnostics: { relatedInformation: true },
+        // Call Hierarchy 支持
+        callHierarchy: {
+          dynamicRegistration: false,
+        },
+        // Inlay Hints 支持
+        inlayHint: {
+          dynamicRegistration: false,
+        },
       },
-      workspace: { workspaceFolders: true, applyEdit: true, configuration: true },
+      workspace: { 
+        workspaceFolders: true, 
+        applyEdit: true, 
+        configuration: true,
+        // 文件监视支持
+        didChangeWatchedFiles: {
+          dynamicRegistration: false,
+        },
+      },
     }
   }
 
@@ -558,6 +877,109 @@ class LspManager {
   // 获取服务器打开的所有文档（用于重启后恢复）
   getOpenedDocuments(serverKey: string): Map<string, { languageId: string; version: number; text: string }> | undefined {
     return this.serverOpenedDocuments.get(serverKey)
+  }
+
+  // ============ Call Hierarchy 支持 ============
+
+  /**
+   * 准备调用层次结构
+   * 返回指定位置的调用层次项
+   */
+  async prepareCallHierarchy(
+    key: string,
+    uri: string,
+    line: number,
+    character: number
+  ): Promise<any[] | null> {
+    try {
+      const result = await this.sendRequest(key, 'textDocument/prepareCallHierarchy', {
+        textDocument: { uri },
+        position: { line, character },
+      })
+      return result || null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * 获取调用当前函数的所有位置（谁调用了我）
+   */
+  async getIncomingCalls(key: string, item: any): Promise<any[] | null> {
+    try {
+      const result = await this.sendRequest(key, 'callHierarchy/incomingCalls', { item })
+      return result || null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * 获取当前函数调用的所有位置（我调用了谁）
+   */
+  async getOutgoingCalls(key: string, item: any): Promise<any[] | null> {
+    try {
+      const result = await this.sendRequest(key, 'callHierarchy/outgoingCalls', { item })
+      return result || null
+    } catch {
+      return null
+    }
+  }
+
+  // ============ 智能根目录检测 ============
+
+  /**
+   * 根据文件路径和语言获取最佳的工作区根目录
+   * 参考 OpenCode 的智能根目录检测
+   */
+  async findBestRoot(filePath: string, languageId: LanguageId, workspacePath: string): Promise<string> {
+    const serverName = this.getServerForLanguage(languageId)
+    if (!serverName) return workspacePath
+
+    const config = LSP_SERVERS.find(c => c.name === serverName)
+    if (!config?.findRoot) return workspacePath
+
+    try {
+      return await config.findRoot(filePath, workspacePath)
+    } catch {
+      return workspacePath
+    }
+  }
+
+  /**
+   * 为指定文件启动 LSP 服务器（使用智能根目录检测）
+   */
+  async ensureServerForFile(filePath: string, languageId: LanguageId, workspacePath: string): Promise<string | null> {
+    const serverName = this.getServerForLanguage(languageId)
+    if (!serverName) return null
+
+    // 使用智能根目录检测
+    const bestRoot = await this.findBestRoot(filePath, languageId, workspacePath)
+    const success = await this.startServer(serverName, bestRoot)
+    return success ? this.getInstanceKey(serverName, bestRoot) : null
+  }
+
+  // ============ 文件监视通知 ============
+
+  /**
+   * 通知服务器文件变化
+   */
+  notifyDidChangeWatchedFiles(key: string, changes: Array<{ uri: string; type: number }>): void {
+    this.sendNotification(key, 'workspace/didChangeWatchedFiles', { changes })
+  }
+
+  /**
+   * 获取服务器配置
+   */
+  getServerConfig(serverName: string): LspServerConfig | undefined {
+    return LSP_SERVERS.find(c => c.name === serverName)
+  }
+
+  /**
+   * 获取所有支持的语言
+   */
+  getSupportedLanguages(): LanguageId[] {
+    return Array.from(this.languageToServer.keys())
   }
 }
 

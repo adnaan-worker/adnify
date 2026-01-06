@@ -147,15 +147,25 @@ export const LSP_SUPPORTED_LANGUAGES = [
     'less',
     'json',
     'jsonc',
+    // 新增支持（需要外部 LSP 服务器）
+    'python',  // pylsp / pyright
+    'go',      // gopls
+    'rust',    // rust-analyzer
+    'c',       // clangd
+    'cpp',     // clangd
+    'vue',     // vue-language-server
 ] as const
 
 // 可扩展支持（需要额外 LSP 服务器）
 export const LSP_EXTENSIBLE_LANGUAGES = [
-    'python',  // pylsp / pyright
-    'rust',    // rust-analyzer
-    'go',      // gopls
     'java',    // jdtls
     'csharp',  // omnisharp
+    'kotlin',  // kotlin-language-server
+    'swift',   // sourcekit-lsp
+    'ruby',    // solargraph
+    'php',     // intelephense
+    'elixir',  // elixir-ls
+    'zig',     // zls
 ] as const
 
 // ==========================================

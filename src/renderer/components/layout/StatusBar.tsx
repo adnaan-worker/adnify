@@ -29,6 +29,7 @@ import { useAgentStore, selectMessages, selectContextSummary, selectIsCompacting
 import { isAssistantMessage, TokenUsage } from '@renderer/agent/types'
 import { useDiagnosticsStore, getFileStats } from '@services/diagnosticsStore'
 import { AGENT_DEFAULTS } from '@shared/constants'
+import LspStatusIndicator from './LspStatusIndicator'
 
 export default function StatusBar() {
   const {
@@ -299,6 +300,9 @@ export default function StatusBar() {
 
           {/* 计划列表 - 仅在 Plan 模式下显示 */}
           <PlanListPopover language={language as 'en' | 'zh'} />
+
+          {/* LSP 状态指示器 */}
+          <LspStatusIndicator />
 
           {activeFilePath && (
             <span className="font-medium text-accent/80">{activeFilePath.split('.').pop()?.toUpperCase() || 'TXT'}</span>

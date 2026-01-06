@@ -414,6 +414,20 @@ export interface ElectronAPI {
   lspInlayHint: (params: { uri: string; range: LspRange; workspacePath?: string | null }) => Promise<LspInlayHint[] | null>
   getLspDiagnostics: (filePath: string) => Promise<LspDiagnostic[]>
   onLspDiagnostics: (callback: (params: { uri: string; diagnostics: LspDiagnostic[] }) => void) => () => void
+  // 新增 LSP 功能
+  lspPrepareCallHierarchy: (params: { uri: string; line: number; character: number; workspacePath?: string | null }) => Promise<any[] | null>
+  lspIncomingCalls: (params: { uri: string; line: number; character: number; workspacePath?: string | null }) => Promise<any[] | null>
+  lspOutgoingCalls: (params: { uri: string; line: number; character: number; workspacePath?: string | null }) => Promise<any[] | null>
+  lspWaitForDiagnostics: (params: { uri: string }) => Promise<{ success: boolean }>
+  lspFindBestRoot: (params: { filePath: string; languageId: string; workspacePath: string }) => Promise<string>
+  lspEnsureServerForFile: (params: { filePath: string; languageId: string; workspacePath: string }) => Promise<{ success: boolean; serverName?: string }>
+  lspDidChangeWatchedFiles: (params: { changes: Array<{ uri: string; type: number }>; workspacePath?: string | null }) => Promise<void>
+  lspGetSupportedLanguages: () => Promise<string[]>
+  // LSP 服务器安装管理
+  lspGetServerStatus: () => Promise<Record<string, { installed: boolean; path?: string }>>
+  lspGetBinDir: () => Promise<string>
+  lspInstallServer: (serverType: string) => Promise<{ success: boolean; path?: string; error?: string }>
+  lspInstallBasicServers: () => Promise<{ success: boolean; error?: string }>
 
   // HTTP (网络请求 - Phase 2)
   httpReadUrl: (url: string, timeout?: number) => Promise<{

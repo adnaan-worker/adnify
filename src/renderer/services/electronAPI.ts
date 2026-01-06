@@ -193,6 +193,20 @@ function createGroupedAPI() {
       inlayHint: (params: Parameters<typeof raw.lspInlayHint>[0]) => raw.lspInlayHint(params),
       getDiagnostics: (filePath: string) => raw.getLspDiagnostics(filePath),
       onDiagnostics: (callback: Parameters<typeof raw.onLspDiagnostics>[0]) => raw.onLspDiagnostics(callback),
+      // 新增 LSP 功能
+      prepareCallHierarchy: (params: Parameters<typeof raw.lspPrepareCallHierarchy>[0]) => raw.lspPrepareCallHierarchy(params),
+      incomingCalls: (params: Parameters<typeof raw.lspIncomingCalls>[0]) => raw.lspIncomingCalls(params),
+      outgoingCalls: (params: Parameters<typeof raw.lspOutgoingCalls>[0]) => raw.lspOutgoingCalls(params),
+      waitForDiagnostics: (params: Parameters<typeof raw.lspWaitForDiagnostics>[0]) => raw.lspWaitForDiagnostics(params),
+      findBestRoot: (params: Parameters<typeof raw.lspFindBestRoot>[0]) => raw.lspFindBestRoot(params),
+      ensureServerForFile: (params: Parameters<typeof raw.lspEnsureServerForFile>[0]) => raw.lspEnsureServerForFile(params),
+      didChangeWatchedFiles: (params: Parameters<typeof raw.lspDidChangeWatchedFiles>[0]) => raw.lspDidChangeWatchedFiles(params),
+      getSupportedLanguages: () => raw.lspGetSupportedLanguages(),
+      // LSP 服务器安装管理
+      getServerStatus: () => raw.lspGetServerStatus(),
+      getBinDir: () => raw.lspGetBinDir(),
+      installServer: (serverType: string) => raw.lspInstallServer(serverType),
+      installBasicServers: () => raw.lspInstallBasicServers(),
     },
 
     // Debug

@@ -268,6 +268,20 @@ export interface ElectronAPI {
   lspInlayHint: (params: { uri: string; range: any; workspacePath?: string | null }) => Promise<any>
   getLspDiagnostics: (filePath: string) => Promise<any[]>
   onLspDiagnostics: (callback: (params: { uri: string; diagnostics: any[] }) => void) => () => void
+  // 新增 LSP 功能
+  lspPrepareCallHierarchy: (params: { uri: string; line: number; character: number; workspacePath?: string | null }) => Promise<any>
+  lspIncomingCalls: (params: { uri: string; line: number; character: number; workspacePath?: string | null }) => Promise<any>
+  lspOutgoingCalls: (params: { uri: string; line: number; character: number; workspacePath?: string | null }) => Promise<any>
+  lspWaitForDiagnostics: (params: { uri: string }) => Promise<{ success: boolean }>
+  lspFindBestRoot: (params: { filePath: string; languageId: string; workspacePath: string }) => Promise<string>
+  lspEnsureServerForFile: (params: { filePath: string; languageId: string; workspacePath: string }) => Promise<{ success: boolean; serverName?: string }>
+  lspDidChangeWatchedFiles: (params: { changes: Array<{ uri: string; type: number }>; workspacePath?: string | null }) => Promise<void>
+  lspGetSupportedLanguages: () => Promise<string[]>
+  // LSP 服务器安装管理
+  lspGetServerStatus: () => Promise<Record<string, { installed: boolean; path?: string }>>
+  lspGetBinDir: () => Promise<string>
+  lspInstallServer: (serverType: string) => Promise<{ success: boolean; path?: string; error?: string }>
+  lspInstallBasicServers: () => Promise<{ success: boolean; error?: string }>
 
   // HTTP (网络请求)
   httpReadUrl: (url: string, timeout?: number) => Promise<{
@@ -491,6 +505,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('lsp:diagnostics', handler)
     return () => ipcRenderer.removeListener('lsp:diagnostics', handler)
   },
+  // 新增 LSP 功能
+  lspPrepareCallHierarchy: (params: any) => ipcRenderer.invoke('lsp:prepareCallHierarchy', params),
+  lspIncomingCalls: (params: any) => ipcRenderer.invoke('lsp:incomingCalls', params),
+  lspOutgoingCalls: (params: any) => ipcRenderer.invoke('lsp:outgoingCalls', params),
+  lspWaitForDiagnostics: (params: any) => ipcRenderer.invoke('lsp:waitForDiagnostics', params),
+  lspFindBestRoot: (params: any) => ipcRenderer.invoke('lsp:findBestRoot', params),
+  lspEnsureServerForFile: (params: any) => ipcRenderer.invoke('lsp:ensureServerForFile', params),
+  lspDidChangeWatchedFiles: (params: any) => ipcRenderer.invoke('lsp:didChangeWatchedFiles', params),
+  lspGetSupportedLanguages: () => ipcRenderer.invoke('lsp:getSupportedLanguages'),
+  // LSP 服务器安装管理
+  lspGetServerStatus: () => ipcRenderer.invoke('lsp:getServerStatus'),
+  lspGetBinDir: () => ipcRenderer.invoke('lsp:getBinDir'),
+  lspInstallServer: (serverType: string) => ipcRenderer.invoke('lsp:installServer', serverType),
+  lspInstallBasicServers: () => ipcRenderer.invoke('lsp:installBasicServers'),
 
   // HTTP API
   httpReadUrl: (url: string, timeout?: number) => ipcRenderer.invoke('http:readUrl', url, timeout),

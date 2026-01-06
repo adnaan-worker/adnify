@@ -1,11 +1,18 @@
 /**
  * MCP OAuth 回调服务器
  * 本地 HTTP 服务器接收 OAuth 授权回调
+ * 支持动态端口分配，避免端口冲突
  */
 
 import * as http from 'http'
+import * as net from 'net'
 import { logger } from '@shared/utils/Logger'
-import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH } from './McpOAuthProvider'
+import { 
+  OAUTH_CALLBACK_PORT_START, 
+  OAUTH_CALLBACK_PORT_END, 
+  OAUTH_CALLBACK_PATH,
+  setOAuthCallbackPort,
+} from './McpOAuthProvider'
 
 const HTML_SUCCESS = `<!DOCTYPE html>
 <html>
@@ -56,15 +63,42 @@ interface PendingAuth {
 
 export namespace McpOAuthCallback {
   let server: http.Server | undefined
+  let currentPort: number | undefined
   const pendingAuths = new Map<string, PendingAuth>()
   const CALLBACK_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 
-  export async function ensureRunning(): Promise<void> {
-    if (server) return
+  /** 检查端口是否可用 */
+  function isPortAvailable(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const tester = net.createServer()
+        .once('error', () => resolve(false))
+        .once('listening', () => {
+          tester.close(() => resolve(true))
+        })
+        .listen(port, '127.0.0.1')
+    })
+  }
+
+  /** 查找可用端口 */
+  async function findAvailablePort(): Promise<number> {
+    for (let port = OAUTH_CALLBACK_PORT_START; port <= OAUTH_CALLBACK_PORT_END; port++) {
+      if (await isPortAvailable(port)) {
+        return port
+      }
+    }
+    throw new Error(`No available port in range ${OAUTH_CALLBACK_PORT_START}-${OAUTH_CALLBACK_PORT_END}`)
+  }
+
+  export async function ensureRunning(): Promise<number> {
+    if (server && currentPort) {
+      return currentPort
+    }
+
+    const port = await findAvailablePort()
 
     return new Promise((resolve, reject) => {
       server = http.createServer((req, res) => {
-        const url = new URL(req.url || '/', `http://127.0.0.1:${OAUTH_CALLBACK_PORT}`)
+        const url = new URL(req.url || '/', `http://127.0.0.1:${port}`)
 
         if (url.pathname !== OAUTH_CALLBACK_PATH) {
           res.writeHead(404)
@@ -123,19 +157,27 @@ export namespace McpOAuthCallback {
 
       server.on('error', (err: NodeJS.ErrnoException) => {
         if (err.code === 'EADDRINUSE') {
-          logger.mcp?.info('[OAuth Callback] Port already in use, assuming another instance is running')
+          logger.mcp?.warn(`[OAuth Callback] Port ${port} in use, trying next...`)
           server = undefined
-          resolve()
+          // 递归尝试下一个端口
+          ensureRunning().then(resolve).catch(reject)
         } else {
           reject(err)
         }
       })
 
-      server.listen(OAUTH_CALLBACK_PORT, '127.0.0.1', () => {
-        logger.mcp?.info(`[OAuth Callback] Server started on port ${OAUTH_CALLBACK_PORT}`)
-        resolve()
+      server.listen(port, '127.0.0.1', () => {
+        currentPort = port
+        setOAuthCallbackPort(port)
+        logger.mcp?.info(`[OAuth Callback] Server started on port ${port}`)
+        resolve(port)
       })
     })
+  }
+
+  /** 获取当前运行的端口 */
+  export function getPort(): number | undefined {
+    return currentPort
   }
 
   export function waitForCallback(oauthState: string): Promise<string> {
@@ -164,6 +206,8 @@ export namespace McpOAuthCallback {
     if (server) {
       server.close()
       server = undefined
+      currentPort = undefined
+      setOAuthCallbackPort(OAUTH_CALLBACK_PORT_START) // 重置为默认端口
       logger.mcp?.info('[OAuth Callback] Server stopped')
     }
 

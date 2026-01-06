@@ -63,6 +63,8 @@ export interface McpServerFormData {
   // 通用字段
   autoApprove?: string[]
   disabled?: boolean
+  /** 来源预设 ID */
+  presetId?: string
 }
 
 type ViewMode = 'presets' | 'custom' | 'configure'
@@ -231,6 +233,7 @@ export default function McpAddServerModal({
           env,
           autoApprove: selectedPreset.defaultAutoApprove || [],
           disabled: false,
+          presetId: selectedPreset.id,
         }
       } else if (serverType === 'remote') {
         // 远程服务器配置

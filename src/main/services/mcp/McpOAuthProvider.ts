@@ -14,8 +14,23 @@ import { logger } from '@shared/utils/Logger'
 import { McpAuthStore } from './McpAuthStore'
 import type { McpOAuthTokens } from '@shared/types/mcp'
 
-export const OAUTH_CALLBACK_PORT = 19876
+/** OAuth 回调端口范围 */
+export const OAUTH_CALLBACK_PORT_START = 19876
+export const OAUTH_CALLBACK_PORT_END = 19886
 export const OAUTH_CALLBACK_PATH = '/mcp/oauth/callback'
+
+/** 当前使用的端口（动态分配） */
+let currentCallbackPort: number | null = null
+
+/** 获取当前回调端口 */
+export function getOAuthCallbackPort(): number {
+  return currentCallbackPort || OAUTH_CALLBACK_PORT_START
+}
+
+/** 设置当前回调端口 */
+export function setOAuthCallbackPort(port: number): void {
+  currentCallbackPort = port
+}
 
 export interface McpOAuthConfig {
   clientId?: string
@@ -34,7 +49,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
   ) {}
 
   get redirectUrl(): string {
-    return `http://127.0.0.1:${OAUTH_CALLBACK_PORT}${OAUTH_CALLBACK_PATH}`
+    return `http://127.0.0.1:${getOAuthCallbackPort()}${OAUTH_CALLBACK_PATH}`
   }
 
   get clientMetadata(): OAuthClientMetadata {

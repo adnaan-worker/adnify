@@ -172,14 +172,9 @@ export default function McpSettings({ language }: McpSettingsProps) {
     const showDeleteConfirm = deleteConfirm === server.id
     const isRemote = server.config.type === 'remote'
 
-    // 查找对应的预设以获取使用示例
-    const preset = MCP_PRESETS.find(p => {
-      if (isRemote) return false
-      const config = server.config as any
-      // 通过命令和参数匹配预设
-      return p.command === config.command && 
-        p.args?.some(arg => config.args?.includes(arg))
-    })
+    // 通过 presetId 查找预设获取使用示例
+    const presetId = (server.config as any).presetId
+    const preset = presetId ? MCP_PRESETS.find(p => p.id === presetId) : undefined
     const usageExamples = language === 'zh' ? preset?.usageExamplesZh : preset?.usageExamples
 
     return (

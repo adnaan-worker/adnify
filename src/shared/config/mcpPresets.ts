@@ -3,6 +3,26 @@
  * 内置常用的 MCP 服务器，用户可以一键添加
  */
 
+/** 支持的平台 */
+export type McpPlatform = 'windows' | 'macos' | 'linux'
+
+/** 依赖类型 */
+export type McpDependencyType = 'node' | 'python' | 'uv' | 'bun' | 'docker'
+
+/** 依赖配置 */
+export interface McpDependency {
+  /** 依赖类型 */
+  type: McpDependencyType
+  /** 最低版本（可选） */
+  minVersion?: string
+  /** 检查命令（用于验证是否安装） */
+  checkCommand?: string
+  /** 安装说明 */
+  installNote?: string
+  /** 安装说明（中文） */
+  installNoteZh?: string
+}
+
 export interface McpPreset {
   /** 预设 ID */
   id: string
@@ -42,6 +62,16 @@ export interface McpPreset {
   usageExamples?: string[]
   /** 使用示例（中文） */
   usageExamplesZh?: string[]
+  /** 支持的平台（不指定则支持所有平台） */
+  platforms?: McpPlatform[]
+  /** 依赖要求 */
+  dependencies?: McpDependency[]
+  /** 最低版本要求（MCP 服务器版本） */
+  minVersion?: string
+  /** 是否已废弃 */
+  deprecated?: boolean
+  /** 废弃说明 */
+  deprecatedNote?: string
 }
 
 export interface McpEnvConfig {
@@ -207,6 +237,9 @@ export const MCP_PRESETS: McpPreset[] = [
     tags: ['database', 'sql'],
     usageExamples: ['Show all tables in the database', 'Query users where age > 18', 'Describe the orders table structure'],
     usageExamplesZh: ['显示数据库中的所有表', '查询年龄大于 18 的用户', '描述 orders 表的结构'],
+    dependencies: [
+      { type: 'uv', checkCommand: 'uvx --version', installNote: 'Install uv: https://docs.astral.sh/uv/', installNoteZh: '安装 uv: https://docs.astral.sh/uv/' },
+    ],
   },
   {
     id: 'postgres',
@@ -453,6 +486,9 @@ export const MCP_PRESETS: McpPreset[] = [
     tags: ['web', 'scraping', 'markdown'],
     usageExamples: ['Fetch the content of https://example.com', 'Read this article and summarize it: [URL]'],
     usageExamplesZh: ['获取 https://example.com 的内容', '阅读这篇文章并总结：[URL]'],
+    dependencies: [
+      { type: 'uv', checkCommand: 'uvx --version', installNote: 'Install uv: https://docs.astral.sh/uv/', installNoteZh: '安装 uv: https://docs.astral.sh/uv/' },
+    ],
   },
   {
     id: 'puppeteer',
@@ -726,4 +762,44 @@ export function searchPresets(query: string): McpPreset[] {
     p.descriptionZh.includes(query) ||
     p.tags?.some(t => t.toLowerCase().includes(lowerQuery))
   )
+}
+
+/** 获取当前平台 */
+export function getCurrentPlatform(): McpPlatform {
+  const platform = process.platform
+  if (platform === 'win32') return 'windows'
+  if (platform === 'darwin') return 'macos'
+  return 'linux'
+}
+
+/** 检查预设是否支持当前平台 */
+export function isPresetSupportedOnCurrentPlatform(preset: McpPreset): boolean {
+  if (!preset.platforms || preset.platforms.length === 0) {
+    return true // 不指定则支持所有平台
+  }
+  return preset.platforms.includes(getCurrentPlatform())
+}
+
+/** 获取预设的依赖检查命令 */
+export function getPresetDependencyChecks(preset: McpPreset): Array<{ type: McpDependencyType; command: string }> {
+  if (!preset.dependencies) return []
+  
+  return preset.dependencies
+    .filter(dep => dep.checkCommand)
+    .map(dep => ({
+      type: dep.type,
+      command: dep.checkCommand!,
+    }))
+}
+
+/** 获取预设的缺失依赖提示 */
+export function getPresetMissingDependencyNote(preset: McpPreset, missingType: McpDependencyType, language: 'en' | 'zh'): string | undefined {
+  const dep = preset.dependencies?.find(d => d.type === missingType)
+  if (!dep) return undefined
+  return language === 'zh' ? dep.installNoteZh : dep.installNote
+}
+
+/** 根据平台过滤预设 */
+export function getPresetsForCurrentPlatform(): McpPreset[] {
+  return MCP_PRESETS.filter(p => !p.deprecated && isPresetSupportedOnCurrentPlatform(p))
 }

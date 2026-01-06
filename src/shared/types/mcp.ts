@@ -41,6 +41,8 @@ export interface McpLocalServerConfig {
   cwd?: string
   /** 连接超时（毫秒） */
   timeout?: number
+  /** 来源预设 ID（用于匹配预设获取使用示例等信息） */
+  presetId?: string
 }
 
 /** 远程 MCP 服务器配置 */
@@ -63,6 +65,8 @@ export interface McpRemoteServerConfig {
   autoApprove?: string[]
   /** 连接超时（毫秒） */
   timeout?: number
+  /** 来源预设 ID（用于匹配预设获取使用示例等信息） */
+  presetId?: string
 }
 
 /** MCP 服务器配置（联合类型） */

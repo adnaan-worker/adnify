@@ -6,8 +6,23 @@
 // 配置类型
 // ============================================
 
-/** MCP 服务器配置 */
-export interface McpServerConfig {
+/** MCP 服务器类型 */
+export type McpServerType = 'local' | 'remote'
+
+/** OAuth 配置 */
+export interface McpOAuthConfig {
+  /** OAuth 客户端 ID（可选，不提供则尝试动态注册） */
+  clientId?: string
+  /** OAuth 客户端密钥 */
+  clientSecret?: string
+  /** OAuth 作用域 */
+  scope?: string
+}
+
+/** 本地 MCP 服务器配置 */
+export interface McpLocalServerConfig {
+  /** 服务器类型 */
+  type: 'local'
   /** 服务器唯一标识 */
   id: string
   /** 显示名称 */
@@ -24,6 +39,43 @@ export interface McpServerConfig {
   autoApprove?: string[]
   /** 工作目录 */
   cwd?: string
+  /** 连接超时（毫秒） */
+  timeout?: number
+}
+
+/** 远程 MCP 服务器配置 */
+export interface McpRemoteServerConfig {
+  /** 服务器类型 */
+  type: 'remote'
+  /** 服务器唯一标识 */
+  id: string
+  /** 显示名称 */
+  name: string
+  /** 远程服务器 URL */
+  url: string
+  /** 自定义请求头 */
+  headers?: Record<string, string>
+  /** OAuth 配置（设为 false 禁用 OAuth） */
+  oauth?: McpOAuthConfig | false
+  /** 是否禁用 */
+  disabled?: boolean
+  /** 自动批准的工具列表 */
+  autoApprove?: string[]
+  /** 连接超时（毫秒） */
+  timeout?: number
+}
+
+/** MCP 服务器配置（联合类型） */
+export type McpServerConfig = McpLocalServerConfig | McpRemoteServerConfig
+
+/** 判断是否为远程配置 */
+export function isRemoteConfig(config: McpServerConfig): config is McpRemoteServerConfig {
+  return config.type === 'remote'
+}
+
+/** 判断是否为本地配置 */
+export function isLocalConfig(config: McpServerConfig): config is McpLocalServerConfig {
+  return config.type === 'local'
 }
 
 /** MCP 配置文件结构 */
@@ -35,7 +87,13 @@ export interface McpConfig {
 // 服务器状态
 // ============================================
 
-export type McpServerStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
+export type McpServerStatus = 
+  | 'disconnected' 
+  | 'connecting' 
+  | 'connected' 
+  | 'error'
+  | 'needs_auth'           // 需要 OAuth 认证
+  | 'needs_registration'   // 需要客户端注册
 
 /** MCP 服务器运行时状态 */
 export interface McpServerState {
@@ -47,6 +105,10 @@ export interface McpServerState {
   resources: McpResource[]
   prompts: McpPrompt[]
   lastConnected?: number
+  /** OAuth 认证状态（仅远程服务器） */
+  authStatus?: 'authenticated' | 'expired' | 'not_authenticated'
+  /** OAuth 授权 URL（需要认证时） */
+  authUrl?: string
 }
 
 // ============================================
@@ -177,6 +239,7 @@ export interface McpServerStatusEvent {
   serverId: string
   status: McpServerStatus
   error?: string
+  authUrl?: string
 }
 
 export interface McpToolsUpdatedEvent {
@@ -187,4 +250,41 @@ export interface McpToolsUpdatedEvent {
 export interface McpResourcesUpdatedEvent {
   serverId: string
   resources: McpResource[]
+}
+
+// ============================================
+// OAuth 相关类型
+// ============================================
+
+/** OAuth 认证请求 */
+export interface McpOAuthStartRequest {
+  serverId: string
+}
+
+/** OAuth 认证结果 */
+export interface McpOAuthStartResult {
+  success: boolean
+  authorizationUrl?: string
+  error?: string
+}
+
+/** OAuth 完成请求 */
+export interface McpOAuthFinishRequest {
+  serverId: string
+  authorizationCode: string
+}
+
+/** OAuth 完成结果 */
+export interface McpOAuthFinishResult {
+  success: boolean
+  error?: string
+}
+
+/** OAuth Token 存储 */
+export interface McpOAuthTokens {
+  accessToken: string
+  refreshToken?: string
+  expiresAt?: number
+  tokenType?: string
+  scope?: string
 }

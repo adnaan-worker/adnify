@@ -25,6 +25,7 @@
     "@anthropic-ai/sdk": "^0.71.2",
     "@google/generative-ai": "^0.24.1",
     "@lancedb/lancedb": "^0.13.0",
+    "@modelcontextprotocol/sdk": "^1.25.1",
     "@monaco-editor/react": "^4.6.0",
     "@parcel/watcher": "^2.4.1",
     "@vscode/ripgrep": "^1.15.9",

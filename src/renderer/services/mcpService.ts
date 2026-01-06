@@ -206,15 +206,19 @@ class McpService {
     }
   }
 
-  /** 添加服务器 */
+  /** 添加服务器（支持本地和远程） */
   async addServer(config: {
+    type: 'local' | 'remote'
     id: string
     name: string
-    command: string
-    args: string[]
-    env: Record<string, string>
-    autoApprove: string[]
-    disabled: boolean
+    command?: string
+    args?: string[]
+    env?: Record<string, string>
+    url?: string
+    headers?: Record<string, string>
+    oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
+    autoApprove?: string[]
+    disabled?: boolean
   }): Promise<boolean> {
     try {
       const result = await api.mcp.addServer(config)
@@ -244,6 +248,45 @@ class McpService {
     } catch (err: any) {
       logger.agent.error(`[McpService] Toggle server ${serverId} failed:`, err)
       return false
+    }
+  }
+
+  /** 开始 OAuth 认证流程 */
+  async startOAuth(serverId: string): Promise<{ success: boolean; authorizationUrl?: string; error?: string }> {
+    try {
+      const result = await api.mcp.startOAuth(serverId)
+      return result
+    } catch (err: any) {
+      logger.agent.error(`[McpService] Start OAuth ${serverId} failed:`, err)
+      return { success: false, error: err.message }
+    }
+  }
+
+  /** 完成 OAuth 认证 */
+  async finishOAuth(serverId: string, authorizationCode: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const result = await api.mcp.finishOAuth(serverId, authorizationCode)
+      if (result.success) {
+        await this.refreshServersState()
+      }
+      return result
+    } catch (err: any) {
+      logger.agent.error(`[McpService] Finish OAuth ${serverId} failed:`, err)
+      return { success: false, error: err.message }
+    }
+  }
+
+  /** 刷新 OAuth Token */
+  async refreshOAuthToken(serverId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const result = await api.mcp.refreshOAuthToken(serverId)
+      if (result.success) {
+        await this.refreshServersState()
+      }
+      return result
+    } catch (err: any) {
+      logger.agent.error(`[McpService] Refresh OAuth token ${serverId} failed:`, err)
+      return { success: false, error: err.message }
     }
   }
 

@@ -343,10 +343,25 @@ export interface ElectronAPI {
   mcpRefreshCapabilities: (serverId: string) => Promise<{ success: boolean; error?: string }>
   mcpGetConfigPaths: () => Promise<{ success: boolean; paths?: { user: string; workspace: string[] }; error?: string }>
   mcpReloadConfig: () => Promise<{ success: boolean; error?: string }>
-  mcpAddServer: (config: { id: string; name: string; command: string; args: string[]; env: Record<string, string>; autoApprove: string[]; disabled: boolean }) => Promise<{ success: boolean; error?: string }>
+  mcpAddServer: (config: {
+    type: 'local' | 'remote'
+    id: string
+    name: string
+    command?: string
+    args?: string[]
+    env?: Record<string, string>
+    url?: string
+    headers?: Record<string, string>
+    oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
+    autoApprove?: string[]
+    disabled?: boolean
+  }) => Promise<{ success: boolean; error?: string }>
   mcpRemoveServer: (serverId: string) => Promise<{ success: boolean; error?: string }>
   mcpToggleServer: (serverId: string, disabled: boolean) => Promise<{ success: boolean; error?: string }>
-  onMcpServerStatus: (callback: (event: McpServerStatusEvent) => void) => () => void
+  mcpStartOAuth: (serverId: string) => Promise<{ success: boolean; authorizationUrl?: string; error?: string }>
+  mcpFinishOAuth: (serverId: string, authorizationCode: string) => Promise<{ success: boolean; error?: string }>
+  mcpRefreshOAuthToken: (serverId: string) => Promise<{ success: boolean; error?: string }>
+  onMcpServerStatus: (callback: (event: McpServerStatusEvent & { authUrl?: string }) => void) => () => void
   onMcpToolsUpdated: (callback: (event: McpToolsUpdatedEvent) => void) => () => void
   onMcpResourcesUpdated: (callback: (event: McpResourcesUpdatedEvent) => void) => () => void
   onMcpStateChanged: (callback: (servers: McpServerState[]) => void) => () => void

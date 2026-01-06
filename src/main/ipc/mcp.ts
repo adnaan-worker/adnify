@@ -1,6 +1,7 @@
 /**
  * MCP IPC 处理器
  * 处理渲染进程与 MCP 服务的通信
+ * 支持本地和远程 MCP 服务器，包括 OAuth 认证
  */
 
 import { ipcMain, BrowserWindow } from 'electron'
@@ -10,6 +11,7 @@ import type {
   McpToolCallRequest,
   McpResourceReadRequest,
   McpPromptGetRequest,
+  McpServerConfig,
 } from '@shared/types/mcp'
 
 export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null): void {
@@ -147,16 +149,8 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
     }
   })
 
-  // 添加服务器
-  ipcMain.handle('mcp:addServer', async (_, config: {
-    id: string
-    name: string
-    command: string
-    args: string[]
-    env: Record<string, string>
-    autoApprove: string[]
-    disabled: boolean
-  }) => {
+  // 添加服务器（支持本地和远程）
+  ipcMain.handle('mcp:addServer', async (_, config: McpServerConfig) => {
     try {
       await mcpManager.addServer(config)
       return { success: true }
@@ -184,6 +178,41 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
       return { success: true }
     } catch (err: any) {
       logger.mcp?.error(`[MCP IPC] Toggle server ${serverId} failed:`, err)
+      return { success: false, error: err.message }
+    }
+  })
+
+  // =================== OAuth 相关处理器 ===================
+
+  // 开始 OAuth 认证流程
+  ipcMain.handle('mcp:startOAuth', async (_, serverId: string) => {
+    try {
+      const result = await mcpManager.startOAuth(serverId)
+      return result
+    } catch (err: any) {
+      logger.mcp?.error(`[MCP IPC] Start OAuth ${serverId} failed:`, err)
+      return { success: false, error: err.message }
+    }
+  })
+
+  // 完成 OAuth 认证
+  ipcMain.handle('mcp:finishOAuth', async (_, serverId: string, authorizationCode: string) => {
+    try {
+      const result = await mcpManager.finishOAuth(serverId, authorizationCode)
+      return result
+    } catch (err: any) {
+      logger.mcp?.error(`[MCP IPC] Finish OAuth ${serverId} failed:`, err)
+      return { success: false, error: err.message }
+    }
+  })
+
+  // 刷新 OAuth token
+  ipcMain.handle('mcp:refreshOAuthToken', async (_, serverId: string) => {
+    try {
+      const result = await mcpManager.refreshOAuthToken(serverId)
+      return result
+    } catch (err: any) {
+      logger.mcp?.error(`[MCP IPC] Refresh OAuth token ${serverId} failed:`, err)
       return { success: false, error: err.message }
     }
   })

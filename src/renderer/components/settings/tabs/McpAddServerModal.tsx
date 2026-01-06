@@ -49,16 +49,24 @@ interface McpAddServerModalProps {
 }
 
 export interface McpServerFormData {
+  type: 'local' | 'remote'
   id: string
   name: string
-  command: string
-  args: string[]
-  env: Record<string, string>
-  autoApprove: string[]
-  disabled: boolean
+  // 本地服务器字段
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  // 远程服务器字段
+  url?: string
+  headers?: Record<string, string>
+  oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
+  // 通用字段
+  autoApprove?: string[]
+  disabled?: boolean
 }
 
 type ViewMode = 'presets' | 'custom' | 'configure'
+type ServerType = 'local' | 'remote'
 
 // 图标映射
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -86,10 +94,12 @@ export default function McpAddServerModal({
   existingServerIds,
 }: McpAddServerModalProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('presets')
+  const [serverType, setServerType] = useState<ServerType>('local')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<McpPresetCategory | 'all'>('all')
   const [selectedPreset, setSelectedPreset] = useState<McpPreset | null>(null)
   const [formData, setFormData] = useState<McpServerFormData>({
+    type: 'local',
     id: '',
     name: '',
     command: '',
@@ -104,6 +114,12 @@ export default function McpAddServerModal({
   const [autoApproveInput, setAutoApproveInput] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 远程服务器字段
+  const [remoteUrl, setRemoteUrl] = useState('')
+  const [oauthClientId, setOauthClientId] = useState('')
+  const [oauthClientSecret, setOauthClientSecret] = useState('')
+  const [oauthScope, setOauthScope] = useState('')
+  const [enableOAuth, setEnableOAuth] = useState(true)
 
   // 过滤预设
   const filteredPresets = useMemo(() => {
@@ -141,7 +157,9 @@ export default function McpAddServerModal({
   // 切换到自定义模式
   const handleCustomMode = () => {
     setSelectedPreset(null)
+    setServerType('local')
     setFormData({
+      type: 'local',
       id: '',
       name: '',
       command: '',
@@ -152,6 +170,11 @@ export default function McpAddServerModal({
     })
     setArgsInput('')
     setAutoApproveInput('')
+    setRemoteUrl('')
+    setOauthClientId('')
+    setOauthClientSecret('')
+    setOauthScope('')
+    setEnableOAuth(true)
     setViewMode('custom')
   }
 
@@ -171,7 +194,7 @@ export default function McpAddServerModal({
       let config: McpServerFormData
 
       if (selectedPreset) {
-        // 从预设创建
+        // 从预设创建（本地服务器）
         const env: Record<string, string> = {}
         
         // 处理环境变量
@@ -200,6 +223,7 @@ export default function McpAddServerModal({
         }).filter(arg => arg !== '')
 
         config = {
+          type: 'local',
           id: selectedPreset.id,
           name: selectedPreset.name,
           command: selectedPreset.command,
@@ -208,15 +232,45 @@ export default function McpAddServerModal({
           autoApprove: selectedPreset.defaultAutoApprove || [],
           disabled: false,
         }
-      } else {
-        // 自定义配置
+      } else if (serverType === 'remote') {
+        // 远程服务器配置
         if (!formData.id.trim()) {
           throw new Error(language === 'zh' ? '请填写服务器 ID' : 'Please fill in server ID')
         }
         if (!formData.name.trim()) {
           throw new Error(language === 'zh' ? '请填写服务器名称' : 'Please fill in server name')
         }
-        if (!formData.command.trim()) {
+        if (!remoteUrl.trim()) {
+          throw new Error(language === 'zh' ? '请填写服务器 URL' : 'Please fill in server URL')
+        }
+        if (existingServerIds.includes(formData.id)) {
+          throw new Error(language === 'zh' ? '服务器 ID 已存在' : 'Server ID already exists')
+        }
+
+        config = {
+          type: 'remote',
+          id: formData.id,
+          name: formData.name,
+          url: remoteUrl,
+          oauth: enableOAuth
+            ? {
+                clientId: oauthClientId || undefined,
+                clientSecret: oauthClientSecret || undefined,
+                scope: oauthScope || undefined,
+              }
+            : false,
+          autoApprove: autoApproveInput.split(/[,\s]+/).filter(Boolean),
+          disabled: false,
+        }
+      } else {
+        // 本地服务器自定义配置
+        if (!formData.id.trim()) {
+          throw new Error(language === 'zh' ? '请填写服务器 ID' : 'Please fill in server ID')
+        }
+        if (!formData.name.trim()) {
+          throw new Error(language === 'zh' ? '请填写服务器名称' : 'Please fill in server name')
+        }
+        if (!formData.command?.trim()) {
           throw new Error(language === 'zh' ? '请填写启动命令' : 'Please fill in command')
         }
         if (existingServerIds.includes(formData.id)) {
@@ -224,9 +278,14 @@ export default function McpAddServerModal({
         }
 
         config = {
-          ...formData,
+          type: 'local',
+          id: formData.id,
+          name: formData.name,
+          command: formData.command,
           args: argsInput.split(/\s+/).filter(Boolean),
+          env: formData.env,
           autoApprove: autoApproveInput.split(/[,\s]+/).filter(Boolean),
+          disabled: false,
         }
       }
 
@@ -245,10 +304,12 @@ export default function McpAddServerModal({
   // 重置表单
   const resetForm = () => {
     setViewMode('presets')
+    setServerType('local')
     setSearchQuery('')
     setSelectedCategory('all')
     setSelectedPreset(null)
     setFormData({
+      type: 'local',
       id: '',
       name: '',
       command: '',
@@ -261,6 +322,11 @@ export default function McpAddServerModal({
     setShowSecrets({})
     setArgsInput('')
     setAutoApproveInput('')
+    setRemoteUrl('')
+    setOauthClientId('')
+    setOauthClientSecret('')
+    setOauthScope('')
+    setEnableOAuth(true)
     setError(null)
   }
 
@@ -527,6 +593,31 @@ export default function McpAddServerModal({
         {/* 自定义配置视图 */}
         {viewMode === 'custom' && (
           <div className="space-y-4">
+            {/* 服务器类型选择 */}
+            <div className="flex gap-2 p-1 bg-surface/30 rounded-lg">
+              <button
+                className={`flex-1 px-4 py-2 text-sm rounded-md transition-colors ${
+                  serverType === 'local'
+                    ? 'bg-accent text-white'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+                onClick={() => setServerType('local')}
+              >
+                {language === 'zh' ? '本地服务器' : 'Local Server'}
+              </button>
+              <button
+                className={`flex-1 px-4 py-2 text-sm rounded-md transition-colors ${
+                  serverType === 'remote'
+                    ? 'bg-accent text-white'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+                onClick={() => setServerType('remote')}
+              >
+                {language === 'zh' ? '远程服务器' : 'Remote Server'}
+              </button>
+            </div>
+
+            {/* 通用字段 */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-text-secondary">
@@ -550,30 +641,106 @@ export default function McpAddServerModal({
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-text-secondary">
-                {language === 'zh' ? '启动命令' : 'Command'} <span className="text-red-400">*</span>
-              </label>
-              <Input
-                value={formData.command}
-                onChange={(e) => setFormData(prev => ({ ...prev, command: e.target.value }))}
-                placeholder="npx, uvx, node, python..."
-              />
-            </div>
+            {/* 本地服务器字段 */}
+            {serverType === 'local' && (
+              <>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-text-secondary">
+                    {language === 'zh' ? '启动命令' : 'Command'} <span className="text-red-400">*</span>
+                  </label>
+                  <Input
+                    value={formData.command || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, command: e.target.value }))}
+                    placeholder="npx, uvx, node, python..."
+                  />
+                </div>
 
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-text-secondary">
-                {language === 'zh' ? '命令参数' : 'Arguments'}
-              </label>
-              <Input
-                value={argsInput}
-                onChange={(e) => setArgsInput(e.target.value)}
-                placeholder="-y @modelcontextprotocol/server-xxx"
-              />
-              <p className="text-xs text-text-muted">
-                {language === 'zh' ? '用空格分隔多个参数' : 'Separate multiple arguments with spaces'}
-              </p>
-            </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-text-secondary">
+                    {language === 'zh' ? '命令参数' : 'Arguments'}
+                  </label>
+                  <Input
+                    value={argsInput}
+                    onChange={(e) => setArgsInput(e.target.value)}
+                    placeholder="-y @modelcontextprotocol/server-xxx"
+                  />
+                  <p className="text-xs text-text-muted">
+                    {language === 'zh' ? '用空格分隔多个参数' : 'Separate multiple arguments with spaces'}
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* 远程服务器字段 */}
+            {serverType === 'remote' && (
+              <>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-text-secondary">
+                    {language === 'zh' ? '服务器 URL' : 'Server URL'} <span className="text-red-400">*</span>
+                  </label>
+                  <Input
+                    value={remoteUrl}
+                    onChange={(e) => setRemoteUrl(e.target.value)}
+                    placeholder="https://mcp.example.com/api"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-text-secondary">
+                      {language === 'zh' ? 'OAuth 认证' : 'OAuth Authentication'}
+                    </label>
+                    <button
+                      className={`relative w-10 h-5 rounded-full transition-colors ${
+                        enableOAuth ? 'bg-accent' : 'bg-white/10'
+                      }`}
+                      onClick={() => setEnableOAuth(!enableOAuth)}
+                    >
+                      <span
+                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                          enableOAuth ? 'left-5' : 'left-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {enableOAuth && (
+                    <div className="space-y-3 p-3 bg-surface/30 rounded-lg">
+                      <div className="space-y-1.5">
+                        <label className="text-sm text-text-muted">
+                          {language === 'zh' ? '客户端 ID（可选）' : 'Client ID (optional)'}
+                        </label>
+                        <Input
+                          value={oauthClientId}
+                          onChange={(e) => setOauthClientId(e.target.value)}
+                          placeholder={language === 'zh' ? '留空则尝试动态注册' : 'Leave empty for dynamic registration'}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm text-text-muted">
+                          {language === 'zh' ? '客户端密钥' : 'Client Secret'}
+                        </label>
+                        <Input
+                          type="password"
+                          value={oauthClientSecret}
+                          onChange={(e) => setOauthClientSecret(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm text-text-muted">
+                          {language === 'zh' ? '作用域' : 'Scope'}
+                        </label>
+                        <Input
+                          value={oauthScope}
+                          onChange={(e) => setOauthScope(e.target.value)}
+                          placeholder="read write"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
 
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-text-secondary">

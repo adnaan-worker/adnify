@@ -547,18 +547,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   mcpGetConfigPaths: () => ipcRenderer.invoke('mcp:getConfigPaths'),
   mcpReloadConfig: () => ipcRenderer.invoke('mcp:reloadConfig'),
   mcpAddServer: (config: {
+    type?: 'local' | 'remote'
     id: string
     name: string
-    command: string
-    args: string[]
-    env: Record<string, string>
-    autoApprove: string[]
-    disabled: boolean
+    command?: string
+    args?: string[]
+    env?: Record<string, string>
+    url?: string
+    headers?: Record<string, string>
+    oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
+    autoApprove?: string[]
+    disabled?: boolean
   }) => ipcRenderer.invoke('mcp:addServer', config),
   mcpRemoveServer: (serverId: string) => ipcRenderer.invoke('mcp:removeServer', serverId),
   mcpToggleServer: (serverId: string, disabled: boolean) => ipcRenderer.invoke('mcp:toggleServer', serverId, disabled),
-  onMcpServerStatus: (callback: (event: { serverId: string; status: string; error?: string }) => void) => {
-    const handler = (_: IpcRendererEvent, event: { serverId: string; status: string; error?: string }) => callback(event)
+  // OAuth 相关
+  mcpStartOAuth: (serverId: string) => ipcRenderer.invoke('mcp:startOAuth', serverId),
+  mcpFinishOAuth: (serverId: string, authorizationCode: string) => ipcRenderer.invoke('mcp:finishOAuth', serverId, authorizationCode),
+  mcpRefreshOAuthToken: (serverId: string) => ipcRenderer.invoke('mcp:refreshOAuthToken', serverId),
+  onMcpServerStatus: (callback: (event: { serverId: string; status: string; error?: string; authUrl?: string }) => void) => {
+    const handler = (_: IpcRendererEvent, event: { serverId: string; status: string; error?: string; authUrl?: string }) => callback(event)
     ipcRenderer.on('mcp:serverStatus', handler)
     return () => ipcRenderer.removeListener('mcp:serverStatus', handler)
   },

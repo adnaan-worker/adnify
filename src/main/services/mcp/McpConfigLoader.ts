@@ -1,6 +1,7 @@
 /**
  * MCP 配置加载器
  * 负责加载和监听 MCP 配置文件
+ * 支持本地和远程 MCP 服务器配置
  */
 
 import * as fs from 'fs'
@@ -40,7 +41,7 @@ export class McpConfigLoader {
     if (userConfig) {
       for (const [id, serverConfig] of Object.entries(userConfig.mcpServers)) {
         if (!seenIds.has(id)) {
-          configs.push({ id, ...serverConfig })
+          configs.push({ id, ...serverConfig } as McpServerConfig)
           seenIds.add(id)
         }
       }
@@ -59,7 +60,7 @@ export class McpConfigLoader {
             configs.splice(existingIndex, 1)
           }
           // 添加新配置
-          configs.push({ id, ...serverConfig })
+          configs.push({ id, ...serverConfig } as McpServerConfig)
           seenIds.add(id)
         }
       }

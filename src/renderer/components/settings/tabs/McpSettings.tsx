@@ -23,11 +23,16 @@ import {
   Settings,
   ChevronDown,
   ChevronUp,
+  Globe,
+  Key,
+  LogIn,
+  Lightbulb,
 } from 'lucide-react'
 import { useStore } from '@store'
 import { mcpService } from '@services/mcpService'
 import { Button } from '@components/ui'
 import type { McpServerState, McpServerStatus } from '@shared/types/mcp'
+import { MCP_PRESETS } from '@shared/config/mcpPresets'
 import McpAddServerModal, { type McpServerFormData } from './McpAddServerModal'
 
 interface McpSettingsProps {
@@ -129,26 +134,53 @@ export default function McpSettings({ language }: McpSettingsProps) {
         return <Loader2 className="w-4 h-4 text-yellow-500 animate-spin" />
       case 'error':
         return <AlertCircle className="w-4 h-4 text-red-500" />
+      case 'needs_auth':
+        return <Key className="w-4 h-4 text-orange-500" />
+      case 'needs_registration':
+        return <LogIn className="w-4 h-4 text-orange-500" />
       default:
         return <PowerOff className="w-4 h-4 text-text-muted" />
     }
   }
 
   const getStatusText = (status: McpServerStatus) => {
-    const texts = {
+    const texts: Record<McpServerStatus, string> = {
       connected: language === 'zh' ? '已连接' : 'Connected',
       connecting: language === 'zh' ? '连接中' : 'Connecting',
       error: language === 'zh' ? '错误' : 'Error',
       disconnected: language === 'zh' ? '未连接' : 'Disconnected',
+      needs_auth: language === 'zh' ? '需要认证' : 'Auth Required',
+      needs_registration: language === 'zh' ? '需要注册' : 'Registration Required',
     }
     return texts[status]
   }
 
+  const handleStartOAuth = async (serverId: string) => {
+    setActionLoading(`oauth-${serverId}`)
+    try {
+      await mcpService.startOAuth(serverId)
+    } catch (err) {
+      console.error('Failed to start OAuth:', err)
+    }
+    setActionLoading(null)
+  }
+
   const renderServerCard = (server: McpServerState) => {
     const isExpanded = expandedServer === server.id
-    const isLoading = actionLoading?.startsWith(server.id) || actionLoading === `refresh-${server.id}`
+    const isLoading = actionLoading?.startsWith(server.id) || actionLoading === `refresh-${server.id}` || actionLoading === `oauth-${server.id}`
     const isDeleting = actionLoading === `delete-${server.id}`
     const showDeleteConfirm = deleteConfirm === server.id
+    const isRemote = server.config.type === 'remote'
+
+    // 查找对应的预设以获取使用示例
+    const preset = MCP_PRESETS.find(p => {
+      if (isRemote) return false
+      const config = server.config as any
+      // 通过命令和参数匹配预设
+      return p.command === config.command && 
+        p.args?.some(arg => config.args?.includes(arg))
+    })
+    const usageExamples = language === 'zh' ? preset?.usageExamplesZh : preset?.usageExamples
 
     return (
       <div
@@ -165,17 +197,31 @@ export default function McpSettings({ language }: McpSettingsProps) {
             className="flex items-center gap-3 flex-1 cursor-pointer"
             onClick={() => setExpandedServer(isExpanded ? null : server.id)}
           >
-            <Server className={`w-5 h-5 ${server.config.disabled ? 'text-text-muted' : 'text-accent'}`} />
+            {isRemote ? (
+              <Globe className={`w-5 h-5 ${server.config.disabled ? 'text-text-muted' : 'text-blue-400'}`} />
+            ) : (
+              <Server className={`w-5 h-5 ${server.config.disabled ? 'text-text-muted' : 'text-accent'}`} />
+            )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <h4 className="font-medium text-text-primary">{server.config.name}</h4>
+                {isRemote && (
+                  <span className="px-1.5 py-0.5 text-[10px] bg-blue-500/20 text-blue-400 rounded">
+                    Remote
+                  </span>
+                )}
                 {server.config.disabled && (
                   <span className="px-1.5 py-0.5 text-[10px] bg-white/10 text-text-muted rounded">
                     {language === 'zh' ? '已禁用' : 'Disabled'}
                   </span>
                 )}
               </div>
-              <p className="text-xs text-text-muted truncate">{server.config.command} {server.config.args?.join(' ')}</p>
+              <p className="text-xs text-text-muted truncate">
+                {isRemote 
+                  ? (server.config as any).url 
+                  : `${(server.config as any).command} ${(server.config as any).args?.join(' ') || ''}`
+                }
+              </p>
             </div>
             {isExpanded ? (
               <ChevronUp className="w-4 h-4 text-text-muted" />
@@ -196,6 +242,20 @@ export default function McpSettings({ language }: McpSettingsProps) {
 
             {/* Actions */}
             <div className="flex items-center gap-1">
+              {/* OAuth Button for remote servers needing auth */}
+              {!server.config.disabled && (server.status === 'needs_auth' || server.status === 'needs_registration') && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => handleStartOAuth(server.id)}
+                  disabled={isLoading}
+                  title={language === 'zh' ? '开始认证' : 'Start Authentication'}
+                >
+                  <Key className="w-4 h-4 mr-1" />
+                  {language === 'zh' ? '认证' : 'Auth'}
+                </Button>
+              )}
+
               {!server.config.disabled && server.status === 'connected' && (
                 <>
                   <Button
@@ -221,7 +281,7 @@ export default function McpSettings({ language }: McpSettingsProps) {
               {!server.config.disabled && server.status === 'connecting' && (
                 <Loader2 className="w-4 h-4 animate-spin text-text-muted" />
               )}
-              {!server.config.disabled && server.status !== 'connected' && server.status !== 'connecting' && (
+              {!server.config.disabled && server.status !== 'connected' && server.status !== 'connecting' && server.status !== 'needs_auth' && server.status !== 'needs_registration' && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -310,6 +370,24 @@ export default function McpSettings({ language }: McpSettingsProps) {
               </div>
             )}
 
+            {/* Auth Status for remote servers */}
+            {isRemote && server.authStatus && (
+              <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${
+                server.authStatus === 'authenticated' 
+                  ? 'bg-green-500/10 text-green-400'
+                  : server.authStatus === 'expired'
+                  ? 'bg-orange-500/10 text-orange-400'
+                  : 'bg-white/5 text-text-muted'
+              }`}>
+                <Key className="w-4 h-4" />
+                <span>
+                  {server.authStatus === 'authenticated' && (language === 'zh' ? '已认证' : 'Authenticated')}
+                  {server.authStatus === 'expired' && (language === 'zh' ? '认证已过期' : 'Authentication Expired')}
+                  {server.authStatus === 'not_authenticated' && (language === 'zh' ? '未认证' : 'Not Authenticated')}
+                </span>
+              </div>
+            )}
+
             {/* Config Details */}
             <div className="space-y-2">
               <h5 className="text-sm font-medium text-text-secondary">
@@ -317,17 +395,29 @@ export default function McpSettings({ language }: McpSettingsProps) {
               </h5>
               <div className="text-xs text-text-muted space-y-1 font-mono bg-black/20 p-3 rounded">
                 <div><span className="text-text-secondary">id:</span> {server.id}</div>
-                <div><span className="text-text-secondary">command:</span> {server.config.command}</div>
-                {server.config.args && server.config.args.length > 0 && (
-                  <div><span className="text-text-secondary">args:</span> {server.config.args.join(' ')}</div>
-                )}
-                {server.config.env && Object.keys(server.config.env).length > 0 && (
-                  <div>
-                    <span className="text-text-secondary">env:</span>
-                    {Object.entries(server.config.env).map(([k, v]) => (
-                      <div key={k} className="ml-4">{k}={v.length > 20 ? v.slice(0, 8) + '***' : v}</div>
-                    ))}
-                  </div>
+                <div><span className="text-text-secondary">type:</span> {server.config.type}</div>
+                {isRemote ? (
+                  <>
+                    <div><span className="text-text-secondary">url:</span> {(server.config as any).url}</div>
+                    {(server.config as any).oauth !== false && (
+                      <div><span className="text-text-secondary">oauth:</span> enabled</div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div><span className="text-text-secondary">command:</span> {(server.config as any).command}</div>
+                    {(server.config as any).args && (server.config as any).args.length > 0 && (
+                      <div><span className="text-text-secondary">args:</span> {(server.config as any).args.join(' ')}</div>
+                    )}
+                    {(server.config as any).env && Object.keys((server.config as any).env).length > 0 && (
+                      <div>
+                        <span className="text-text-secondary">env:</span>
+                        {Object.entries((server.config as any).env as Record<string, string>).map(([k, v]) => (
+                          <div key={k} className="ml-4">{k}={v.length > 20 ? v.slice(0, 8) + '***' : v}</div>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -418,6 +508,32 @@ export default function McpSettings({ language }: McpSettingsProps) {
                     </span>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Usage Examples */}
+            {usageExamples && usageExamples.length > 0 && (
+              <div className="space-y-2">
+                <h5 className="text-sm font-medium text-text-secondary flex items-center gap-2">
+                  <Lightbulb className="w-4 h-4 text-yellow-500" />
+                  {language === 'zh' ? '使用示例' : 'Usage Examples'}
+                </h5>
+                <div className="space-y-1.5">
+                  {usageExamples.map((example, index) => (
+                    <div
+                      key={index}
+                      className="p-2.5 bg-yellow-500/5 border border-yellow-500/20 rounded-lg text-sm text-text-secondary"
+                    >
+                      <span className="text-yellow-500/70 mr-2">💡</span>
+                      {example}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-text-muted">
+                  {language === 'zh' 
+                    ? '在聊天中输入类似的内容即可触发此工具' 
+                    : 'Type similar prompts in chat to trigger this tool'}
+                </p>
               </div>
             )}
           </div>

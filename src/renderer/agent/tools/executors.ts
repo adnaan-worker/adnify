@@ -12,6 +12,7 @@ import { pathToLspUri } from '@/renderer/services/lspService'
 import {
     calculateLineChanges,
 } from '@/renderer/utils/searchReplace'
+import { smartReplace, normalizeLineEndings } from '@/renderer/utils/smartReplace'
 import { getAgentConfig } from '../utils/AgentConfig'
 import { AgentService } from '../services/AgentService'
 import { useAgentStore } from '../store/AgentStore'
@@ -173,68 +174,61 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         const originalContent = await api.file.read(path)
         if (originalContent === null) return { success: false, result: '', error: `File not found: ${path}. Use write_file to create new files.` }
 
-        // 获取 old_string 和 new_string 参数
         const oldString = args.old_string as string
         const newString = args.new_string as string
+        const replaceAll = args.replace_all as boolean | undefined
 
-        if (!oldString) {
-            return { success: false, result: '', error: 'old_string is required. Provide the exact text to find and replace.' }
-        }
+        // 使用智能替换（支持多种容错策略）
+        const normalizedContent = normalizeLineEndings(originalContent)
+        const normalizedOld = normalizeLineEndings(oldString)
+        const normalizedNew = normalizeLineEndings(newString)
 
-        if (oldString === newString) {
-            return { success: false, result: '', error: 'old_string and new_string are identical. No changes needed.' }
-        }
+        const result = smartReplace(normalizedContent, normalizedOld, normalizedNew, replaceAll)
 
-        // 检查 old_string 在文件中出现的次数
-        const occurrences = originalContent.split(oldString).length - 1
-
-        if (occurrences === 0) {
-            // 提供详细的错误信息帮助调试
+        if (!result.success) {
+            // 提供更详细的错误信息
             const hasCache = AgentService.hasValidFileCache(path)
-            const tip = hasCache
-                ? 'The old_string was not found. The file may have been modified. Use read_file to get the latest content.'
-                : 'The old_string was not found. Use read_file first to get the exact content including whitespace.'
+            let errorMsg = result.error || 'Replace failed'
             
-            // 尝试找到相似的内容
-            const normalizedOld = oldString.replace(/\s+/g, ' ').trim()
-            const normalizedContent = originalContent.replace(/\s+/g, ' ')
-            const hasSimilar = normalizedContent.includes(normalizedOld)
-            
-            let errorMsg = `old_string not found in file.\n\nTip: ${tip}`
-            if (hasSimilar) {
-                errorMsg += '\n\nNote: Similar content exists but whitespace differs. Copy exact content from read_file output.'
+            if (result.error?.includes('not found')) {
+                const tip = hasCache
+                    ? 'The file may have been modified. Use read_file to get the latest content.'
+                    : 'Use read_file first to get the exact content.'
+                errorMsg = `old_string not found in file.\n\nTip: ${tip}`
+                
+                // 检查是否有相似内容
+                const normalizedOldTrimmed = normalizedOld.replace(/\s+/g, ' ').trim()
+                const normalizedContentTrimmed = normalizedContent.replace(/\s+/g, ' ')
+                if (normalizedContentTrimmed.includes(normalizedOldTrimmed)) {
+                    errorMsg += '\n\nNote: Similar content exists. The smart matcher tried multiple strategies but couldn\'t find a unique match.'
+                }
             }
             
             return { success: false, result: '', error: errorMsg }
         }
 
-        if (occurrences > 1) {
-            return {
-                success: false,
-                result: '',
-                error: `old_string found ${occurrences} times in file. It must be unique.\n\nTip: Include more surrounding context (3-5 lines before/after) to make old_string unique.`
-            }
-        }
-
-        // 执行替换
-        const newContent = originalContent.replace(oldString, newString)
-
-        const success = await api.file.write(path, newContent)
-        if (!success) return { success: false, result: '', error: 'Failed to write file' }
+        const newContent = result.newContent!
+        const writeSuccess = await api.file.write(path, newContent)
+        if (!writeSuccess) return { success: false, result: '', error: 'Failed to write file' }
 
         // 更新文件缓存
         AgentService.markFileAsRead(path, newContent)
 
         const lineChanges = calculateLineChanges(originalContent, newContent)
+        
+        // 记录使用的匹配策略（用于调试）
+        const strategyInfo = result.strategy !== 'exact' ? ` (matched via ${result.strategy} strategy)` : ''
+        
         return { 
             success: true, 
-            result: 'File updated successfully', 
+            result: `File updated successfully${strategyInfo}`, 
             meta: { 
                 filePath: path, 
                 oldContent: originalContent, 
                 newContent, 
                 linesAdded: lineChanges.added, 
-                linesRemoved: lineChanges.removed 
+                linesRemoved: lineChanges.removed,
+                matchStrategy: result.strategy
             } 
         }
     },

@@ -236,27 +236,26 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     edit_file: {
         name: 'edit_file',
         displayName: 'Edit File',
-        description: 'Edit file by replacing exact text. old_string must match file content EXACTLY.',
-        detailedDescription: `Precise string replacement in files.
-- old_string must match file content EXACTLY (including whitespace, indentation)
-- new_string replaces the matched content
-- Use for surgical edits when you know the exact text to change
-- ALWAYS read the file first to get exact content`,
+        description: 'Edit file by replacing text. Uses smart matching with multiple fallback strategies.',
+        detailedDescription: `Smart string replacement in files with multiple matching strategies.
+- Tries exact match first, then falls back to fuzzy strategies
+- Strategies: exact → line-trimmed → block-anchor → whitespace-normalized → indentation-flexible
+- ALWAYS read the file first to understand context
+- For new files, use write_file instead`,
         examples: [
             `edit_file path="src/utils.ts" old_string="function add(a, b) {\\n  return a + b;\\n}" new_string="function add(a: number, b: number): number {\\n  return a + b;\\n}"`,
+            `edit_file path="config.json" old_string='"debug": false' new_string='"debug": true' replace_all=true`,
         ],
         criticalRules: [
-            'ALWAYS read_file BEFORE edit_file to get exact content',
-            'old_string must match EXACTLY including all whitespace and indentation',
+            'ALWAYS read_file BEFORE edit_file to understand context',
             'Include enough context (3-5 lines) to ensure unique match',
-            'If old_string matches multiple locations, the edit will FAIL',
+            'If multiple matches exist and replace_all is false, the edit will FAIL',
             'For new files, use write_file instead',
             'For line-based edits, use replace_file_content instead',
         ],
         commonErrors: [
-            { error: 'old_string not found', solution: 'Read the file again and copy exact content including whitespace' },
-            { error: 'Multiple matches found', solution: 'Include more surrounding context to make old_string unique' },
-            { error: 'Whitespace mismatch', solution: 'Ensure tabs/spaces match exactly - copy from read_file output' },
+            { error: 'old_string not found', solution: 'Read the file again - smart matching will try multiple strategies' },
+            { error: 'Multiple matches found', solution: 'Include more context OR use replace_all=true if you want to replace all' },
         ],
         category: 'write',
         approvalType: 'none',
@@ -265,8 +264,9 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'File path', required: true },
-            old_string: { type: 'string', description: 'Exact text to find and replace (must be unique in file)', required: true },
+            old_string: { type: 'string', description: 'Text to find (smart matching with fallback strategies)', required: true },
             new_string: { type: 'string', description: 'New text to replace with', required: true },
+            replace_all: { type: 'boolean', description: 'Replace all occurrences (default: false)', default: false },
         },
     },
 

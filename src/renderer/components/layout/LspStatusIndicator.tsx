@@ -116,13 +116,13 @@ export default function LspStatusIndicator() {
   return (
     <BottomBarPopover
       icon={
-        <div className={`flex items-center gap-1.5 ${isInstalled ? 'text-green-400' : 'text-yellow-400'}`}>
+        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-white/5 transition-all ${isInstalled ? 'text-emerald-400' : 'text-amber-400'}`}>
           {isInstalled ? (
-            <Zap className="w-3 h-3" />
+            <Zap className="w-3 h-3 fill-current" />
           ) : (
             <ZapOff className="w-3 h-3" />
           )}
-          <span className="text-[10px]">LSP</span>
+          <span className="text-[10px] font-bold tracking-tighter">LSP</span>
         </div>
       }
       tooltip={

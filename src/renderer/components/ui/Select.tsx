@@ -62,9 +62,7 @@ export function Select({
                 setIsOpen(false)
             }
         }
-        if (isOpen) {
-            document.addEventListener('mousedown', handleClickOutside)
-        }
+        if (isOpen) document.addEventListener('mousedown', handleClickOutside)
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [isOpen])
 
@@ -72,7 +70,7 @@ export function Select({
         <div
             ref={dropdownRef}
             style={dropdownStyle}
-            className="p-1.5 bg-surface border border-border-subtle rounded-xl shadow-xl animate-scale-in max-h-64 overflow-auto custom-scrollbar flex flex-col gap-0.5"
+            className="p-1.5 bg-background/95 backdrop-blur-2xl border border-border rounded-xl shadow-2xl animate-scale-in max-h-64 overflow-auto custom-scrollbar flex flex-col gap-0.5"
         >
             {options.map((option) => (
                 <button
@@ -81,8 +79,8 @@ export function Select({
                     className={`
                         w-full flex items-center justify-between px-3 py-2 text-sm text-left rounded-lg transition-all duration-200
                         ${option.value === value 
-                            ? 'text-accent bg-accent/10 font-medium' 
-                            : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+                            ? 'text-accent bg-accent/10 font-bold' 
+                            : 'text-text-secondary hover:bg-white/5 hover:text-text-primary'
                         }
                     `}
                 >
@@ -93,9 +91,6 @@ export function Select({
                     {option.value === value && <Check className="w-3.5 h-3.5" strokeWidth={2} />}
                 </button>
             ))}
-            {options.length === 0 && (
-                <div className="px-3 py-2 text-xs text-text-muted text-center italic">No options</div>
-            )}
         </div>
     )
 
@@ -111,7 +106,7 @@ export function Select({
                     bg-black/20 border-white/10
                     hover:bg-black/30 hover:border-white/20
                     focus:outline-none
-                    ${isOpen ? 'border-accent/50 ring-1 ring-accent/20 bg-black/40' : ''}
+                    ${isOpen ? 'border-accent/50 ring-2 ring-accent/10 bg-black/40' : ''}
                     ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                 `}
             >

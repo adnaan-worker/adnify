@@ -12,7 +12,8 @@ import {
   Trash2,
   Copy,
   Clipboard,
-  ExternalLink
+  ExternalLink,
+  Loader2
 } from 'lucide-react'
 import { useStore } from '@store'
 import type { FileItem } from '@shared/types'
@@ -473,15 +474,15 @@ export function VirtualFileTree({
         onClick={() => handleNodeClick(node)}
         onContextMenu={(e) => handleContextMenu(e, node)}
         className={`
-          group flex items-center gap-2 pr-2 cursor-pointer transition-all duration-200 relative select-none
+          group flex items-center gap-2 pr-2 cursor-pointer transition-all duration-150 relative select-none rounded-md mx-2 my-0.5
           ${isActive 
-            ? 'bg-accent/10 text-text-primary' 
-            : 'text-text-muted hover:text-text-primary hover:bg-white/5'
+            ? 'bg-accent/10 text-text-primary font-bold' 
+            : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
           }
         `}
         style={{
           height: ITEM_HEIGHT,
-          paddingLeft: `${depth * 12 + 12}px`,
+          paddingLeft: `${depth * 12 + 10}px`,
           position: 'absolute',
           top: (visibleRange.startIndex + index) * ITEM_HEIGHT,
           left: 0,
@@ -490,34 +491,34 @@ export function VirtualFileTree({
       >
         {/* Active Indicator - Premium Glow */}
         {isActive && (
-          <div className="absolute left-0 top-[2px] bottom-[2px] w-[2px] bg-accent shadow-[0_0_8px_rgba(var(--accent)/0.8)] z-10" />
+          <div className="absolute left-0 top-[4px] bottom-[4px] w-[3px] bg-accent rounded-r-full shadow-[0_0_12px_rgba(var(--accent),0.8)] z-10" />
         )}
 
-        {/* Indent Guide - More subtle */}
+        {/* Indent Guide - Very subtle line */}
         {depth > 0 && Array.from({ length: depth }).map((_, i) => (
           <div
             key={i}
-            className="absolute top-0 bottom-0 border-l border-border opacity-20 group-hover:opacity-40 transition-opacity"
+            className="absolute top-0 bottom-0 border-l border-white/[0.03] group-hover:border-white/[0.08] transition-colors"
             style={{ left: `${(i + 1) * 12}px` }}
           />
         ))}
 
-        {/* Icon */}
+        {/* Icon & Toggle */}
         {item.isDirectory ? (
           <>
-            <span className={`transition-transform duration-200 flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}>
-              <ChevronRight className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100" />
-            </span>
+            <div className="flex items-center justify-center w-4 h-4 -ml-1 transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(90deg)' : 'none' }}>
+              <ChevronRight className="w-3.5 h-3.5 text-text-muted opacity-40 group-hover:opacity-100" />
+            </div>
             {isLoading ? (
-              <div className="w-4 h-4 border-2 border-text-muted border-t-transparent rounded-full animate-spin flex-shrink-0" />
+              <Loader2 className="w-4 h-4 text-accent animate-spin flex-shrink-0" />
             ) : (
-              <FileIcon filename={item.name} isDirectory isOpen={isExpanded} size={16} />
+              <FileIcon filename={item.name} isDirectory isOpen={isExpanded} size={16} className="flex-shrink-0" />
             )}
           </>
         ) : (
           <>
-            <span className="w-3.5 flex-shrink-0" />
-            <FileIcon filename={item.name} size={16} />
+            <div className="w-3 flex-shrink-0" />
+            <FileIcon filename={item.name} size={16} className="flex-shrink-0" />
           </>
         )}
 

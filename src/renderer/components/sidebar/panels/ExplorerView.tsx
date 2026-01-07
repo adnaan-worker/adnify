@@ -188,30 +188,30 @@ export function ExplorerView() {
 
   return (
     <div className="h-full flex flex-col bg-background-secondary">
-      <div className="h-10 px-3 flex items-center justify-between group border-b border-border bg-transparent sticky top-0 z-10">
-        <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider opacity-80">
+      <div className="h-10 px-4 flex items-center justify-between group border-b border-border bg-transparent sticky top-0 z-10">
+        <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] opacity-50">
           {t('explorer', language)}
         </span>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
           <Tooltip content={t('revealActiveFile', language) || 'Reveal Active File'}>
-            <Button variant="icon" size="icon" onClick={handleRevealActiveFile} disabled={!activeFilePath} className="w-6 h-6 rounded-lg">
+            <button onClick={handleRevealActiveFile} disabled={!activeFilePath} className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/5 text-text-muted hover:text-text-primary transition-all">
               <Crosshair className="w-3.5 h-3.5" />
-            </Button>
+            </button>
           </Tooltip>
           <Tooltip content={t('newFile', language)}>
-            <Button variant="icon" size="icon" onClick={() => handleRootCreate('file')} className="w-6 h-6 rounded-lg">
+            <button onClick={() => handleRootCreate('file')} className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/5 text-text-muted hover:text-text-primary transition-all">
               <FilePlus className="w-3.5 h-3.5" />
-            </Button>
+            </button>
           </Tooltip>
           <Tooltip content={t('newFolder', language)}>
-            <Button variant="icon" size="icon" onClick={() => handleRootCreate('folder')} className="w-6 h-6 rounded-lg">
+            <button onClick={() => handleRootCreate('folder')} className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/5 text-text-muted hover:text-text-primary transition-all">
               <FolderPlus className="w-3.5 h-3.5" />
-            </Button>
+            </button>
           </Tooltip>
           <Tooltip content={t('refresh', language)}>
-            <Button variant="icon" size="icon" onClick={refreshFiles} className="w-6 h-6 rounded-lg">
+            <button onClick={refreshFiles} className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/5 text-text-muted hover:text-text-primary transition-all">
               <RefreshCw className="w-3.5 h-3.5" />
-            </Button>
+            </button>
           </Tooltip>
         </div>
       </div>
@@ -232,15 +232,16 @@ export function ExplorerView() {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center px-6">
-            <div className="w-12 h-12 bg-surface/50 backdrop-blur-sm rounded-2xl flex items-center justify-center mb-4 border border-border">
-              <FolderOpen className="w-6 h-6 text-text-muted" />
+            <div className="w-16 h-16 bg-surface/20 backdrop-blur-md rounded-3xl flex items-center justify-center mb-6 border border-border shadow-inner">
+              <FolderOpen className="w-8 h-8 text-text-muted opacity-50" />
             </div>
-            <p className="text-sm text-text-muted mb-4 font-medium">{t('noFolderOpened', language)}</p>
+            <p className="text-sm font-medium text-text-primary mb-1">{t('noFolderOpened', language)}</p>
+            <p className="text-xs text-text-muted mb-6 opacity-60">Open a folder to start coding</p>
             <Button
               onClick={handleOpenFolder}
-              className="flex items-center gap-2 px-5 py-2"
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl shadow-lg shadow-accent/20"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-4 h-4" />
               {t('openFolder', language)}
             </Button>
           </div>

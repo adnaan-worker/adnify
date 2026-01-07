@@ -9,11 +9,11 @@ export default function TitleBar() {
   return (
     <div className="h-10 flex items-center justify-between px-0 drag-region select-none border-b border-border bg-background z-50">
 
-      {/* Left - Logo + Workspace Dropdown */}
+      {/* Left - Branding */}
       <div className="flex items-center gap-2 pl-3 min-w-[200px] w-1/3">
         <div className="flex items-center gap-2.5 opacity-90 hover:opacity-100 transition-all cursor-default group no-drag">
           <Logo className="w-5 h-5 transition-transform group-hover:scale-110" glow />
-          <span className="text-[11px] font-black text-text-primary tracking-[0.2em] font-sans">ADNIFY</span>
+          <span className="text-[11px] font-black text-text-primary tracking-[0.2em] font-sans uppercase">ADNIFY</span>
         </div>
         <div className="h-4 w-[1px] bg-border mx-2" />
         <div className="no-drag">
@@ -21,7 +21,7 @@ export default function TitleBar() {
         </div>
       </div>
 
-      {/* Center - Command Palette Trigger */}
+      {/* Center - Command Palette */}
       <div className="flex-1 flex justify-center min-w-0 px-4">
         <div
           onClick={() => setShowQuickOpen(true)}
@@ -35,40 +35,39 @@ export default function TitleBar() {
         </div>
       </div>
 
-      {/* Right Controls - Window Controls */}
-      <div className="flex items-center justify-end min-w-[150px] w-1/3 h-full">
-        <div className="no-drag flex items-center h-full">
+      {/* Right - Window Controls (Refined) */}
+      <div className="flex items-center justify-end min-w-[160px] w-1/3 h-full pr-2">
+        <div className="no-drag flex items-center gap-1 h-full">
           {/* About Button */}
           <button
             onClick={() => setShowAbout(true)}
-            className="w-10 h-full flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
             title="About Adnify"
           >
             <HelpCircle className="w-4 h-4" />
           </button>
 
-          {/* Window Controls Group */}
-          <div className="flex h-full ml-1">
+          <div className="w-px h-3 bg-border mx-1 opacity-50" />
+
+          {/* Windows Control Buttons Group */}
+          <div className="flex items-center gap-0.5">
             <button
               onClick={() => api.window.minimize()}
-              className="w-12 h-full flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-white/10 transition-colors"
-              title="Minimize"
+              className="w-9 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-white/10 transition-colors"
             >
               <Minus className="w-4 h-4" />
             </button>
             <button
               onClick={() => api.window.maximize()}
-              className="w-12 h-full flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-white/10 transition-colors"
-              title="Maximize"
+              className="w-9 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-white/10 transition-colors"
             >
               <Square className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => api.window.close()}
-              className="w-12 h-full flex items-center justify-center text-text-muted hover:text-white hover:bg-red-500 transition-colors"
-              title="Close"
+              className="w-9 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-white hover:bg-red-500/90 transition-all"
             >
-              <X className="w-4.5 h-4.5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>

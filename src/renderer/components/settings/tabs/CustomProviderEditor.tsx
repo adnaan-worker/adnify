@@ -1,11 +1,6 @@
 /**
- * 自定义 Provider 编辑器
- * 
- * 支持新建和编辑自定义 Provider：
- * - 兼容模式（OpenAI/Anthropic/Gemini）
- * - 完全自定义模式
- * 
- * 数据统一存储在 providerConfigs["custom-xxx"] 中
+ * 自定义 Provider 编辑器 - 升级版
+ * 采用全玻璃质感卡片与现代布局
  */
 
 import { useState } from 'react'
@@ -21,8 +16,8 @@ import type { ProviderModelConfig } from '@renderer/types/provider'
 import { generateCustomProviderId } from '@renderer/types/provider'
 
 interface CustomProviderEditorProps {
-  providerId?: string                    // 编辑现有 provider 时传入
-  config?: ProviderModelConfig           // 现有配置
+  providerId?: string
+  config?: ProviderModelConfig
   language: 'en' | 'zh'
   onSave: () => void
   onCancel: () => void
@@ -51,7 +46,6 @@ export function CustomProviderEditor({
 }: CustomProviderEditorProps) {
   const { setProviderConfig } = useStore()
 
-  // 基础状态
   const [name, setName] = useState(config?.displayName || '')
   const [baseUrl, setBaseUrl] = useState(config?.baseUrl || '')
   const [apiKey, setApiKey] = useState(config?.apiKey || '')
@@ -61,11 +55,9 @@ export function CustomProviderEditor({
   const [timeout, setTimeout] = useState(config?.timeout ? config.timeout / 1000 : 120)
   const [selectedPreset, setSelectedPreset] = useState('')
 
-  // 高级配置
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedConfig | undefined>(config?.advanced)
   const [showCustomConfig, setShowCustomConfig] = useState(false)
 
-  // 从厂商预设加载
   const handleLoadPreset = (presetId: string) => {
     const preset = VENDOR_PRESETS[presetId]
     if (!preset) return
@@ -79,13 +71,11 @@ export function CustomProviderEditor({
     }
     setSelectedPreset(presetId)
 
-    // 完全自定义模式自动展开配置面板
     if (preset.protocol === 'custom') {
       setShowCustomConfig(true)
     }
 
     if (preset.adapter) {
-      // 从 adapter 配置中提取高级配置
       const adapter = preset.adapter as LLMAdapterConfig
       setAdvancedConfig({
         request: { endpoint: adapter.request?.endpoint, bodyTemplate: adapter.request?.bodyTemplate },
@@ -107,11 +97,8 @@ export function CustomProviderEditor({
     }
   }
 
-  // 构建适配器配置
   const buildAdapterConfig = (): LLMAdapterConfig => {
-    // 基于模式获取基础适配器
     const baseAdapter = BUILTIN_ADAPTERS[mode] || BUILTIN_ADAPTERS.openai
-    
     const adapter: LLMAdapterConfig = {
       ...baseAdapter,
       id: providerId || generateCustomProviderId(),
@@ -120,7 +107,6 @@ export function CustomProviderEditor({
       protocol: mode,
     }
 
-    // 应用高级配置
     if (advancedConfig) {
       if (advancedConfig.request) {
         adapter.request = {
@@ -136,35 +122,13 @@ export function CustomProviderEditor({
           ...advancedConfig.response,
         }
       }
-      if (advancedConfig.messageFormat) {
-        adapter.messageFormat = {
-          ...adapter.messageFormat,
-          ...advancedConfig.messageFormat,
-        } as any
-      }
-      if (advancedConfig.toolFormat) {
-        adapter.toolFormat = {
-          ...adapter.toolFormat,
-          ...advancedConfig.toolFormat,
-        } as any
-      }
     }
-
     return adapter
   }
 
   const handleSave = () => {
-    // 验证
-    if (!name.trim()) {
-      toast.error(language === 'zh' ? '请输入名称' : 'Name is required')
-      return
-    }
-    if (!baseUrl.trim()) {
-      toast.error(language === 'zh' ? '请输入 API URL' : 'API URL is required')
-      return
-    }
-    if (models.length === 0) {
-      toast.error(language === 'zh' ? '请添加至少一个模型' : 'At least one model is required')
+    if (!name.trim() || !baseUrl.trim() || models.length === 0) {
+      toast.error(language === 'zh' ? '请填写所有必填项' : 'Please fill in all required fields')
       return
     }
 
@@ -189,111 +153,109 @@ export function CustomProviderEditor({
     onSave()
   }
 
-  const isCustomMode = mode === 'custom'
-
   return (
-    <div className="p-4 bg-surface-elevated border border-accent/30 rounded-xl space-y-4 animate-fade-in">
+    <div className="p-6 bg-surface/20 backdrop-blur-xl border border-accent/20 rounded-2xl space-y-6 animate-scale-in shadow-2xl">
       {/* 快速预设 */}
       {isNew && (
         <div className="space-y-2">
-          <label className="text-xs font-medium text-text-secondary flex items-center gap-2">
+          <label className="text-[11px] font-bold text-text-muted uppercase tracking-[0.2em] flex items-center gap-2 ml-1">
             <Zap className="w-3.5 h-3.5 text-yellow-500" />
             {language === 'zh' ? '快速预设' : 'Quick Preset'}
           </label>
           <Select
             value={selectedPreset}
             onChange={handleLoadPreset}
-            options={[{ value: '', label: language === 'zh' ? '选择预设...' : 'Select...' }, ...VENDOR_OPTIONS]}
-            className="text-sm"
+            options={[{ value: '', label: language === 'zh' ? '选择官方/社区预设...' : 'Select a preset...' }, ...VENDOR_OPTIONS]}
+            className="w-full h-10 rounded-xl"
           />
         </div>
       )}
 
       {/* 基础信息 */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-text-secondary">
-            {language === 'zh' ? '名称' : 'Name'} *
+      <div className="grid grid-cols-2 gap-5">
+        <div className="space-y-2">
+          <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">
+            {language === 'zh' ? '提供商名称' : 'Provider Name'} *
           </label>
           <Input 
             value={name} 
             onChange={(e) => setName(e.target.value)} 
-            placeholder="DeepSeek" 
-            className="text-sm h-9" 
+            placeholder="e.g. DeepSeek" 
+            className="h-10 rounded-xl bg-black/20" 
           />
         </div>
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-text-secondary">
-            {language === 'zh' ? '模式' : 'Mode'} *
+        <div className="space-y-2">
+          <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">
+            {language === 'zh' ? '协议模式' : 'Protocol Mode'} *
           </label>
           <Select 
             value={mode} 
             onChange={(v) => setMode(v as ApiProtocol)} 
             options={MODE_OPTIONS} 
-            className="text-sm" 
+            className="h-10 rounded-xl" 
           />
         </div>
       </div>
 
       {/* API URL */}
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium text-text-secondary">API URL *</label>
+      <div className="space-y-2">
+        <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">API Endpoint URL *</label>
         <Input 
           value={baseUrl} 
           onChange={(e) => setBaseUrl(e.target.value)} 
-          placeholder="https://api.example.com" 
-          className="text-sm h-9" 
+          placeholder="https://api.provider.com/v1" 
+          className="h-10 rounded-xl bg-black/20 font-mono text-xs" 
         />
       </div>
 
       {/* API Key */}
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium text-text-secondary">API Key</label>
+      <div className="space-y-2">
+        <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">API Authentication Key</label>
         <Input
           type="password"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
-          placeholder={language === 'zh' ? '输入 API Key' : 'Enter API Key'}
-          className="text-sm h-9"
+          placeholder="sk-..."
+          className="h-10 rounded-xl bg-black/20 font-mono"
         />
       </div>
 
       {/* 模型列表 */}
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium text-text-secondary">
-          {language === 'zh' ? '模型列表' : 'Models'} *
+      <div className="space-y-2">
+        <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">
+          {language === 'zh' ? '模型名称列表' : 'Available Models'} *
         </label>
         <div className="flex gap-2">
           <Input
             value={newModel}
             onChange={(e) => setNewModel(e.target.value)}
-            placeholder={language === 'zh' ? '添加模型...' : 'Add model...'}
+            placeholder={language === 'zh' ? '输入模型 ID 并回车...' : 'Model ID...'}
             onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddModel())}
-            className="flex-1 text-sm h-9"
+            className="flex-1 h-10 rounded-xl bg-black/20"
           />
           <Button 
             variant="secondary" 
             size="sm" 
             onClick={handleAddModel} 
             disabled={!newModel.trim()} 
-            className="h-9 px-3"
+            className="h-10 px-4 rounded-xl"
           >
             <Plus className="w-4 h-4" />
           </Button>
         </div>
         {models.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2">
+          <div className="flex flex-wrap gap-2 mt-3 p-3 bg-black/20 rounded-xl border border-border">
             {models.map((model) => (
               <div 
                 key={model} 
-                className="flex items-center gap-1 px-2 py-0.5 bg-surface rounded-full border border-border-subtle text-xs"
+                className="flex items-center gap-2 px-3 py-1 bg-surface/40 rounded-full border border-border text-[11px] font-bold text-text-secondary transition-all hover:border-accent/30 shadow-sm"
               >
                 <span>{model}</span>
                 <button 
                   onClick={() => setModels(models.filter((m) => m !== model))} 
-                  className="text-text-muted hover:text-red-400"
+                  className="text-text-muted hover:text-red-400 transition-colors"
                 >
-                  <Trash className="w-3 h-3" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             ))}
@@ -302,23 +264,20 @@ export function CustomProviderEditor({
       </div>
 
       {/* 完全自定义模式配置 */}
-      {isCustomMode && (
-        <div className="border border-accent/20 rounded-lg overflow-hidden">
+      {mode === 'custom' && (
+        <div className="border border-accent/20 rounded-2xl overflow-hidden shadow-xl animate-scale-in">
           <button
             onClick={() => setShowCustomConfig(!showCustomConfig)}
-            className="w-full flex items-center gap-2 px-4 py-3 bg-accent/5 hover:bg-accent/10 transition-colors"
+            className="w-full flex items-center gap-3 px-5 py-4 bg-accent/5 hover:bg-accent/10 transition-all group"
           >
-            {showCustomConfig ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+            <ChevronDown className={`w-4 h-4 text-accent transition-transform duration-300 ${showCustomConfig ? '' : '-rotate-90'}`} />
             <Code2 className="w-4 h-4 text-accent" />
-            <span className="text-sm font-medium text-text-primary">
-              {language === 'zh' ? '完整适配器配置' : 'Full Adapter Configuration'}
-            </span>
-            <span className="ml-auto text-xs text-accent">
-              {language === 'zh' ? '必填' : 'Required'}
+            <span className="text-sm font-bold text-text-primary uppercase tracking-tight">
+              {language === 'zh' ? '高级适配器映射配置' : 'Full Adapter Mapping'}
             </span>
           </button>
           {showCustomConfig && (
-            <div className="p-4 bg-surface/30">
+            <div className="p-6 bg-black/20 border-t border-accent/10 shadow-inner">
               <AdapterOverridesEditor 
                 overrides={advancedConfig} 
                 onChange={setAdvancedConfig} 
@@ -331,42 +290,18 @@ export function CustomProviderEditor({
         </div>
       )}
 
-      {/* 非自定义模式的高级设置 */}
-      {!isCustomMode && (
-        <details className="group">
-          <summary className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary cursor-pointer">
-            {language === 'zh' ? '高级设置' : 'Advanced'}
-          </summary>
-          <div className="mt-2 pl-4 border-l border-border-subtle">
-            <label className="text-xs text-text-secondary">
-              {language === 'zh' ? '超时 (秒)' : 'Timeout (sec)'}
-            </label>
-            <Input 
-              type="number" 
-              value={timeout} 
-              onChange={(e) => setTimeout(parseInt(e.target.value) || 120)} 
-              min={30} 
-              max={600} 
-              className="w-24 text-sm h-8 mt-1" 
-            />
-          </div>
-        </details>
-      )}
-
       {/* 操作按钮 */}
-      <div className="flex justify-end gap-2 pt-2 border-t border-border-subtle">
-        <Button variant="ghost" size="sm" onClick={onCancel} className="h-8 px-3">
-          <X className="w-4 h-4 mr-1" />
+      <div className="flex justify-end gap-3 pt-4 border-t border-border/50">
+        <Button variant="ghost" size="sm" onClick={onCancel} className="h-10 px-6 rounded-xl font-bold uppercase tracking-widest text-[11px]">
           {language === 'zh' ? '取消' : 'Cancel'}
         </Button>
-        <Button size="sm" onClick={handleSave} className="h-8 px-3">
-          <Save className="w-4 h-4 mr-1" />
-          {language === 'zh' ? '保存' : 'Save'}
+        <Button size="sm" onClick={handleSave} className="h-10 px-8 rounded-xl font-bold uppercase tracking-widest text-[11px] shadow-lg shadow-accent/20">
+          <Save className="w-4 h-4 mr-2" />
+          {language === 'zh' ? '保存提供商' : 'Save'}
         </Button>
       </div>
     </div>
   )
 }
 
-// 保持旧名称的导出以兼容
 export { CustomProviderEditor as InlineProviderEditor }

@@ -182,23 +182,29 @@ export default function SettingsModal() {
                         </h2>
                     </div>
                     
-                    <nav className="flex-1 px-3 space-y-1 overflow-y-auto custom-scrollbar">
+                    <nav className="flex-1 px-3 space-y-1.5 overflow-y-auto no-scrollbar">
                         {tabs.map(tab => (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group ${
+                                className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-bold transition-all duration-300 relative group ${
                                     activeTab === tab.id
                                     ? 'bg-accent/10 text-accent shadow-sm'
-                                    : 'text-text-secondary hover:bg-surface/50 hover:text-text-primary'
+                                    : 'text-text-secondary hover:bg-white/5 hover:text-text-primary'
                                     }`}
                             >
-                                <span className={`transition-colors ${activeTab === tab.id ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'}`}>
+                                {/* Active Vertical Indicator */}
+                                {activeTab === tab.id && (
+                                    <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-accent rounded-r-full shadow-[0_0_10px_rgba(var(--accent),0.8)]" />
+                                )}
+
+                                <span className={`transition-colors duration-300 ${activeTab === tab.id ? 'text-accent scale-110' : 'text-text-muted group-hover:text-text-primary'}`}>
                                     {tab.icon}
                                 </span>
-                                {tab.label}
+                                <span className="uppercase tracking-widest">{tab.label}</span>
+                                
                                 {activeTab === tab.id && (
-                                    <div className="ml-auto w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_8px_rgba(var(--accent),0.5)]" />
+                                    <div className="ml-auto w-1 h-1 rounded-full bg-accent animate-pulse" />
                                 )}
                             </button>
                         ))}

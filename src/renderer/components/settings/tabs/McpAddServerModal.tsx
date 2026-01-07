@@ -466,14 +466,14 @@ export default function McpAddServerModal({
             </div>
 
             {/* 分类标签 */}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 mb-2">
               {categories.map(cat => (
                 <button
                   key={cat.id}
-                  className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all duration-200 ${
+                  className={`px-4 py-1.5 text-[11px] font-bold rounded-xl transition-all duration-300 border uppercase tracking-tight ${
                     selectedCategory === cat.id
-                      ? 'bg-accent text-white shadow-lg shadow-accent/20 scale-105'
-                      : 'bg-surface/30 text-text-secondary hover:bg-surface/50 hover:text-text-primary border border-transparent hover:border-border'
+                      ? 'bg-accent text-white border-accent shadow-lg shadow-accent/20 scale-105 z-10'
+                      : 'bg-surface/20 text-text-secondary border-transparent hover:border-border hover:bg-surface/40'
                   }`}
                   onClick={() => setSelectedCategory(cat.id)}
                 >

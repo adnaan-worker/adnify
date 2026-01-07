@@ -31,11 +31,11 @@ export default function ActivityBar() {
               `}
             >
               <item.icon
-                className={`w-5.5 h-5.5 transition-transform duration-300 ${activeSidePanel === item.id ? 'scale-110 drop-shadow-[0_0_8px_rgba(var(--accent)/0.4)]' : 'group-hover:scale-110'}`}
+                className={`w-[22px] h-[22px] transition-transform duration-300 ${activeSidePanel === item.id ? 'scale-110 drop-shadow-[0_0_8px_rgba(var(--accent)/0.4)]' : 'group-hover:scale-110'}`}
                 strokeWidth={1.5}
               />
 
-              {/* Active Indicator - Vertical Bar */}
+              {/* Active Indicator */}
               {activeSidePanel === item.id && (
                 <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-accent rounded-r-full shadow-[0_0_10px_rgba(var(--accent)/0.6)]" />
               )}

@@ -492,27 +492,30 @@ export default function DebugPanel() {
         <div className="flex-1 overflow-auto p-2">
           {/* Variables */}
           {activeTab === 'variables' && (
-            <div className="text-xs">
+            <div className="flex flex-col gap-2">
               {scopes.length === 0 ? (
-                <div className="text-text-muted text-center py-4">{tt('暂停时显示变量', 'Variables shown when paused')}</div>
+                <div className="flex flex-col items-center justify-center py-12 text-text-muted opacity-40 italic">
+                  <Variable className="w-8 h-8 mb-2" />
+                  <p className="text-xs">{tt('暂停时显示变量', 'Variables shown when paused')}</p>
+                </div>
               ) : (
                 scopes.map(scope => (
-                  <div key={scope.variablesReference}>
+                  <div key={scope.variablesReference} className="bg-white/[0.02] border border-border rounded-xl overflow-hidden shadow-sm">
                     <div
                       onClick={() => toggleScope(scope.variablesReference)}
-                      className="flex items-center gap-2 py-1 px-2 hover:bg-surface-hover cursor-pointer rounded"
+                      className="flex items-center gap-2 py-2 px-3 hover:bg-white/5 cursor-pointer transition-colors border-b border-border/50 bg-white/[0.02]"
                     >
-                      {expandedScopes.has(scope.variablesReference) ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                      <span className="font-medium">{scope.name}</span>
+                      <ChevronRight className={`w-3.5 h-3.5 text-text-muted transition-transform duration-200 ${expandedScopes.has(scope.variablesReference) ? 'rotate-90' : ''}`} />
+                      <span className="font-bold text-[11px] text-text-secondary uppercase tracking-widest">{scope.name}</span>
                     </div>
                     {expandedScopes.has(scope.variablesReference) && (
-                      <div className="pl-4">
+                      <div className="p-1.5 flex flex-col gap-0.5">
                         {(variables.get(scope.variablesReference) || []).map(v => (
-                          <div key={v.name} className="flex items-center gap-2 py-0.5 px-2">
-                            <span className="text-purple-400">{v.name}</span>
-                            <span className="text-text-muted">=</span>
-                            <span className="text-green-400 truncate">{v.value}</span>
-                            <span className="text-text-muted text-[10px]">({v.type})</span>
+                          <div key={v.name} className="flex items-center gap-2 py-1 px-2 hover:bg-white/5 rounded-md group transition-colors font-mono">
+                            <span className="text-purple-400 font-bold text-[11px]">{v.name}</span>
+                            <span className="text-text-muted/40 text-[10px]">=</span>
+                            <span className="text-emerald-400 text-[11px] truncate flex-1 font-medium" title={v.value}>{v.value}</span>
+                            <span className="text-[9px] text-text-muted opacity-0 group-hover:opacity-40 uppercase tracking-tighter px-1.5 py-0.5 bg-white/5 rounded border border-white/5">{v.type}</span>
                           </div>
                         ))}
                       </div>
@@ -525,23 +528,33 @@ export default function DebugPanel() {
 
           {/* Call Stack */}
           {activeTab === 'callstack' && (
-            <div className="text-xs">
+            <div className="flex flex-col gap-1 px-1">
               {stackFrames.length === 0 ? (
-                <div className="text-text-muted text-center py-4">{tt('暂停时显示调用栈', 'Call stack shown when paused')}</div>
+                <div className="flex flex-col items-center justify-center py-12 text-text-muted opacity-40 italic">
+                  <Layers className="w-8 h-8 mb-2" />
+                  <p className="text-xs">{tt('暂停时显示调用栈', 'Call stack shown when paused')}</p>
+                </div>
               ) : (
                 stackFrames.map((frame, i) => {
-                  // 兼容新旧格式：source 可能是对象或字符串
                   const source = frame.source
                   const filePath = (typeof source === 'object' && source?.path) || frame.file || ''
                   const fileName = filePath.split(/[\\/]/).pop() || filePath
+                  const isActive = i === 0
                   return (
                     <div
                       key={frame.id}
                       onClick={() => gotoBreakpoint(filePath, frame.line)}
-                      className={`py-1 px-2 rounded cursor-pointer hover:bg-surface-hover ${i === 0 ? 'bg-accent/10' : ''}`}
+                      className={`relative py-2.5 px-4 rounded-xl cursor-pointer transition-all duration-200 border group ${
+                        isActive 
+                          ? 'bg-accent/10 border-accent/30 shadow-lg shadow-accent/5' 
+                          : 'hover:bg-white/5 border-transparent text-text-secondary hover:text-text-primary'
+                      }`}
                     >
-                      <div className="font-medium">{frame.name}</div>
-                      <div className="text-text-muted">{fileName}:{frame.line}</div>
+                      {isActive && (
+                        <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-accent rounded-r-full shadow-[0_0_8px_rgba(var(--accent),0.8)]" />
+                      )}
+                      <div className={`text-xs ${isActive ? 'font-bold text-accent' : 'font-medium'}`}>{frame.name}</div>
+                      <div className="text-[10px] text-text-muted opacity-60 mt-0.5 font-mono truncate">{fileName}:{frame.line}</div>
                     </div>
                   )
                 })

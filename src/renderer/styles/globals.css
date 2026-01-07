@@ -37,9 +37,9 @@
   /* Level 1: Editor / Main Stage (Deepest) */
   --background: 9 9 11;             /* #09090b - Zinc 950 */
 
-  /* Level 2: Sidebar / Panels / Terminal (Slightly Lighter for Depth) */
-  --background-secondary: 18 18 20; /* #121214 - Zinc 925 (Custom) */
-  --background-tertiary: 39 39 42;  /* #27272a - Zinc 800 */
+  /* Level 2: Sidebar / Panels / Terminal (Unified for Immersion) */
+  --background-secondary: 9 9 11;   /* #09090b - Matches Editor */
+  --background-tertiary: 20 20 23;  /* #141417 - Very subtle lift */
 
   /* Level 3: Surfaces (Inputs, Dropdowns) */
   --surface: 32 32 35;              /* #202023 - Zinc 850 */
@@ -224,4 +224,19 @@ body {
 
 .animate-slide-in {
   animation: slide-in 0.15s ease-out;
+}
+
+/* Shimmer Animation */
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 8s linear infinite;
+  background-size: 200% 100%;
 }

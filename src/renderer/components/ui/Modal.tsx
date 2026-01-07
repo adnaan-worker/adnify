@@ -10,9 +10,19 @@ interface ModalProps {
     size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | 'full'
     noPadding?: boolean
     className?: string
+    showCloseButton?: boolean
 }
 
-export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 'md', noPadding = false, className = '' }) => {
+export const Modal: React.FC<ModalProps> = ({ 
+    isOpen, 
+    onClose, 
+    title, 
+    children, 
+    size = 'md', 
+    noPadding = false, 
+    className = '',
+    showCloseButton = true
+}) => {
     useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => {
             if (e.key === 'Escape') onClose()
@@ -38,22 +48,50 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
         '3xl': 'max-w-3xl',
         '4xl': 'max-w-4xl',
         '5xl': 'max-w-5xl',
-        'full': 'max-w-full mx-4'
+        'full': 'max-w-full mx-4 h-[90vh]'
     }
 
     return createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className={`relative w-full ${sizes[size]} bg-surface border border-white/10 rounded-xl shadow-2xl shadow-black/50 overflow-hidden animate-scale-in ${className}`}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            {/* Backdrop with fade-in */}
+            <div 
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in transition-opacity" 
+                onClick={onClose} 
+            />
+            
+            {/* Modal Container with Scale-in */}
+            <div className={`
+                relative w-full ${sizes[size]} 
+                bg-background/80 backdrop-blur-2xl 
+                border border-white/10 
+                rounded-3xl shadow-2xl shadow-black/50 
+                overflow-hidden animate-scale-in 
+                flex flex-col
+                ${className}
+            `}>
+                {/* Decorative Background Blobs (Composer Style) */}
+                <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
+                    <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] bg-accent/5 rounded-full blur-[100px]" />
+                    <div className="absolute bottom-[-20%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[80px]" />
+                </div>
+
+                {/* Header */}
                 {title && (
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-white/5">
-                        <h3 className="text-lg font-semibold text-text-primary">{title}</h3>
-                        <button onClick={onClose} className="p-1 rounded-md hover:bg-white/10 text-text-muted hover:text-text-primary transition-colors">
-                            <X className="w-5 h-5" />
-                        </button>
+                    <div className="relative flex items-center justify-between px-6 py-5 border-b border-white/5 bg-white/[0.02] z-10 shrink-0">
+                        <h3 className="text-lg font-bold text-text-primary tracking-tight">{title}</h3>
+                        {showCloseButton && (
+                            <button 
+                                onClick={onClose} 
+                                className="p-2 rounded-xl hover:bg-white/5 text-text-muted hover:text-text-primary transition-all duration-200 group"
+                            >
+                                <X className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
+                            </button>
+                        )}
                     </div>
                 )}
-                <div className={noPadding ? '' : 'p-6'}>
+
+                {/* Content */}
+                <div className={`relative z-10 custom-scrollbar ${noPadding ? '' : 'p-6'} flex-1 overflow-auto`}>
                     {children}
                 </div>
             </div>

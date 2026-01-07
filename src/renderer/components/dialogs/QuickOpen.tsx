@@ -286,13 +286,13 @@ export default function QuickOpen({ onClose }: QuickOpenProps) {
         className="
             w-[600px] max-h-[60vh] flex flex-col
             bg-background/90 backdrop-blur-xl 
-            border border-border/50 rounded-xl shadow-2xl shadow-black/50
+            border border-border rounded-2xl shadow-2xl shadow-black/50
             overflow-hidden animate-slide-up
         "
         onClick={e => e.stopPropagation()}
       >
         {/* Search Input */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-border/40">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
           <Search className="w-5 h-5 text-accent" />
           <input
             ref={inputRef}
@@ -340,7 +340,7 @@ export default function QuickOpen({ onClose }: QuickOpenProps) {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-2 bg-surface/30 border-t border-border/30 text-[10px] text-text-muted flex justify-between items-center">
+        <div className="px-5 py-2 bg-surface/30 border-t border-border text-[10px] text-text-muted flex justify-between items-center">
           <span>{t('filesCount', language, { count: String(matches.length) })}</span>
           <div className="flex items-center gap-3">
             <span><kbd className="font-mono bg-surface/50 px-1 rounded">↑↓</kbd> {t('navigate', language)}</span>

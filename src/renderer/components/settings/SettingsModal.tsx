@@ -175,7 +175,7 @@ export default function SettingsModal() {
         <Modal isOpen={true} onClose={() => setShowSettings(false)} title="" size="5xl" noPadding className="overflow-hidden bg-background">
             <div className="flex h-[75vh] max-h-[800px]">
                 {/* Modern Sidebar */}
-                <div className="w-64 bg-surface/40 backdrop-blur-md border-r border-white/5 flex flex-col pt-6 pb-4">
+                <div className="w-64 bg-white/5 backdrop-blur-md border-r border-border flex flex-col pt-6 pb-4">
                     <div className="px-6 mb-6">
                         <h2 className="text-lg font-semibold text-text-primary tracking-tight">
                             {language === 'zh' ? '设置' : 'Settings'}
@@ -205,7 +205,7 @@ export default function SettingsModal() {
                     </nav>
 
                     {/* Language & Footer */}
-                    <div className="mt-auto px-4 pt-4 border-t border-white/5 space-y-4">
+                    <div className="mt-auto px-4 pt-4 border-t border-border space-y-4">
                         <div className="flex items-center gap-2 px-2 text-text-muted">
                             <Globe className="w-4 h-4" />
                             <span className="text-xs font-medium uppercase tracking-wider">{language === 'zh' ? '语言' : 'Language'}</span>
@@ -270,7 +270,7 @@ export default function SettingsModal() {
                     </div>
 
                     {/* Floating Footer */}
-                    <div className="px-8 py-5 border-t border-white/5 bg-background/80 backdrop-blur-xl flex items-center justify-end gap-3 z-10">
+                    <div className="px-8 py-5 border-t border-border bg-background/80 backdrop-blur-xl flex items-center justify-end gap-3 z-10">
                         <Button variant="ghost" onClick={() => setShowSettings(false)} className="hover:bg-white/5">
                             {language === 'zh' ? '取消' : 'Cancel'}
                         </Button>

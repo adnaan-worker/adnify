@@ -7,8 +7,8 @@ export const themes: Record<ThemeName, Record<string, string>> = {
     'adnify-dark': {
         // Deep Zinc/Slate base - Professional & Modern
         '--background': '9 9 11',           // #09090b (Level 1)
-        '--background-secondary': '24 24 27', // #18181b (Level 2)
-        '--background-tertiary': '39 39 42',  // #27272a
+        '--background-secondary': '9 9 11', // #09090b (Unified)
+        '--background-tertiary': '20 20 23',  // #141417
 
         '--surface': '39 39 42',            // #27272a (Level 3)
         '--surface-hover': '63 63 70',      // #3f3f46

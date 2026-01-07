@@ -188,28 +188,28 @@ export function ExplorerView() {
 
   return (
     <div className="h-full flex flex-col bg-background-secondary">
-      <div className="h-10 px-3 flex items-center justify-between group border-b border-white/5 bg-transparent sticky top-0 z-10">
+      <div className="h-10 px-3 flex items-center justify-between group border-b border-border bg-transparent sticky top-0 z-10">
         <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider opacity-80">
           {t('explorer', language)}
         </span>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <Tooltip content={t('revealActiveFile', language) || 'Reveal Active File'}>
-            <Button variant="icon" size="icon" onClick={handleRevealActiveFile} disabled={!activeFilePath} className="w-6 h-6">
+            <Button variant="icon" size="icon" onClick={handleRevealActiveFile} disabled={!activeFilePath} className="w-6 h-6 rounded-lg">
               <Crosshair className="w-3.5 h-3.5" />
             </Button>
           </Tooltip>
           <Tooltip content={t('newFile', language)}>
-            <Button variant="icon" size="icon" onClick={() => handleRootCreate('file')} className="w-6 h-6">
+            <Button variant="icon" size="icon" onClick={() => handleRootCreate('file')} className="w-6 h-6 rounded-lg">
               <FilePlus className="w-3.5 h-3.5" />
             </Button>
           </Tooltip>
           <Tooltip content={t('newFolder', language)}>
-            <Button variant="icon" size="icon" onClick={() => handleRootCreate('folder')} className="w-6 h-6">
+            <Button variant="icon" size="icon" onClick={() => handleRootCreate('folder')} className="w-6 h-6 rounded-lg">
               <FolderPlus className="w-3.5 h-3.5" />
             </Button>
           </Tooltip>
           <Tooltip content={t('refresh', language)}>
-            <Button variant="icon" size="icon" onClick={refreshFiles} className="w-6 h-6">
+            <Button variant="icon" size="icon" onClick={refreshFiles} className="w-6 h-6 rounded-lg">
               <RefreshCw className="w-3.5 h-3.5" />
             </Button>
           </Tooltip>
@@ -232,13 +232,13 @@ export function ExplorerView() {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center px-6">
-            <div className="w-12 h-12 bg-surface-hover rounded-xl flex items-center justify-center mb-4 border border-white/5">
+            <div className="w-12 h-12 bg-surface/50 backdrop-blur-sm rounded-2xl flex items-center justify-center mb-4 border border-border">
               <FolderOpen className="w-6 h-6 text-text-muted" />
             </div>
             <p className="text-sm text-text-muted mb-4 font-medium">{t('noFolderOpened', language)}</p>
             <Button
               onClick={handleOpenFolder}
-              className="flex items-center gap-2 px-4 py-2 bg-accent text-white text-xs font-medium rounded-lg hover:bg-accent-hover transition-colors shadow-glow"
+              className="flex items-center gap-2 px-5 py-2"
             >
               <Plus className="w-3.5 h-3.5" />
               {t('openFolder', language)}
@@ -248,12 +248,12 @@ export function ExplorerView() {
       </div>
 
       {isGitRepo && gitStatus && (
-        <div className="px-3 py-2 border-t border-border-subtle bg-surface/50">
+        <div className="px-3 py-2 border-t border-border bg-transparent">
           <div className="flex items-center gap-2 text-xs text-text-secondary">
-            <GitBranch className="w-3.5 h-3.5" />
-            <span>{gitStatus.branch}</span>
+            <GitBranch className="w-3.5 h-3.5 text-accent opacity-80" />
+            <span className="font-medium">{gitStatus.branch}</span>
             {(gitStatus.ahead > 0 || gitStatus.behind > 0) && (
-              <span className="flex items-center gap-1 text-[10px] text-text-muted bg-surface-active px-1.5 py-0.5 rounded">
+              <span className="flex items-center gap-1 text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20">
                 {gitStatus.ahead > 0 && `↑${gitStatus.ahead}`}
                 {gitStatus.behind > 0 && `↓${gitStatus.behind}`}
               </span>

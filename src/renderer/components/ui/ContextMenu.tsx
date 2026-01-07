@@ -90,12 +90,12 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   return (
     <div
       ref={menuRef}
-      className="fixed z-[100] min-w-[180px] py-1 bg-surface border border-border-subtle rounded-lg shadow-xl animate-fade-in"
+      className="fixed z-[100] min-w-[200px] p-1.5 bg-background/90 backdrop-blur-xl border border-border rounded-xl shadow-2xl animate-scale-in"
       style={{ left: position.x, top: position.y }}
     >
       {items.map((item, index) => {
         if (item.separator) {
-          return <div key={index} className="my-1 border-t border-border-subtle" />
+          return <div key={index} className="my-1 border-t border-border" />
         }
         
         const Icon = item.icon
@@ -106,19 +106,19 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
             onClick={() => handleItemClick(item)}
             disabled={item.disabled}
             className={`
-              w-full px-3 py-1.5 flex items-center gap-2 text-left text-[13px] transition-colors
+              w-full px-3 py-2 flex items-center gap-2.5 text-left text-[13px] transition-colors rounded-lg
               ${item.disabled 
                 ? 'text-text-muted/50 cursor-not-allowed' 
                 : item.danger
                   ? 'text-text-secondary hover:bg-status-error/10 hover:text-status-error'
-                  : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+                  : 'text-text-secondary hover:bg-accent/10 hover:text-text-primary'
               }
             `}
           >
-            {Icon && <Icon className="w-4 h-4 flex-shrink-0" />}
-            <span className="flex-1">{item.label}</span>
+            {Icon && <Icon className="w-4 h-4 flex-shrink-0 opacity-70" />}
+            <span className="flex-1 font-medium">{item.label}</span>
             {item.shortcut && (
-              <span className="text-[11px] text-text-muted">{item.shortcut}</span>
+              <span className="text-[10px] text-text-muted opacity-60">{item.shortcut}</span>
             )}
           </button>
         )
@@ -147,5 +147,3 @@ export function useContextMenu<T = any>() {
   
   return { menu, show, hide }
 }
-
-

@@ -1,6 +1,8 @@
 /**
  * 内嵌式 Toast 通知
  * 显示在底部状态栏上方，更加灵动简洁
+ * 
+ * 升级版：胶囊设计、超强模糊、细腻光影
  */
 
 import { useState, useCallback, createContext, useContext, ReactNode, useEffect } from 'react'
@@ -31,31 +33,31 @@ const ToastContext = createContext<ToastContextType | null>(null)
 const TOAST_CONFIG = {
   success: {
     icon: CheckCircle2,
-    bg: 'bg-green-500/10',
-    border: 'border-green-500/20',
+    bg: 'bg-background/80',
+    border: 'border-green-500/30',
     text: 'text-green-400',
-    glow: 'shadow-[0_0_20px_-5px_rgba(34,197,94,0.3)]'
+    glow: 'shadow-[0_8px_32px_-12px_rgba(34,197,94,0.3)]'
   },
   error: {
     icon: XCircle,
-    bg: 'bg-red-500/10',
-    border: 'border-red-500/20',
+    bg: 'bg-background/80',
+    border: 'border-red-500/30',
     text: 'text-red-400',
-    glow: 'shadow-[0_0_20px_-5px_rgba(239,68,68,0.3)]'
+    glow: 'shadow-[0_8px_32px_-12px_rgba(239,68,68,0.3)]'
   },
   warning: {
     icon: AlertTriangle,
-    bg: 'bg-yellow-500/10',
-    border: 'border-yellow-500/20',
+    bg: 'bg-background/80',
+    border: 'border-yellow-500/30',
     text: 'text-yellow-400',
-    glow: 'shadow-[0_0_20px_-5px_rgba(234,179,8,0.3)]'
+    glow: 'shadow-[0_8px_32px_-12px_rgba(234,179,8,0.3)]'
   },
   info: {
     icon: Info,
-    bg: 'bg-blue-500/10',
-    border: 'border-blue-500/20',
+    bg: 'bg-background/80',
+    border: 'border-blue-500/30',
     text: 'text-blue-400',
-    glow: 'shadow-[0_0_20px_-5px_rgba(59,130,246,0.3)]'
+    glow: 'shadow-[0_8px_32_px_-12px_rgba(59,130,246,0.3)]'
   }
 }
 
@@ -73,24 +75,33 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 20, scale: 0.9 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -10, scale: 0.95 }}
-      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+      initial={{ opacity: 0, y: 30, scale: 0.8, filter: 'blur(10px)' }}
+      animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+      exit={{ opacity: 0, y: -20, scale: 0.9, transition: { duration: 0.2 } }}
+      transition={{ 
+        type: 'spring', 
+        stiffness: 400, 
+        damping: 30,
+        mass: 0.8
+      }}
       className={`
-        flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md
-        ${config.bg} ${config.border} ${config.glow}
+        flex items-center gap-3 px-5 py-2.5 rounded-full border backdrop-blur-2xl
+        ${config.bg} ${config.border} ${config.glow} pointer-events-auto
+        group relative overflow-hidden
       `}
     >
-      <Icon className={`w-3.5 h-3.5 ${config.text} shrink-0`} />
-      <span className="text-xs text-text-primary font-medium truncate max-w-[300px]">
+      {/* Subtle background shimmer */}
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+      
+      <Icon className={`w-4 h-4 ${config.text} shrink-0 relative z-10`} strokeWidth={2.5} />
+      <span className="text-sm text-text-primary font-bold truncate max-w-[400px] relative z-10 tracking-tight">
         {toast.message}
       </span>
       <button
         onClick={() => onDismiss(toast.id)}
-        className="p-0.5 hover:bg-white/10 rounded transition-colors shrink-0"
+        className="p-1 hover:bg-white/10 rounded-full transition-all duration-200 shrink-0 relative z-10 active:scale-90"
       >
-        <X className="w-3 h-3 text-text-muted hover:text-text-primary" />
+        <X className="w-3.5 h-3.5 text-text-muted hover:text-text-primary" />
       </button>
     </motion.div>
   )
@@ -99,11 +110,11 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
 // Toast 容器 - 显示在底部状态栏上方
 function ToastContainer({ toasts, removeToast }: { toasts: ToastMessage[]; removeToast: (id: string) => void }) {
   return (
-    <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[9999] flex flex-col items-center gap-1.5 pointer-events-none">
+    <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[9999] flex flex-col items-center gap-2.5 pointer-events-none">
       <AnimatePresence mode="popLayout">
         {toasts.map((toast) => (
-          <div key={toast.id} className="pointer-events-auto">
-            <ToastItem toast={toast} onDismiss={removeToast} />
+          <div key={toast.id}>
+            <ToastItem toast={toast} removeToast={removeToast} onDismiss={removeToast} />
           </div>
         ))}
       </AnimatePresence>
@@ -117,7 +128,6 @@ export function InlineToastProvider({ children }: { children: ReactNode }) {
 
   const addToast = useCallback((type: ToastType, message: string, durationOrDetail?: number | string) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`
-    // 如果第二个参数是字符串，拼接到消息中；如果是数字，作为 duration
     let finalMessage = message
     let duration = 3000
     if (typeof durationOrDetail === 'string' && durationOrDetail) {
@@ -126,8 +136,8 @@ export function InlineToastProvider({ children }: { children: ReactNode }) {
       duration = durationOrDetail
     }
     setToasts((prev) => {
-      // 限制最多显示 3 个
-      const newToasts = prev.length >= 3 ? prev.slice(1) : prev
+      // 限制最多显示 5 个
+      const newToasts = prev.length >= 5 ? prev.slice(1) : prev
       return [...newToasts, { id, type, message: finalMessage, duration }]
     })
     return id

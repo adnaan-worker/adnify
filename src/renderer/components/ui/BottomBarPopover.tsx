@@ -96,12 +96,12 @@ export default function BottomBarPopover({
             {isOpen && (
                 <div
                     ref={popoverRef}
-                    className="absolute bottom-full right-0 mb-2 bg-surface border border-border rounded-lg shadow-2xl overflow-hidden animate-slide-up z-50"
+                    className="absolute bottom-full right-0 mb-2 bg-background/80 backdrop-blur-xl border border-border rounded-xl shadow-2xl overflow-hidden animate-slide-up z-50"
                     style={{ width, height }}
                 >
                     {/* 面板头部 */}
                     {title && (
-                        <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle bg-surface/80">
+                        <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-transparent">
                             <span className="text-xs font-medium text-text-primary">{title}</span>
                             <button
                                 onClick={() => setIsOpen(false)}

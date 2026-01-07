@@ -9,21 +9,23 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 export const Input = forwardRef<HTMLInputElement, InputProps>(
     ({ className = '', leftIcon, rightIcon, error, ...props }, ref) => {
         return (
-            <div className="relative flex items-center w-full">
+            <div className="relative flex items-center w-full group">
                 {leftIcon && (
-                    <div className="absolute left-3 text-text-muted pointer-events-none flex items-center justify-center">
+                    <div className="absolute left-3 text-text-muted pointer-events-none flex items-center justify-center transition-colors group-focus-within:text-accent">
                         {leftIcon}
                     </div>
                 )}
                 <input
                     ref={ref}
                     className={`
-            flex h-9 w-full rounded-md border bg-surface/50 px-3 py-1 text-sm text-text-primary placeholder:text-text-muted/50
-            focus:outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent/50 transition-all
+            flex h-10 w-full rounded-xl border bg-surface/30 backdrop-blur-sm px-4 py-2 text-sm text-text-primary placeholder:text-text-muted/40
+            transition-all duration-200
+            hover:bg-surface/50 hover:border-white/20
+            focus:outline-none focus:bg-surface/60 focus:ring-2 focus:ring-accent/20 focus:border-accent/50 focus:shadow-[0_0_15px_-3px_rgba(var(--accent)/0.1)]
             disabled:cursor-not-allowed disabled:opacity-50
-            ${error ? 'border-red-500 focus:ring-red-500/50' : 'border-white/10'}
-            ${leftIcon ? 'pl-9' : ''}
-            ${rightIcon ? 'pr-9' : ''}
+            ${error ? 'border-red-500/50 focus:ring-red-500/20 focus:border-red-500' : 'border-white/10'}
+            ${leftIcon ? 'pl-10' : ''}
+            ${rightIcon ? 'pr-10' : ''}
             ${className}
           `}
                     {...props}

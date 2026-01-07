@@ -51,7 +51,7 @@ function getTerminalTheme(themeName: string) {
         return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
     }
     return {
-        background: rgbToHex(themeVars['--surface']),
+        background: rgbToHex(themeVars['--background']),
         foreground: rgbToHex(themeVars['--text-primary']),
         cursor: rgbToHex(themeVars['--text-secondary']),
         selectionBackground: rgbToHex(themeVars['--accent']),
@@ -292,7 +292,7 @@ export default function TerminalPanel() {
                 <div className="absolute top-0 left-0 right-0 h-1 cursor-row-resize z-50 hover:bg-accent/50 transition-colors" onMouseDown={startResizing} />
                 
                 {/* 标题栏 */}
-                <div className="h-10 min-h-[40px] flex items-center justify-between border-b border-border-subtle bg-background-secondary select-none relative z-20">
+                <div className="h-10 min-h-[40px] flex items-center justify-between border-t border-border bg-background select-none relative z-20">
                     {/* 左侧：图标和标签页 */}
                     <div className="flex items-center flex-1 min-w-0 overflow-hidden h-full">
                         <div className="flex-shrink-0 flex items-center justify-center px-3 cursor-pointer hover:text-text-primary text-text-muted transition-colors h-full" onClick={() => setIsCollapsed(!isCollapsed)}>
@@ -303,10 +303,10 @@ export default function TerminalPanel() {
                                 <div
                                     key={term.id}
                                     onClick={() => terminalManager.setActiveTerminal(term.id)}
-                                    className={`relative flex items-center gap-2 px-3 h-full my-auto text-xs cursor-pointer min-w-[120px] max-w-[200px] flex-shrink-0 group transition-all mr-1 border-r border-white/5 ${activeId === term.id ? 'bg-surface/50 text-text-primary' : 'text-text-muted hover:bg-surface-hover/50 hover:text-text-secondary'}`}
+                                    className={`relative flex items-center gap-2 px-3 h-full my-auto text-xs cursor-pointer min-w-[120px] max-w-[200px] flex-shrink-0 group transition-all mr-1 border-r border-border ${activeId === term.id ? 'bg-transparent text-text-primary font-medium' : 'text-text-muted hover:bg-white/5 hover:text-text-secondary'}`}
                                 >
                                     <span className="truncate flex-1">{term.name}</span>
-                                    {activeId === term.id && <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-accent shadow-[0_0_8px_rgba(139,92,246,0.6)]" />}
+                                    {activeId === term.id && <div className="absolute top-0 left-0 right-0 h-[2px] bg-accent shadow-[0_0_8px_rgba(139,92,246,0.6)]" />}
                                     <Button variant="ghost" size="icon" onClick={(e) => closeTerminal(term.id, e)} className="h-4 w-4 opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-400 hover:bg-white/10">
                                         <X className="w-3 h-3" />
                                     </Button>
@@ -316,20 +316,20 @@ export default function TerminalPanel() {
                     </div>
 
                     {/* 中间：工作区选择和新建终端 */}
-                    <div className="relative flex-shrink-0 h-full flex items-center px-1 gap-1 border-l border-white/5 mx-1">
+                    <div className="relative flex-shrink-0 h-full flex items-center px-1 gap-1 border-l border-border mx-1">
                         {workspace && workspace.roots.length > 1 && (
                             <div className="w-[120px]">
                                 <Select value={selectedRoot} onChange={setSelectedRoot} options={workspace.roots.map(root => ({ value: root, label: root.split(/[\\/]/).pop() || root }))} className="h-7 text-xs border-transparent bg-transparent hover:bg-white/5" />
                             </div>
                         )}
                         <div className="relative">
-                            <Button ref={shellButtonRef} variant="ghost" size="icon" onClick={() => setShowShellMenu(!showShellMenu)} className="h-7 w-7">
+                            <Button ref={shellButtonRef} variant="ghost" size="icon" onClick={() => setShowShellMenu(!showShellMenu)} className="h-7 w-7 rounded-lg">
                                 <Plus className="w-3.5 h-3.5" />
                             </Button>
                             {showShellMenu && (
-                                <div ref={shellMenuRef} className="absolute bottom-full left-0 mb-2 w-48 bg-surface border border-border-subtle rounded-lg shadow-xl py-1 flex flex-col max-h-64 overflow-y-auto z-[100] animate-scale-in">
+                                <div ref={shellMenuRef} className="absolute bottom-full left-0 mb-2 w-48 bg-background/90 backdrop-blur-xl border border-border rounded-xl shadow-xl py-1 flex flex-col max-h-64 overflow-y-auto z-[100] animate-scale-in">
                                     {availableShells.map(shell => (
-                                        <button key={shell.label} onClick={() => createTerminal(shell.path, shell.label)} className="text-left px-3 py-2 text-xs text-text-primary hover:bg-surface-hover w-full transition-colors">
+                                        <button key={shell.label} onClick={() => createTerminal(shell.path, shell.label)} className="text-left px-3 py-2 text-xs text-text-primary hover:bg-white/10 w-full transition-colors">
                                             {shell.label}
                                         </button>
                                     ))}
@@ -341,14 +341,14 @@ export default function TerminalPanel() {
                     {/* 右侧：操作按钮 */}
                     <div className="flex items-center gap-1 px-2 flex-shrink-0">
                         <div className="relative">
-                            <Button ref={scriptButtonRef} variant="ghost" size="sm" onClick={() => setShowScriptMenu(!showScriptMenu)} className="h-7 px-2 gap-1.5 text-xs font-normal" title="Run Task">
+                            <Button ref={scriptButtonRef} variant="ghost" size="sm" onClick={() => setShowScriptMenu(!showScriptMenu)} className="h-7 px-2 gap-1.5 text-xs font-normal rounded-lg" title="Run Task">
                                 <Play className="w-3.5 h-3.5" />
                                 Run
                             </Button>
                             {showScriptMenu && (
-                                <div ref={scriptMenuRef} className="absolute bottom-full right-0 mb-2 bg-surface border border-border-subtle rounded-lg shadow-xl py-1 flex flex-col max-h-64 overflow-y-auto z-[100] min-w-[180px] animate-scale-in">
+                                <div ref={scriptMenuRef} className="absolute bottom-full right-0 mb-2 bg-background/90 backdrop-blur-xl border border-border rounded-xl shadow-xl py-1 flex flex-col max-h-64 overflow-y-auto z-[100] min-w-[180px] animate-scale-in">
                                     {Object.keys(scripts).length > 0 ? Object.entries(scripts).map(([name, cmd]) => (
-                                        <button key={name} onClick={() => runScript(name)} className="text-left px-3 py-2 text-xs text-text-primary hover:bg-surface-hover flex flex-col gap-0.5 border-b border-border-subtle/50 last:border-0 w-full transition-colors">
+                                        <button key={name} onClick={() => runScript(name)} className="text-left px-3 py-2 text-xs text-text-primary hover:bg-white/10 flex flex-col gap-0.5 border-b border-border/50 last:border-0 w-full transition-colors">
                                             <span className="font-medium text-accent">{name}</span>
                                             <span className="text-[10px] text-text-muted truncate max-w-[200px] opacity-70 font-mono">{cmd}</span>
                                         </button>
@@ -356,26 +356,26 @@ export default function TerminalPanel() {
                                 </div>
                             )}
                         </div>
-                        <Button variant="ghost" size="sm" onClick={handleFixWithAI} className="h-7 px-2 gap-1.5 text-xs font-normal mr-2" title="Fix with AI">
+                        <Button variant="ghost" size="sm" onClick={handleFixWithAI} className="h-7 px-2 gap-1.5 text-xs font-normal mr-2 rounded-lg" title="Fix with AI">
                             <Sparkles className="w-3.5 h-3.5" />
                             Fix
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => { createTerminal(); setTerminalLayout('split'); }} className="h-7 w-7" title="Split Terminal"><SplitSquareHorizontal className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => setTerminalLayout(isSplitView ? 'tabs' : 'split')} className={`h-7 w-7 ${isSplitView ? 'text-accent' : ''}`} title="Toggle Split View"><LayoutTemplate className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => activeId && terminalManager.getXterm(activeId)?.clear()} className="h-7 w-7" title="Clear"><Trash2 className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => setIsCollapsed(!isCollapsed)} className="h-7 w-7">{isCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}</Button>
-                        <Button variant="ghost" size="icon" onClick={() => setTerminalVisible(false)} className="h-7 w-7" title="Close"><X className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => { createTerminal(); setTerminalLayout('split'); }} className="h-7 w-7 rounded-lg" title="Split Terminal"><SplitSquareHorizontal className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => setTerminalLayout(isSplitView ? 'tabs' : 'split')} className={`h-7 w-7 rounded-lg ${isSplitView ? 'text-accent' : ''}`} title="Toggle Split View"><LayoutTemplate className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => activeId && terminalManager.getXterm(activeId)?.clear()} className="h-7 w-7 rounded-lg" title="Clear"><Trash2 className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => setIsCollapsed(!isCollapsed)} className="h-7 w-7 rounded-lg">{isCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}</Button>
+                        <Button variant="ghost" size="icon" onClick={() => setTerminalVisible(false)} className="h-7 w-7 rounded-lg" title="Close"><X className="w-3.5 h-3.5" /></Button>
                     </div>
                 </div>
 
                 {/* 终端内容区域 */}
-                <div className={`flex-1 p-0 min-h-0 relative bg-background-secondary ${isCollapsed ? 'hidden' : 'block'}`}>
+                <div className={`flex-1 p-0 min-h-0 relative bg-transparent ${isCollapsed ? 'hidden' : 'block'}`}>
                     <div className={`h-full w-full ${isSplitView ? 'grid grid-cols-2 gap-1' : ''}`}>
                         {terminals.map(term => (
                             <div
                                 key={term.id}
                                 ref={el => { if (el) containerRefs.current.set(term.id, el) }}
-                                className={`h-full w-full pl-2 pt-1 relative group/term ${isSplitView ? 'border border-border-subtle' : (activeId === term.id ? 'block' : 'hidden')} ${isSplitView && activeId === term.id ? 'ring-1 ring-accent' : ''}`}
+                                className={`h-full w-full pl-2 pt-1 relative group/term ${isSplitView ? 'border border-border' : (activeId === term.id ? 'block' : 'hidden')} ${isSplitView && activeId === term.id ? 'ring-1 ring-accent' : ''}`}
                                 onClick={() => terminalManager.setActiveTerminal(term.id)}
                             >
                                 {isSplitView && (

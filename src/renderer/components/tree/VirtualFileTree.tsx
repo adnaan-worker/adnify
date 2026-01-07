@@ -473,8 +473,11 @@ export function VirtualFileTree({
         onClick={() => handleNodeClick(node)}
         onContextMenu={(e) => handleContextMenu(e, node)}
         className={`
-          group flex items-center gap-1.5 pr-2 cursor-pointer transition-all duration-200 relative select-none
-          ${isActive ? 'bg-surface-active/60 text-text-primary font-medium' : 'text-text-muted hover:text-text-primary hover:bg-surface-hover/40'}
+          group flex items-center gap-2 pr-2 cursor-pointer transition-all duration-200 relative select-none
+          ${isActive 
+            ? 'bg-accent/10 text-text-primary' 
+            : 'text-text-muted hover:text-text-primary hover:bg-white/5'
+          }
         `}
         style={{
           height: ITEM_HEIGHT,
@@ -486,15 +489,18 @@ export function VirtualFileTree({
         }}
       >
         {/* Active Indicator - Premium Glow */}
-        {isActive && <div className="absolute left-0 top-1.5 bottom-1.5 w-[3px] bg-accent rounded-r-full shadow-[0_0_8px_rgba(var(--accent)/0.6)]" />}
+        {isActive && (
+          <div className="absolute left-0 top-[2px] bottom-[2px] w-[2px] bg-accent shadow-[0_0_8px_rgba(var(--accent)/0.8)] z-10" />
+        )}
 
         {/* Indent Guide - More subtle */}
-        {depth > 0 && (
+        {depth > 0 && Array.from({ length: depth }).map((_, i) => (
           <div
-            className="absolute top-0 bottom-0 border-l border-border-subtle opacity-40 group-hover:opacity-100 transition-opacity"
-            style={{ left: `${depth * 12}px` }}
+            key={i}
+            className="absolute top-0 bottom-0 border-l border-border opacity-20 group-hover:opacity-40 transition-opacity"
+            style={{ left: `${(i + 1) * 12}px` }}
           />
-        )}
+        ))}
 
         {/* Icon */}
         {item.isDirectory ? (

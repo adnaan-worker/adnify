@@ -384,13 +384,13 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
         className="
             w-[640px] max-h-[60vh] flex flex-col
             bg-background/80 backdrop-blur-2xl 
-            border border-white/10 rounded-2xl shadow-2xl shadow-black/50
+            border border-border rounded-2xl shadow-2xl shadow-black/50
             overflow-hidden animate-scale-in ring-1 ring-white/5
         "
         onClick={e => e.stopPropagation()}
       >
         {/* Search Input */}
-        <div className="flex items-center gap-4 px-6 py-5 border-b border-white/5 bg-white/5 relative">
+        <div className="flex items-center gap-4 px-6 py-5 border-b border-border bg-white/5 relative">
           <Search className="w-5 h-5 text-accent drop-shadow-[0_0_8px_rgba(var(--accent)/0.5)]" />
           <input
             ref={inputRef}
@@ -452,7 +452,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
         </div>
 
         {/* Footer Hint */}
-        <div className="px-6 py-3 bg-background/40 border-t border-white/5 text-[10px] text-text-muted flex justify-between items-center backdrop-blur-md">
+        <div className="px-6 py-3 bg-background/40 border-t border-border text-[10px] text-text-muted flex justify-between items-center backdrop-blur-md">
           <div className="flex gap-4">
             <span className="flex items-center gap-1.5"><kbd className="font-mono bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-text-secondary shadow-sm">↑↓</kbd> to navigate</span>
             <span className="flex items-center gap-1.5"><kbd className="font-mono bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-text-secondary shadow-sm">Enter</kbd> to select</span>

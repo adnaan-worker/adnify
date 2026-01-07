@@ -759,7 +759,7 @@ export default function Editor() {
   return (
     <div className="h-full flex flex-col bg-transparent" onKeyDown={handleKeyDown}>
       {/* Tabs */}
-      <div className="h-9 flex items-center bg-background-secondary border-b border-border-subtle overflow-x-auto custom-scrollbar select-none backdrop-blur-sm">
+      <div className="h-9 flex items-center bg-background border-b border-border overflow-x-auto custom-scrollbar select-none">
         {openFiles.map((file: { path: string; isDirty?: boolean }) => {
           const isActive = file.path === activeFilePath
           const fileName = getFileName(file.path)
@@ -768,10 +768,10 @@ export default function Editor() {
             <div
               key={file.path}
               className={`
-                group relative flex items-center gap-2 px-3 h-full min-w-[120px] max-w-[200px] cursor-pointer transition-all duration-200 border-r border-white/5
+                group relative flex items-center gap-2 px-4 h-full min-w-[120px] max-w-[200px] cursor-pointer transition-all duration-200 border-r border-border
                 ${isActive
-                  ? 'bg-surface text-text-primary'
-                  : 'bg-transparent text-text-muted hover:bg-surface-hover hover:text-text-primary'}
+                  ? 'bg-transparent text-text-primary font-medium'
+                  : 'bg-transparent text-text-muted hover:bg-white/5 hover:text-text-primary'}
               `}
               onClick={() => setActiveFile(file.path)}
               onContextMenu={(e) => {
@@ -779,11 +779,13 @@ export default function Editor() {
                 setTabContextMenu({ x: e.clientX, y: e.clientY, filePath: file.path })
               }}
             >
-              {isActive && <div className="absolute top-0 left-0 right-0 h-[2px] bg-accent shadow-[0_0_8px_rgba(var(--accent)/0.5)]" />}
+              {isActive && (
+                <div className="absolute top-0 left-0 right-0 h-[2px] bg-accent shadow-[0_0_10px_rgba(var(--accent)/0.8)] z-10" />
+              )}
 
-              <span className="text-xs truncate flex-1">{fileName}</span>
+              <span className="text-[13px] truncate flex-1">{fileName}</span>
 
-              <div className="flex items-center justify-center w-5 h-5 rounded-md hover:bg-white/10 transition-colors"
+              <div className="flex items-center justify-center w-5 h-5 rounded-lg hover:bg-white/10 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation()
                   handleCloseFile(file.path)
@@ -792,7 +794,7 @@ export default function Editor() {
                 {file.isDirty ? (
                   <div className="w-2 h-2 rounded-full bg-accent group-hover:hidden" />
                 ) : null}
-                <X className={`w-3 h-3 ${file.isDirty ? 'hidden group-hover:block' : 'opacity-0 group-hover:opacity-100'} transition-opacity`} />
+                <X className={`w-3.5 h-3.5 ${file.isDirty ? 'hidden group-hover:block' : 'opacity-0 group-hover:opacity-100'} transition-opacity`} />
               </div>
             </div>
           )
@@ -800,7 +802,7 @@ export default function Editor() {
 
         {/* Lint 状态和按钮 */}
         {activeFile && (
-          <div className="ml-auto flex items-center gap-2 px-3 flex-shrink-0 h-full border-l border-border-subtle bg-background-secondary/50">
+          <div className="ml-auto flex items-center gap-2 px-3 flex-shrink-0 h-full border-l border-border bg-transparent">
             {lintErrors.length > 0 && (
               <div className="flex items-center gap-2 text-xs mr-2">
                 {lintErrors.filter(e => e.severity === 'error').length > 0 && (
@@ -820,10 +822,10 @@ export default function Editor() {
             <button
               onClick={runLintCheck}
               disabled={isLinting}
-              className="p-1.5 rounded hover:bg-surface-active transition-colors disabled:opacity-50"
+              className="p-1.5 rounded-lg hover:bg-white/5 transition-colors disabled:opacity-50 group"
               title="Run lint check"
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-text-muted ${isLinting ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-text-muted group-hover:text-text-primary ${isLinting ? 'animate-spin' : ''}`} />
             </button>
           </div>
         )}
@@ -831,14 +833,14 @@ export default function Editor() {
 
       {/* Breadcrumbs */}
       {activeFile && (
-        <div className="h-7 flex items-center px-4 border-b border-border-subtle bg-background/40 backdrop-blur-sm text-[11px] text-text-muted select-none">
+        <div className="h-7 flex items-center px-4 border-b border-border bg-background/40 backdrop-blur-sm text-[11px] text-text-muted select-none">
           <div className="flex items-center gap-1 hover:text-text-primary transition-colors cursor-pointer">
             <Home className="w-3 h-3" />
           </div>
           <span className="mx-1 opacity-30">/</span>
           {getBreadcrumbs(activeFile.path).map((part, index, arr) => (
             <div key={index} className="flex items-center gap-1">
-              <span className={`hover:text-text-primary transition-colors cursor-pointer ${index === arr.length - 1 ? 'text-text-primary font-medium' : ''}`}>
+              <span className={`hover:text-text-primary transition-colors cursor-pointer ${index === arr.length - 1 ? 'text-text-primary font-bold' : ''}`}>
                 {part}
               </span>
               {index < arr.length - 1 && <ChevronRight className="w-3 h-3 opacity-30" />}

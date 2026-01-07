@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 interface TooltipProps {
     content: React.ReactNode
@@ -18,7 +19,8 @@ export function Tooltip({ content, children, side = 'top', delay = 300, classNam
     const show = () => {
         timeoutRef.current = setTimeout(() => {
             setIsVisible(true)
-            updatePosition()
+            // Use requestAnimationFrame to ensure ref is populated before calculating
+            requestAnimationFrame(updatePosition)
         }, delay)
     }
 
@@ -33,9 +35,10 @@ export function Tooltip({ content, children, side = 'top', delay = 300, classNam
         if (!triggerRef.current) return
 
         const triggerRect = triggerRef.current.getBoundingClientRect()
-        const tooltipRect = tooltipRef.current?.getBoundingClientRect() || { width: 0, height: 0 }
+        // If ref is not yet available (e.g. first render), assume some dimensions or update again
+        const tooltipWidth = tooltipRef.current?.offsetWidth || 0
+        const tooltipHeight = tooltipRef.current?.offsetHeight || 0
 
-        // Default offset
         const offset = 8
 
         let top = 0
@@ -43,19 +46,19 @@ export function Tooltip({ content, children, side = 'top', delay = 300, classNam
 
         switch (side) {
             case 'top':
-                top = triggerRect.top - tooltipRect.height - offset
-                left = triggerRect.left + (triggerRect.width - tooltipRect.width) / 2
+                top = triggerRect.top - tooltipHeight - offset
+                left = triggerRect.left + (triggerRect.width - tooltipWidth) / 2
                 break
             case 'bottom':
                 top = triggerRect.bottom + offset
-                left = triggerRect.left + (triggerRect.width - tooltipRect.width) / 2
+                left = triggerRect.left + (triggerRect.width - tooltipWidth) / 2
                 break
             case 'left':
-                top = triggerRect.top + (triggerRect.height - tooltipRect.height) / 2
-                left = triggerRect.left - tooltipRect.width - offset
+                top = triggerRect.top + (triggerRect.height - tooltipHeight) / 2
+                left = triggerRect.left - tooltipWidth - offset
                 break
             case 'right':
-                top = triggerRect.top + (triggerRect.height - tooltipRect.height) / 2
+                top = triggerRect.top + (triggerRect.height - tooltipHeight) / 2
                 left = triggerRect.right + offset
                 break
         }
@@ -63,36 +66,27 @@ export function Tooltip({ content, children, side = 'top', delay = 300, classNam
         setPosition({ top, left })
     }
 
-    useEffect(() => {
-        if (isVisible) {
-            updatePosition()
-            window.addEventListener('resize', updatePosition)
-            window.addEventListener('scroll', updatePosition)
-        }
-        return () => {
-            window.removeEventListener('resize', updatePosition)
-            window.removeEventListener('scroll', updatePosition)
-        }
-    }, [isVisible])
+    // Portal tooltip to body to avoid clipping
+    const tooltip = isVisible ? (
+        <div
+            ref={tooltipRef}
+            className="fixed z-[9999] px-3 py-1.5 text-xs font-medium text-white bg-black/80 backdrop-blur-md border border-white/10 rounded-lg shadow-xl animate-fade-in pointer-events-none whitespace-nowrap tracking-wide select-none"
+            style={{ top: position.top, left: position.left }}
+        >
+            {content}
+        </div>
+    ) : null
 
     return (
         <div
             ref={triggerRef}
             onMouseEnter={show}
             onMouseLeave={hide}
+            onMouseDown={hide} // Hide on click
             className={`relative inline-block ${className}`}
         >
             {children}
-            {isVisible && (
-                <div
-                    ref={tooltipRef}
-                    className="fixed z-50 px-2 py-1 text-xs font-medium text-text-primary bg-surface border border-border-subtle rounded shadow-xl animate-fade-in pointer-events-none whitespace-nowrap"
-                    style={{ top: position.top, left: position.left }}
-                >
-                    {content}
-                    {/* Arrow could be added here if needed */}
-                </div>
-            )}
+            {createPortal(tooltip, document.body)}
         </div>
     )
 }

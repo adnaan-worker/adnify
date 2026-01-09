@@ -59,3 +59,16 @@ export { slashCommandService } from './slashCommandService'
 export type { SlashCommand, SlashCommandResult } from './slashCommandService'
 export { checkProviderHealth, clearHealthCache } from './healthCheckService'
 export { indexWorkerService } from './indexWorkerService'
+export { snippetService } from './snippetService'
+export type { CodeSnippet, SnippetGroup } from './snippetService'
+export { workerService } from './workerService'
+
+// ===== 设置 =====
+export {
+  settingsService,
+  exportSettings,
+  exportSettingsToJSON,
+  importSettingsFromJSON,
+  downloadSettings,
+} from './settingsService'
+export type { AppSettings, ExportedSettings } from './settingsService'

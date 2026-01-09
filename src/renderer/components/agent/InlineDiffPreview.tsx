@@ -55,14 +55,15 @@ function getLanguageFromPath(path: string): string {
 /**
  * 流式模式下的简化 diff：只显示新内容为新增行
  * 不做完整 diff 计算，性能更好
+ * 限制最大行数避免卡顿
  */
-function createStreamingDiff(newContent: string): DiffLine[] {
+function createStreamingDiff(newContent: string, maxLines = 100): DiffLine[] {
     if (!newContent) return []
     
-    const lines = newContent.split('\n')
+    const lines = newContent.split('\n').slice(0, maxLines)
     return lines.map((content, idx) => ({
         type: 'add' as const,
-        content,
+        content: content.slice(0, 500), // 限制单行长度
         newLineNumber: idx + 1,
     }))
 }

@@ -17,6 +17,8 @@ import { checkpointService } from '@renderer/agent/services/checkpointService'
 import { initDiagnosticsListener } from './diagnosticsStore'
 import { restoreWorkspaceState } from './workspaceStateService'
 import { mcpService } from './mcpService'
+import { snippetService } from './snippetService'
+import { workerService } from './workerService'
 
 export interface InitResult {
   success: boolean
@@ -51,6 +53,7 @@ async function initCoreModules(): Promise<void> {
     initializeAgentStore(),
     initEditorConfig(),
     themeManager.init(),
+    snippetService.init(), // snippet 必须在编辑器可用前初始化
   ])
   
   startupMetrics.end('init-core')
@@ -122,7 +125,7 @@ function scheduleBackgroundInit(): void {
       logger.system.warn('[Init] Checkpoint service init failed:', e)
     }
   })
-  
+
   // Agent Store 持久化恢复
   scheduleIdleTask(async () => {
     try {
@@ -130,6 +133,16 @@ function scheduleBackgroundInit(): void {
       logger.system.debug('[Init] Agent store rehydrated')
     } catch (e) {
       logger.system.warn('[Init] Agent store rehydrate failed:', e)
+    }
+  })
+
+  // Worker 服务初始化
+  scheduleIdleTask(() => {
+    try {
+      workerService.init()
+      logger.system.debug('[Init] Worker service initialized')
+    } catch (e) {
+      logger.system.warn('[Init] Worker service init failed:', e)
     }
   })
 }

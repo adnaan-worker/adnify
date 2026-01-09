@@ -4,11 +4,13 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { useState, useEffect } from 'react'
-import { HardDrive, AlertTriangle, Monitor } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { HardDrive, AlertTriangle, Monitor, Download, Upload } from 'lucide-react'
 import { toast } from '@components/common/ToastProvider'
-import { Button } from '@components/ui'
+import { Button, Switch } from '@components/ui'
 import { Language } from '@renderer/i18n'
+import { useStore } from '@store'
+import { downloadSettings, importSettingsFromJSON, type AppSettings } from '@services/settingsService'
 
 interface SystemSettingsProps {
     language: Language
@@ -25,6 +27,84 @@ function DataPathDisplay() {
 
 export function SystemSettings({ language }: SystemSettingsProps) {
     const [isClearing, setIsClearing] = useState(false)
+    const [includeApiKeys, setIncludeApiKeys] = useState(false)
+    const fileInputRef = useRef<HTMLInputElement>(null)
+    const store = useStore()
+
+    // 构建当前设置对象
+    const getCurrentSettings = (): AppSettings => ({
+        llmConfig: store.llmConfig,
+        language: store.language,
+        autoApprove: store.autoApprove,
+        promptTemplateId: store.promptTemplateId,
+        agentConfig: store.agentConfig,
+        providerConfigs: store.providerConfigs,
+        aiInstructions: store.aiInstructions,
+        onboardingCompleted: store.onboardingCompleted,
+    })
+
+    const handleExport = () => {
+        try {
+            downloadSettings(getCurrentSettings(), includeApiKeys)
+            toast.success(language === 'zh' ? '配置已导出' : 'Settings exported')
+        } catch (error) {
+            logger.settings.error('Failed to export settings:', error)
+            toast.error(language === 'zh' ? '导出失败' : 'Export failed')
+        }
+    }
+
+    const handleImport = () => {
+        fileInputRef.current?.click()
+    }
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        try {
+            const text = await file.text()
+            const result = importSettingsFromJSON(text)
+            
+            if (!result.success || !result.settings) {
+                toast.error(result.error || (language === 'zh' ? '导入失败' : 'Import failed'))
+                return
+            }
+
+            const settings = result.settings
+
+            // 应用导入的设置
+            if (settings.language) store.setLanguage(settings.language as 'en' | 'zh')
+            if (settings.autoApprove) store.setAutoApprove(settings.autoApprove)
+            if (settings.promptTemplateId) store.setPromptTemplateId(settings.promptTemplateId)
+            if (settings.agentConfig) store.setAgentConfig(settings.agentConfig)
+            if (settings.aiInstructions !== undefined) store.setAiInstructions(settings.aiInstructions)
+            
+            // 应用 provider 配置
+            if (settings.providerConfigs) {
+                for (const [id, config] of Object.entries(settings.providerConfigs)) {
+                    store.setProviderConfig(id, config)
+                }
+            }
+
+            // 应用 LLM 配置
+            if (settings.llmConfig) {
+                store.setLLMConfig({
+                    ...store.llmConfig,
+                    provider: settings.llmConfig.provider || store.llmConfig.provider,
+                    model: settings.llmConfig.model || store.llmConfig.model,
+                    parameters: settings.llmConfig.parameters || store.llmConfig.parameters,
+                })
+            }
+
+            toast.success(language === 'zh' ? '配置已导入' : 'Settings imported')
+        } catch (error) {
+            logger.settings.error('Failed to import settings:', error)
+            toast.error(language === 'zh' ? '导入失败' : 'Import failed')
+        }
+
+        // 清空 input
+        e.target.value = ''
+    }
 
     const handleClearCache = async () => {
         setIsClearing(true)
@@ -129,6 +209,71 @@ export function SystemSettings({ language }: SystemSettingsProps) {
                         <Button variant="danger" size="sm" onClick={handleReset} className="rounded-xl px-6">
                             {language === 'zh' ? '重置' : 'Reset'}
                         </Button>
+                    </div>
+                </div>
+            </section>
+
+            {/* 配置导出/导入 */}
+            <section>
+                <div className="flex items-center gap-2 mb-5 ml-1">
+                    <Download className="w-4 h-4 text-accent" />
+                    <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-[0.2em]">
+                        {language === 'zh' ? '配置备份' : 'Settings Backup'}
+                    </h4>
+                </div>
+                <div className="space-y-4">
+                    <div className="p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border space-y-5 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '导出配置' : 'Export Settings'}</div>
+                                <div className="text-xs text-text-muted mt-1 opacity-70">
+                                    {language === 'zh' 
+                                        ? '将当前配置导出为 JSON 文件，方便备份或迁移' 
+                                        : 'Export current settings to JSON file for backup or migration'}
+                                </div>
+                            </div>
+                            <Button variant="secondary" size="sm" onClick={handleExport} className="rounded-xl px-4">
+                                <Download className="w-3.5 h-3.5 mr-1.5" />
+                                {language === 'zh' ? '导出' : 'Export'}
+                            </Button>
+                        </div>
+                        
+                        <div className="flex items-center justify-between py-2">
+                            <div className="text-xs text-text-muted">
+                                {language === 'zh' ? '包含 API 密钥（不推荐）' : 'Include API keys (not recommended)'}
+                            </div>
+                            <Switch 
+                                checked={includeApiKeys} 
+                                onChange={(e) => setIncludeApiKeys(e.target.checked)}
+                            />
+                        </div>
+                        
+                        {includeApiKeys && (
+                            <div className="flex items-center gap-2 text-[10px] font-medium text-yellow-500 bg-yellow-500/10 px-3 py-2 rounded-lg border border-yellow-500/20">
+                                <AlertTriangle className="w-3.5 h-3.5" />
+                                {language === 'zh' ? '导出文件将包含敏感的 API 密钥，请妥善保管' : 'Exported file will contain sensitive API keys, keep it safe'}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex items-center justify-between p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border shadow-sm">
+                        <div>
+                            <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '导入配置' : 'Import Settings'}</div>
+                            <div className="text-xs text-text-muted mt-1 opacity-70">
+                                {language === 'zh' ? '从 JSON 文件导入配置' : 'Import settings from JSON file'}
+                            </div>
+                        </div>
+                        <Button variant="secondary" size="sm" onClick={handleImport} className="rounded-xl px-4">
+                            <Upload className="w-3.5 h-3.5 mr-1.5" />
+                            {language === 'zh' ? '导入' : 'Import'}
+                        </Button>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".json"
+                            onChange={handleFileChange}
+                            className="hidden"
+                        />
                     </div>
                 </div>
             </section>

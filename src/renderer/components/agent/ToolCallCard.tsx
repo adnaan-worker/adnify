@@ -6,7 +6,7 @@
 import { useState, useMemo, useEffect, memo } from 'react'
 import {
   Check, X, ChevronDown, Loader2,
-  Terminal, Search, Copy, AlertTriangle
+  Terminal, Search, Copy, AlertTriangle, FileCode
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@store'
@@ -15,6 +15,7 @@ import { ToolCall } from '@renderer/agent/types'
 import { JsonHighlight } from '@utils/jsonHighlight'
 import { terminalManager } from '@/renderer/services/TerminalManager'
 import { RichContentRenderer } from './RichContentRenderer'
+import InlineDiffPreview from './InlineDiffPreview'
 import { getFileName } from '@shared/utils/pathUtils'
 
 interface ToolCallCardProps {
@@ -207,7 +208,57 @@ const ToolCallCard = memo(function ToolCallCard({
       )
     }
 
-    // 3. 默认通用预览
+    // 3. 文件编辑/写入预览（流式内容显示）
+    if (name === 'edit_file' || name === 'write_file' || name === 'create_file' || name === 'replace_file_content') {
+      const filePath = (args.path as string) || ''
+      // 获取要显示的内容，限制长度避免卡顿
+      const MAX_PREVIEW_CHARS = 5000
+      const rawNewContent = ((args.content || args.new_string || '') as string)
+      const rawOldContent = ((args.old_string || '') as string)
+      const newContent = rawNewContent.slice(0, MAX_PREVIEW_CHARS)
+      const oldContent = rawOldContent.slice(0, MAX_PREVIEW_CHARS)
+      const isTruncated = rawNewContent.length > MAX_PREVIEW_CHARS || rawOldContent.length > MAX_PREVIEW_CHARS
+
+      // 只有当有内容时才显示预览
+      if (newContent || isStreaming) {
+        return (
+          <div className="bg-black/20 rounded-md border border-border overflow-hidden shadow-inner">
+            <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 border-b border-border">
+              <span className="text-text-muted flex items-center gap-2 text-xs">
+                <FileCode className="w-3 h-3" />
+                <span className="font-medium text-text-primary">{getFileName(filePath)}</span>
+                {isStreaming && (
+                  <span className="text-accent text-[10px] flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                    Writing...
+                  </span>
+                )}
+                {isTruncated && !isStreaming && (
+                  <span className="text-yellow-500 text-[10px]">(preview truncated)</span>
+                )}
+              </span>
+            </div>
+            <div className="max-h-64 overflow-auto custom-scrollbar">
+              <InlineDiffPreview
+                oldContent={oldContent}
+                newContent={newContent}
+                filePath={filePath}
+                isStreaming={isStreaming}
+                maxLines={30}
+              />
+            </div>
+            {/* 完成后显示结果 */}
+            {toolCall.result && !isStreaming && (
+              <div className="px-3 py-2 border-t border-border text-xs text-text-muted">
+                {toolCall.result.slice(0, 200)}
+              </div>
+            )}
+          </div>
+        )
+      }
+    }
+
+    // 4. 默认通用预览
     return (
       <div className="space-y-2">
         {/* 参数 */}

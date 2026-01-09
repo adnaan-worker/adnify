@@ -23,6 +23,12 @@ export function GlobalErrorHandler({ children }: GlobalErrorHandlerProps) {
       event.preventDefault()
       
       const error = event.reason
+      
+      // 忽略 Monaco Editor 的取消操作（常见的无害错误）
+      if (error?.message === 'Canceled' || error?.name === 'Canceled') {
+        return
+      }
+      
       const appError = AppError.fromError(error)
       
       logger.system.error('[GlobalErrorHandler] Unhandled Promise rejection:', {
@@ -83,6 +89,11 @@ function shouldShowToast(error: AppError): boolean {
 
   // 用户主动取消的操作不显示
   if (error.code === ErrorCode.ABORTED || error.message?.includes('aborted')) {
+    return false
+  }
+
+  // Monaco Editor 的取消操作不显示
+  if (error.message === 'Canceled' || error.message?.includes('Canceled:')) {
     return false
   }
 

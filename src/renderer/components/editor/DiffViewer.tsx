@@ -1,26 +1,28 @@
 /**
  * 增强版 DiffViewer
  * - Split/Unified 视图模式
- * - 虚拟化滚动（大文件优化）
+ * - 使用通用 VirtualList 组件
+ * - 使用 workerService 进行 diff 计算
  * - 流式编辑预览
- * - 内存优化
  */
 
-import { useState, useMemo, useCallback, useRef, useEffect, memo } from 'react'
+import { useState, useMemo, useCallback, useEffect, memo } from 'react'
 import { X, Check, ChevronDown, ChevronUp, Copy, FileEdit, Columns, AlignJustify } from 'lucide-react'
 import { useStore } from '@store'
 import { t } from '@renderer/i18n'
 import { getFileName } from '@shared/utils/pathUtils'
+import { VirtualList, useVirtualListRef } from '../common/VirtualList'
+import { workerService } from '@services/workerService'
 
 // ===== 类型定义 =====
-interface DiffLine {
+export interface DiffLine {
   type: 'add' | 'remove' | 'unchanged'
   content: string
   oldLineNum?: number
   newLineNum?: number
 }
 
-interface SplitDiffLine {
+export interface SplitDiffLine {
   left: { lineNum?: number; content: string; type: 'remove' | 'unchanged' | 'empty' }
   right: { lineNum?: number; content: string; type: 'add' | 'unchanged' | 'empty' }
 }
@@ -32,21 +34,20 @@ interface DiffViewerProps {
   onAccept: () => void
   onReject: () => void
   onClose?: () => void
-  isStreaming?: boolean // 流式编辑模式
-  minimal?: boolean // 极简模式（用于 Inline Edit）
+  isStreaming?: boolean
+  minimal?: boolean
 }
 
 // ===== 常量 =====
-const VIRTUAL_ROW_HEIGHT = 22 // 每行高度
-const VIRTUAL_OVERSCAN = 10 // 预渲染行数
-const MAX_VISIBLE_ROWS = 500 // 最大可见行数（超过启用虚拟化）
+const VIRTUAL_ROW_HEIGHT = 22
+const MAX_VISIBLE_ROWS = 500
+const USE_WORKER_THRESHOLD = 10000 // 超过此字符数使用 Worker
 
-// ===== 优化的 LCS 算法 =====
+// ===== 优化的 LCS 算法（主线程降级用） =====
 function computeLCS(a: string[], b: string[]): string[] {
   const m = a.length
   const n = b.length
 
-  // 对于大文件，使用空间优化的 LCS
   if (m * n > 1000000) {
     return computeLCSOptimized(a, b)
   }
@@ -80,16 +81,12 @@ function computeLCS(a: string[], b: string[]): string[] {
   return lcs
 }
 
-// 空间优化的 LCS（用于大文件）
 function computeLCSOptimized(a: string[], b: string[]): string[] {
   const m = a.length
   const n = b.length
 
-  // 使用两行滚动数组
   let prev = new Array(n + 1).fill(0)
   let curr = new Array(n + 1).fill(0)
-
-  // 记录路径
   const path: number[][] = []
 
   for (let i = 1; i <= m; i++) {
@@ -97,19 +94,18 @@ function computeLCSOptimized(a: string[], b: string[]): string[] {
     for (let j = 1; j <= n; j++) {
       if (a[i - 1] === b[j - 1]) {
         curr[j] = prev[j - 1] + 1
-        path[i][j] = 0 // 对角线
+        path[i][j] = 0
       } else if (prev[j] >= curr[j - 1]) {
         curr[j] = prev[j]
-        path[i][j] = 1 // 上
+        path[i][j] = 1
       } else {
         curr[j] = curr[j - 1]
-        path[i][j] = 2 // 左
+        path[i][j] = 2
       }
     }
     ;[prev, curr] = [curr, prev]
   }
 
-  // 回溯构建 LCS
   const lcs: string[] = []
   let i = m, j = n
   while (i > 0 && j > 0) {
@@ -127,8 +123,8 @@ function computeLCSOptimized(a: string[], b: string[]): string[] {
   return lcs
 }
 
-// ===== Diff 计算 =====
-function computeDiff(original: string, modified: string): DiffLine[] {
+// ===== Diff 计算（主线程） =====
+export function computeDiff(original: string, modified: string): DiffLine[] {
   const originalLines = original.split('\n')
   const modifiedLines = modified.split('\n')
   const diff: DiffLine[] = []
@@ -151,26 +147,14 @@ function computeDiff(original: string, modified: string): DiffLine[] {
         newIdx++
         lcsIdx++
       } else {
-        diff.push({
-          type: 'add',
-          content: modifiedLines[newIdx],
-          newLineNum: newIdx + 1,
-        })
+        diff.push({ type: 'add', content: modifiedLines[newIdx], newLineNum: newIdx + 1 })
         newIdx++
       }
     } else if (oldIdx < originalLines.length) {
-      diff.push({
-        type: 'remove',
-        content: originalLines[oldIdx],
-        oldLineNum: oldIdx + 1,
-      })
+      diff.push({ type: 'remove', content: originalLines[oldIdx], oldLineNum: oldIdx + 1 })
       oldIdx++
     } else if (newIdx < modifiedLines.length) {
-      diff.push({
-        type: 'add',
-        content: modifiedLines[newIdx],
-        newLineNum: newIdx + 1,
-      })
+      diff.push({ type: 'add', content: modifiedLines[newIdx], newLineNum: newIdx + 1 })
       newIdx++
     }
   }
@@ -178,8 +162,7 @@ function computeDiff(original: string, modified: string): DiffLine[] {
   return diff
 }
 
-// 转换为 Split 视图格式
-function convertToSplitView(diff: DiffLine[]): SplitDiffLine[] {
+export function convertToSplitView(diff: DiffLine[]): SplitDiffLine[] {
   const result: SplitDiffLine[] = []
   let i = 0
 
@@ -193,9 +176,7 @@ function convertToSplitView(diff: DiffLine[]): SplitDiffLine[] {
       })
       i++
     } else if (line.type === 'remove') {
-      // 查找配对的 add
       const nextAdd = diff[i + 1]?.type === 'add' ? diff[i + 1] : null
-
       if (nextAdd) {
         result.push({
           left: { lineNum: line.oldLineNum, content: line.content, type: 'remove' },
@@ -221,8 +202,9 @@ function convertToSplitView(diff: DiffLine[]): SplitDiffLine[] {
   return result
 }
 
-// ===== 虚拟化行组件 =====
-const VirtualRow = memo(function VirtualRow({
+
+// ===== 行渲染组件 =====
+const UnifiedRow = memo(function UnifiedRow({
   line,
   style,
 }: {
@@ -230,67 +212,62 @@ const VirtualRow = memo(function VirtualRow({
   style: React.CSSProperties
 }) {
   return (
-    <tr
+    <div
       style={style}
-      className={`
-        ${line.type === 'add' ? 'bg-green-500/10' : ''}
-        ${line.type === 'remove' ? 'bg-red-500/10' : ''}
-      `}
+      className={`flex text-sm font-mono ${
+        line.type === 'add' ? 'bg-green-500/10' : line.type === 'remove' ? 'bg-red-500/10' : ''
+      }`}
     >
-      <td className="w-12 px-2 py-0.5 text-right text-text-primary-muted select-none border-r border-border text-xs">
+      <span className="w-12 px-2 py-0.5 text-right text-text-primary-muted select-none border-r border-border text-xs flex-shrink-0">
         {line.oldLineNum || ''}
-      </td>
-      <td className="w-12 px-2 py-0.5 text-right text-text-primary-muted select-none border-r border-border text-xs">
+      </span>
+      <span className="w-12 px-2 py-0.5 text-right text-text-primary-muted select-none border-r border-border text-xs flex-shrink-0">
         {line.newLineNum || ''}
-      </td>
-      <td className="w-6 px-1 py-0.5 text-center select-none">
+      </span>
+      <span className="w-6 px-1 py-0.5 text-center select-none flex-shrink-0">
         {line.type === 'add' && <span className="text-green-400">+</span>}
         {line.type === 'remove' && <span className="text-red-400">-</span>}
-      </td>
-      <td className="px-3 py-0.5 whitespace-pre overflow-hidden text-ellipsis">
-        <span className={`
-          ${line.type === 'add' ? 'text-green-300' : ''}
-          ${line.type === 'remove' ? 'text-red-300' : 'text-text-primary'}
-        `}>
+      </span>
+      <span className="px-3 py-0.5 whitespace-pre overflow-hidden text-ellipsis flex-1">
+        <span className={`${
+          line.type === 'add' ? 'text-green-300' : line.type === 'remove' ? 'text-red-300' : 'text-text-primary'
+        }`}>
           {line.content}
         </span>
-      </td>
-    </tr>
+      </span>
+    </div>
   )
 })
 
-// ===== Split 视图行组件 =====
 const SplitRow = memo(function SplitRow({
   line,
   style,
 }: {
   line: SplitDiffLine
-  style?: React.CSSProperties
+  style: React.CSSProperties
 }) {
   const leftBg = line.left.type === 'remove' ? 'bg-red-500/10' : line.left.type === 'empty' ? 'bg-background/30' : ''
   const rightBg = line.right.type === 'add' ? 'bg-green-500/10' : line.right.type === 'empty' ? 'bg-background/30' : ''
 
   return (
-    <tr style={style}>
-      {/* Left side */}
-      <td className={`w-10 px-2 py-0.5 text-right text-text-primary-muted select-none border-r border-border text-xs ${leftBg}`}>
+    <div style={style} className="flex text-sm font-mono">
+      <span className={`w-10 px-2 py-0.5 text-right text-text-primary-muted select-none border-r border-border text-xs flex-shrink-0 ${leftBg}`}>
         {line.left.lineNum || ''}
-      </td>
-      <td className={`w-1/2 px-3 py-0.5 whitespace-pre overflow-hidden text-ellipsis border-r border-border ${leftBg}`}>
+      </span>
+      <span className={`flex-1 px-3 py-0.5 whitespace-pre overflow-hidden text-ellipsis border-r border-border ${leftBg}`}>
         <span className={line.left.type === 'remove' ? 'text-red-300' : 'text-text-primary'}>
           {line.left.content}
         </span>
-      </td>
-      {/* Right side */}
-      <td className={`w-10 px-2 py-0.5 text-right text-text-primary-muted select-none border-r border-border text-xs ${rightBg}`}>
+      </span>
+      <span className={`w-10 px-2 py-0.5 text-right text-text-primary-muted select-none border-r border-border text-xs flex-shrink-0 ${rightBg}`}>
         {line.right.lineNum || ''}
-      </td>
-      <td className={`w-1/2 px-3 py-0.5 whitespace-pre overflow-hidden text-ellipsis ${rightBg}`}>
+      </span>
+      <span className={`flex-1 px-3 py-0.5 whitespace-pre overflow-hidden text-ellipsis ${rightBg}`}>
         <span className={line.right.type === 'add' ? 'text-green-300' : 'text-text-primary'}>
           {line.right.content}
         </span>
-      </td>
-    </tr>
+      </span>
+    </div>
   )
 })
 
@@ -308,15 +285,45 @@ export default function DiffViewer({
   const { language } = useStore()
   const [collapsed, setCollapsed] = useState(false)
   const [viewMode, setViewMode] = useState<'split' | 'unified'>('unified')
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [scrollTop, setScrollTop] = useState(0)
-  const [containerHeight, setContainerHeight] = useState(400)
+  const [diff, setDiff] = useState<DiffLine[]>([])
+  const [isComputing, setIsComputing] = useState(false)
+  const listRef = useVirtualListRef()
 
-  // 计算 diff（使用 useMemo 缓存）
-  const diff = useMemo(
-    () => computeDiff(originalContent, modifiedContent),
-    [originalContent, modifiedContent]
-  )
+  // 计算 diff（大文件使用 Worker）
+  useEffect(() => {
+    const totalLength = originalContent.length + modifiedContent.length
+    
+    if (totalLength > USE_WORKER_THRESHOLD && !isStreaming) {
+      // 大文件使用 Worker
+      setIsComputing(true)
+      workerService.computeDiff(originalContent, modifiedContent)
+        .then(result => {
+          // Worker 返回的格式转换
+          const diffLines: DiffLine[] = []
+          let oldLineNum = 1
+          let newLineNum = 1
+          
+          for (const item of result) {
+            if (item.type === 'unchanged') {
+              diffLines.push({ type: 'unchanged', content: item.content, oldLineNum: oldLineNum++, newLineNum: newLineNum++ })
+            } else if (item.type === 'remove') {
+              diffLines.push({ type: 'remove', content: item.content, oldLineNum: oldLineNum++ })
+            } else {
+              diffLines.push({ type: 'add', content: item.content, newLineNum: newLineNum++ })
+            }
+          }
+          setDiff(diffLines)
+        })
+        .catch(() => {
+          // Worker 失败，降级到主线程
+          setDiff(computeDiff(originalContent, modifiedContent))
+        })
+        .finally(() => setIsComputing(false))
+    } else {
+      // 小文件或流式模式直接在主线程计算
+      setDiff(computeDiff(originalContent, modifiedContent))
+    }
+  }, [originalContent, modifiedContent, isStreaming])
 
   // Split 视图数据
   const splitDiff = useMemo(
@@ -334,51 +341,10 @@ export default function DiffViewer({
   // 是否启用虚拟化
   const useVirtualization = diff.length > MAX_VISIBLE_ROWS
 
-  // 虚拟化计算
-  const virtualData = useMemo(() => {
-    if (!useVirtualization) return null
-
-    const totalHeight = diff.length * VIRTUAL_ROW_HEIGHT
-    const startIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - VIRTUAL_OVERSCAN)
-    const endIndex = Math.min(
-      diff.length,
-      Math.ceil((scrollTop + containerHeight) / VIRTUAL_ROW_HEIGHT) + VIRTUAL_OVERSCAN
-    )
-
-    return {
-      totalHeight,
-      startIndex,
-      endIndex,
-      offsetY: startIndex * VIRTUAL_ROW_HEIGHT,
-    }
-  }, [diff.length, scrollTop, containerHeight, useVirtualization])
-
-  // 滚动处理
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    if (useVirtualization) {
-      setScrollTop(e.currentTarget.scrollTop)
-    }
-  }, [useVirtualization])
-
-  // 监听容器大小变化
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerHeight(entry.contentRect.height)
-      }
-    })
-
-    observer.observe(container)
-    return () => observer.disconnect()
-  }, [])
-
   // 流式模式自动滚动到底部
   useEffect(() => {
-    if (isStreaming && containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight
+    if (isStreaming && listRef.current) {
+      listRef.current.scrollToBottom()
     }
   }, [isStreaming, modifiedContent])
 
@@ -390,87 +356,63 @@ export default function DiffViewer({
 
   // 渲染 Unified 视图
   const renderUnifiedView = () => {
-    if (useVirtualization && virtualData) {
-      const visibleLines = diff.slice(virtualData.startIndex, virtualData.endIndex)
-
+    if (useVirtualization) {
       return (
-        <div
-          ref={containerRef}
-          className="max-h-96 overflow-auto"
-          onScroll={handleScroll}
-        >
-          <div style={{ height: virtualData.totalHeight, position: 'relative' }}>
-            <table
-              className="w-full text-sm font-mono"
-              style={{
-                position: 'absolute',
-                top: virtualData.offsetY,
-                left: 0,
-                right: 0,
-              }}
-            >
-              <tbody>
-                {visibleLines.map((line, idx) => (
-                  <VirtualRow
-                    key={virtualData.startIndex + idx}
-                    line={line}
-                    style={{ height: VIRTUAL_ROW_HEIGHT }}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <VirtualList
+          ref={listRef}
+          items={diff}
+          itemHeight={VIRTUAL_ROW_HEIGHT}
+          renderItem={(line) => <UnifiedRow line={line} style={{}} />}
+          getKey={(_, index) => index}
+          className="max-h-96"
+        />
       )
     }
 
     return (
-      <div ref={containerRef} className="max-h-96 overflow-auto">
-        <table className="w-full text-sm font-mono">
-          <tbody>
-            {diff.map((line, idx) => (
-              <VirtualRow key={idx} line={line} style={{}} />
-            ))}
-          </tbody>
-        </table>
+      <div className="max-h-96 overflow-auto custom-scrollbar">
+        {diff.map((line, idx) => (
+          <UnifiedRow key={idx} line={line} style={{}} />
+        ))}
       </div>
     )
   }
 
   // 渲染 Split 视图
   const renderSplitView = () => {
+    if (useVirtualization) {
+      return (
+        <VirtualList
+          ref={listRef}
+          items={splitDiff}
+          itemHeight={VIRTUAL_ROW_HEIGHT}
+          renderItem={(line) => <SplitRow line={line} style={{}} />}
+          getKey={(_, index) => index}
+          className="max-h-96"
+        />
+      )
+    }
+
     return (
-      <div ref={containerRef} className="max-h-96 overflow-auto">
-        <table className="w-full text-sm font-mono table-fixed">
-          <thead className="sticky top-0 bg-editor-sidebar z-10">
-            <tr>
-              <th className="w-10 px-2 py-1 text-left text-xs text-text-primary-muted border-b border-border">#</th>
-              <th className="w-1/2 px-3 py-1 text-left text-xs text-text-primary-muted border-b border-r border-border">
-                {t('original', language)}
-              </th>
-              <th className="w-10 px-2 py-1 text-left text-xs text-text-primary-muted border-b border-border">#</th>
-              <th className="w-1/2 px-3 py-1 text-left text-xs text-text-primary-muted border-b border-border">
-                {t('modified', language)}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {splitDiff.map((line, idx) => (
-              <SplitRow key={idx} line={line} />
-            ))}
-          </tbody>
-        </table>
+      <div className="max-h-96 overflow-auto custom-scrollbar">
+        {splitDiff.map((line, idx) => (
+          <SplitRow key={idx} line={line} style={{}} />
+        ))}
       </div>
     )
   }
 
-  // 极简模式下，直接返回内容区域
+  // 极简模式
   if (minimal) {
-      return (
-          <div className="bg-background border border-border rounded-lg overflow-hidden">
-             {viewMode === 'unified' ? renderUnifiedView() : renderSplitView()}
-          </div>
-      )
+    return (
+      <div className="bg-background border border-border rounded-lg overflow-hidden">
+        {isComputing ? (
+          <div className="p-4 text-center text-text-muted text-sm">Computing diff...</div>
+        ) : (
+          viewMode === 'unified' ? renderUnifiedView() : renderSplitView()
+        )}
+      </div>
+    )
   }
 
   return (
@@ -486,48 +428,36 @@ export default function DiffViewer({
             {isStreaming && (
               <span className="text-yellow-400 animate-pulse">● {t('streaming', language)}</span>
             )}
+            {isComputing && (
+              <span className="text-blue-400 animate-pulse">● Computing...</span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* View mode toggle */}
           <div className="flex items-center bg-editor-hover rounded-lg p-0.5">
             <button
               onClick={() => setViewMode('unified')}
-              className={`p-1.5 rounded transition-colors ${ viewMode === 'unified' ? 'bg-editor-accent text-white' : 'text-text-primary-muted hover:text-text-primary'}`}
+              className={`p-1.5 rounded transition-colors ${viewMode === 'unified' ? 'bg-editor-accent text-white' : 'text-text-primary-muted hover:text-text-primary'}`}
               title={t('unifiedView', language)}
             >
               <AlignJustify className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('split')}
-              className={`p-1.5 rounded transition-colors ${ viewMode === 'split' ? 'bg-editor-accent text-white' : 'text-text-primary-muted hover:text-text-primary'}`}
+              className={`p-1.5 rounded transition-colors ${viewMode === 'split' ? 'bg-editor-accent text-white' : 'text-text-primary-muted hover:text-text-primary'}`}
               title={t('splitView', language)}
             >
               <Columns className="w-4 h-4" />
             </button>
           </div>
-          <button
-            onClick={copyToClipboard}
-            className="p-2 rounded-lg hover:bg-editor-hover transition-colors"
-            title={t('copyModified', language)}
-          >
+          <button onClick={copyToClipboard} className="p-2 rounded-lg hover:bg-editor-hover transition-colors" title={t('copyModified', language)}>
             <Copy className="w-4 h-4 text-text-primary-muted" />
           </button>
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="p-2 rounded-lg hover:bg-editor-hover transition-colors"
-          >
-            {collapsed ? (
-              <ChevronDown className="w-4 h-4 text-text-primary-muted" />
-            ) : (
-              <ChevronUp className="w-4 h-4 text-text-primary-muted" />
-            )}
+          <button onClick={() => setCollapsed(!collapsed)} className="p-2 rounded-lg hover:bg-editor-hover transition-colors">
+            {collapsed ? <ChevronDown className="w-4 h-4 text-text-primary-muted" /> : <ChevronUp className="w-4 h-4 text-text-primary-muted" />}
           </button>
           {onClose && (
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg hover:bg-editor-hover transition-colors"
-            >
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-editor-hover transition-colors">
               <X className="w-4 h-4 text-text-primary-muted" />
             </button>
           )}
@@ -536,7 +466,11 @@ export default function DiffViewer({
 
       {/* Diff Content */}
       {!collapsed && (
-        viewMode === 'unified' ? renderUnifiedView() : renderSplitView()
+        isComputing ? (
+          <div className="p-8 text-center text-text-muted">Computing diff...</div>
+        ) : (
+          viewMode === 'unified' ? renderUnifiedView() : renderSplitView()
+        )
       )}
 
       {/* Actions */}
@@ -548,7 +482,7 @@ export default function DiffViewer({
           <button
             onClick={onReject}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
-            disabled={isStreaming}
+            disabled={isStreaming || isComputing}
           >
             <X className="w-4 h-4" />
             {t('rejectChanges', language)}
@@ -556,7 +490,7 @@ export default function DiffViewer({
           <button
             onClick={onAccept}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500 text-white hover:bg-green-600 transition-colors disabled:opacity-50"
-            disabled={isStreaming}
+            disabled={isStreaming || isComputing}
           >
             <Check className="w-4 h-4" />
             {t('acceptChanges', language)}
@@ -566,7 +500,3 @@ export default function DiffViewer({
     </div>
   )
 }
-
-// 导出工具函数供其他组件使用
-export { computeDiff, convertToSplitView }
-export type { DiffLine, SplitDiffLine }

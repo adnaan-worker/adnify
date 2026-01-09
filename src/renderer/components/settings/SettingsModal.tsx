@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain } from 'lucide-react'
+import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode } from 'lucide-react'
 import { useStore } from '@store'
 import { PROVIDERS } from '@/shared/config/providers'
 import { getEditorConfig, saveEditorConfig } from '@renderer/config/editorConfig'
@@ -21,7 +21,8 @@ import {
     IndexSettings,
     SystemSettings,
     McpSettings,
-    LspSettings
+    LspSettings,
+    SnippetSettings
 } from './tabs'
 
 export default function SettingsModal() {
@@ -163,6 +164,7 @@ export default function SettingsModal() {
     const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
         { id: 'provider', label: language === 'zh' ? '模型提供商' : 'Providers', icon: <Cpu className="w-4 h-4" /> },
         { id: 'editor', label: language === 'zh' ? '编辑器' : 'Editor', icon: <Code className="w-4 h-4" /> },
+        { id: 'snippets', label: language === 'zh' ? '代码片段' : 'Snippets', icon: <FileCode className="w-4 h-4" /> },
         { id: 'agent', label: language === 'zh' ? '智能体' : 'Agent', icon: <Settings2 className="w-4 h-4" /> },
         { id: 'rules', label: language === 'zh' ? '规则与记忆' : 'Rules & Memory', icon: <Brain className="w-4 h-4" /> },
         { id: 'mcp', label: 'MCP', icon: <Plug className="w-4 h-4" /> },
@@ -256,6 +258,7 @@ export default function SettingsModal() {
                         {activeTab === 'editor' && (
                             <EditorSettings settings={editorSettings} setSettings={setEditorSettings} language={language} />
                         )}
+                        {activeTab === 'snippets' && <SnippetSettings language={language} />}
                         {activeTab === 'agent' && (
                             <AgentSettings
                                 autoApprove={localAutoApprove}

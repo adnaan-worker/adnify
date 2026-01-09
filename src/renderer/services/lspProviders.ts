@@ -165,11 +165,16 @@ export function registerLspProviders(monaco: typeof Monaco) {
     triggerCharacters: ['.', '/', '"', "'", '`', '<', '@', '#'],
     provideCompletionItems: async (model, position) => {
       const filePath = lspUriToPath(model.uri.toString())
-      const result = await getCompletions(
+      
+      // 添加超时，避免 LSP 响应慢时阻塞补全
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000))
+      const completionPromise = getCompletions(
         filePath,
         position.lineNumber - 1,
         position.column - 1
       )
+      
+      const result = await Promise.race([completionPromise, timeoutPromise])
 
       if (!result) return { suggestions: [] }
 

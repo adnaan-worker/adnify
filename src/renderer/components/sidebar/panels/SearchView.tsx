@@ -7,8 +7,9 @@ import { useState, useCallback, useMemo } from 'react'
 import { ChevronRight, ChevronDown, FileText, Edit2, Box, MoreHorizontal, Loader2, Search } from 'lucide-react'
 import { useStore } from '@store'
 import { t } from '@renderer/i18n'
-import { getFileName } from '@shared/utils/pathUtils'
+import { getFileName, joinPath } from '@shared/utils/pathUtils'
 import { Input } from '../../ui'
+import { toast } from '../../common/ToastProvider'
 
 export function SearchView() {
   const [query, setQuery] = useState('')
@@ -130,10 +131,17 @@ export function SearchView() {
   }
 
   const handleResultClick = async (result: { path: string; line: number }) => {
-    const content = await api.file.read(result.path)
+    // 如果是相对路径，转换为绝对路径
+    let filePath = result.path
+    const isAbsolute = /^[a-zA-Z]:[\\/]|^\//.test(filePath)
+    if (!isAbsolute && workspacePath) {
+      filePath = joinPath(workspacePath, filePath)
+    }
+
+    const content = await api.file.read(filePath)
     if (content !== null) {
-      openFile(result.path, content)
-      setActiveFile(result.path)
+      openFile(filePath, content)
+      setActiveFile(filePath)
       window.dispatchEvent(
         new CustomEvent('editor:goto-line', {
           detail: { line: result.line, column: 1 },
@@ -201,7 +209,17 @@ export function SearchView() {
     if (searchResults.length === 0) return
 
     const filePaths = [...new Set(searchResults.map((r) => r.path))]
+    const fileCount = filePaths.length
+    const matchCount = searchResults.length
 
+    // 确认对话框
+    const confirmMessage = language === 'zh'
+      ? `确定要在 ${fileCount} 个文件中替换 ${matchCount} 处匹配吗？`
+      : `Replace ${matchCount} matches in ${fileCount} files?`
+    
+    if (!confirm(confirmMessage)) return
+
+    let replacedCount = 0
     for (const filePath of filePaths) {
       const content = await api.file.read(filePath)
       if (content === null) continue
@@ -223,8 +241,15 @@ export function SearchView() {
 
       if (newContent !== content) {
         await api.file.write(filePath, newContent)
+        replacedCount++
       }
     }
+
+    // 显示替换结果
+    const resultMessage = language === 'zh'
+      ? `已在 ${replacedCount} 个文件中完成替换`
+      : `Replaced in ${replacedCount} files`
+    toast.success(resultMessage)
 
     handleSearch()
   }

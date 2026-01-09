@@ -504,4 +504,112 @@ class SettingsService {
 
 export const settingsService = new SettingsService()
 
+// ============ 配置导出/导入 ============
+
+export interface ExportedSettings {
+  version: string
+  exportedAt: string
+  settings: Partial<AppSettings>
+}
+
+/**
+ * 导出配置（不包含敏感信息如 API Key）
+ */
+export function exportSettings(settings: AppSettings, includeApiKeys = false): ExportedSettings {
+  const exported: Partial<AppSettings> = {
+    language: settings.language,
+    autoApprove: settings.autoApprove,
+    promptTemplateId: settings.promptTemplateId,
+    agentConfig: settings.agentConfig,
+    aiInstructions: settings.aiInstructions,
+    llmConfig: {
+      provider: settings.llmConfig.provider,
+      model: settings.llmConfig.model,
+      apiKey: '', // 不导出 API Key
+      parameters: settings.llmConfig.parameters,
+    },
+    providerConfigs: {},
+  }
+
+  // 处理 provider 配置
+  for (const [id, config] of Object.entries(settings.providerConfigs)) {
+    const cleanedConfig: ProviderConfig = {
+      model: config.model,
+      baseUrl: config.baseUrl,
+      timeout: config.timeout,
+      customModels: config.customModels,
+      advanced: config.advanced,
+    }
+    
+    // 可选包含 API Key
+    if (includeApiKeys && config.apiKey) {
+      cleanedConfig.apiKey = config.apiKey
+    }
+    
+    // 自定义 provider 的额外字段
+    if (!isBuiltinProvider(id)) {
+      cleanedConfig.displayName = config.displayName
+      cleanedConfig.protocol = config.protocol
+      cleanedConfig.adapterConfig = config.adapterConfig
+    }
+    
+    exported.providerConfigs![id] = cleanedConfig
+  }
+
+  return {
+    version: '1.0.0',
+    exportedAt: new Date().toISOString(),
+    settings: exported,
+  }
+}
+
+/**
+ * 导出配置为 JSON 字符串
+ */
+export function exportSettingsToJSON(settings: AppSettings, includeApiKeys = false): string {
+  const exported = exportSettings(settings, includeApiKeys)
+  return JSON.stringify(exported, null, 2)
+}
+
+/**
+ * 从 JSON 导入配置
+ */
+export function importSettingsFromJSON(json: string): { success: boolean; settings?: Partial<AppSettings>; error?: string } {
+  try {
+    const parsed = JSON.parse(json) as ExportedSettings
+    
+    // 验证版本
+    if (!parsed.version || !parsed.settings) {
+      return { success: false, error: 'Invalid settings file format' }
+    }
+    
+    // 验证必要字段
+    const settings = parsed.settings
+    if (typeof settings !== 'object') {
+      return { success: false, error: 'Invalid settings data' }
+    }
+    
+    return { success: true, settings }
+  } catch (e) {
+    return { success: false, error: `Failed to parse JSON: ${e instanceof Error ? e.message : 'Unknown error'}` }
+  }
+}
+
+/**
+ * 下载配置文件
+ */
+export function downloadSettings(settings: AppSettings, includeApiKeys = false): void {
+  const json = exportSettingsToJSON(settings, includeApiKeys)
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `adnify-settings-${new Date().toISOString().split('T')[0]}.json`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 export { defaultLLMConfig, defaultLLMParameters, defaultAutoApprove, defaultAgentConfig, isBuiltinProvider }

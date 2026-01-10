@@ -154,7 +154,18 @@ export default function Editor() {
 
       editor.onDidChangeModelContent(() => {
         const currentVersionId = model.getAlternativeVersionId()
-        updateFileDirtyState(activeFilePath, currentVersionId)
+        const editorContent = editor.getValue()
+        const { openFiles: currentFiles } = useStore.getState()
+        const currentFile = currentFiles.find(f => f.path === activeFilePath)
+        
+        if (currentFile && editorContent === currentFile.content) {
+          // 内容相同，说明是外部同步（如 AI 写入后 reloadFileFromDisk）
+          // 更新 savedVersionId，保持 isDirty: false
+          markFileSaved(activeFilePath, currentVersionId)
+        } else {
+          // 内容不同，说明是用户编辑
+          updateFileDirtyState(activeFilePath, currentVersionId)
+        }
       })
     }
 

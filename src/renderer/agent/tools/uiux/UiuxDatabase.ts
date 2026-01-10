@@ -252,6 +252,67 @@ class UiuxDatabase {
   getAvailableStacks(): TechStack[] {
     return AVAILABLE_STACKS
   }
+
+  /**
+   * 获取产品类型的完整设计推荐
+   * 一次性返回风格+配色+字体的组合
+   */
+  async getRecommendation(productType: string): Promise<{
+    product: Record<string, unknown> | null
+    style: Record<string, unknown> | null
+    prompt: Record<string, unknown> | null
+    color: Record<string, unknown> | null
+    typography: Record<string, unknown> | null
+    landing: Record<string, unknown> | null
+  }> {
+    // 1. 搜索产品类型
+    const productData = await this.loadDomainData('product')
+    const productSearcher = await this.getSearcher('domain:product', productData, DOMAIN_CONFIGS.product.searchFields)
+    const productResults = productSearcher.search(productType, 1)
+    const product = productResults[0]?.item || null
+
+    if (!product) {
+      return { product: null, style: null, prompt: null, color: null, typography: null, landing: null }
+    }
+
+    // 2. 根据产品推荐的风格搜索风格详情
+    const styleRecommendation = (product['Primary Style Recommendation'] as string) || ''
+    const styleData = await this.loadDomainData('style')
+    const styleSearcher = await this.getSearcher('domain:style', styleData, DOMAIN_CONFIGS.style.searchFields)
+    const styleResults = styleSearcher.search(styleRecommendation.split('+')[0].trim(), 1)
+    const style = styleResults[0]?.item || null
+
+    // 3. 搜索对应的 prompt/CSS 关键词
+    const promptData = await this.loadDomainData('prompt')
+    const promptSearcher = await this.getSearcher('domain:prompt', promptData, DOMAIN_CONFIGS.prompt.searchFields)
+    const promptResults = promptSearcher.search(styleRecommendation.split('+')[0].trim(), 1)
+    const prompt = promptResults[0]?.item || null
+
+    // 4. 根据产品类型搜索配色
+    const colorData = await this.loadDomainData('color')
+    const colorSearcher = await this.getSearcher('domain:color', colorData, DOMAIN_CONFIGS.color.searchFields)
+    const colorResults = colorSearcher.search(productType, 1)
+    const color = colorResults[0]?.item || null
+
+    // 5. 根据风格搜索字体搭配
+    const typographyData = await this.loadDomainData('typography')
+    const typographySearcher = await this.getSearcher('domain:typography', typographyData, DOMAIN_CONFIGS.typography.searchFields)
+    // 根据风格特点选择字体：现代风格用 sans，传统用 serif
+    const fontQuery = styleRecommendation.toLowerCase().includes('minimal') || styleRecommendation.toLowerCase().includes('flat') 
+      ? 'modern sans clean' 
+      : productType
+    const typographyResults = typographySearcher.search(fontQuery, 1)
+    const typography = typographyResults[0]?.item || null
+
+    // 6. 搜索 Landing Page 模式
+    const landingPattern = (product['Landing Page Pattern'] as string) || ''
+    const landingData = await this.loadDomainData('landing')
+    const landingSearcher = await this.getSearcher('domain:landing', landingData, DOMAIN_CONFIGS.landing.searchFields)
+    const landingResults = landingSearcher.search(landingPattern, 1)
+    const landing = landingResults[0]?.item || null
+
+    return { product, style, prompt, color, typography, landing }
+  }
 }
 
 /** 单例实例 */

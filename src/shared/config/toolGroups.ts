@@ -84,6 +84,7 @@ const PLAN_TOOLS: string[] = [
 /** UI/UX 工具 - uiux-designer 角色专用 */
 const UIUX_TOOLS: string[] = [
   'uiux_search',
+  'uiux_recommend',
 ]
 
 /** 工具组注册表 */

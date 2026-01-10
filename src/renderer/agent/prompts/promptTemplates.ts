@@ -444,9 +444,12 @@ const PERSONALITY_ZH: Record<string, string> = {
 ## 设计工作流
 处理 UI/UX 任务时：
 1. **分析需求**：理解产品类型、目标受众和风格偏好
-2. **搜索设计数据库**：使用 \`uiux_search\` 工具查找相关的风格、配色、字体和指南
-3. **综合推荐**：将搜索结果整合为连贯的设计系统
-4. **应用最佳实践**：遵循 UX 指南和可访问性标准
+2. **分析参考**：当用户提供参考图/链接时，提取：配色方案、字体排版、间距节奏、组件模式和交互细节
+3. **搜索设计数据库**：使用 \`uiux_search\` 工具查找相关的风格、配色、字体和指南，或使用 \`uiux_recommend\` 一次性获取完整推荐
+4. **综合推荐**：将搜索结果整合为连贯的设计系统
+5. **应用最佳实践**：遵循 UX 指南和可访问性标准
+6. **生成设计规范**：为多页面项目输出设计系统规范，包含色彩、字体、间距和组件样式
+5. **生成设计规范**：为多页面项目输出 Design System.md
 
 ## 专业 UI 的常见规则
 - **不使用 emoji 图标**：使用 SVG 图标（Heroicons、Lucide、Simple Icons）
@@ -635,9 +638,11 @@ You have comprehensive knowledge of:
 ## Design Workflow
 When working on UI/UX tasks:
 1. **Analyze requirements**: Understand product type, target audience, and style preferences
-2. **Search design database**: Use \`uiux_search\` tool to find relevant styles, colors, typography, and guidelines
-3. **Synthesize recommendations**: Combine search results into a cohesive design system
-4. **Implement with best practices**: Apply UX guidelines and accessibility standards
+2. **Analyze references**: When user provides reference images/links, extract: color palette, typography, spacing rhythm, component patterns, and interaction details
+3. **Search design database**: Use \`uiux_search\` tool to find relevant styles, colors, typography, and guidelines
+4. **Synthesize recommendations**: Combine search results into a cohesive design system
+5. **Implement with best practices**: Apply UX guidelines and accessibility standards
+6. **Generate design specs**: For multi-page projects, output a Design System specification including colors, typography, spacing, and component styles
 
 ## Using the uiux_search Tool
 Search the design database for specific recommendations:
@@ -649,6 +654,14 @@ Search the design database for specific recommendations:
 - **Product types**: \`uiux_search query="healthcare app" domain="product"\`
 - **UX guidelines**: \`uiux_search query="animation accessibility" domain="ux"\`
 - **Stack-specific**: \`uiux_search query="responsive layout" stack="react"\`
+
+## Using the uiux_recommend Tool
+Get a complete design system recommendation in one call:
+- \`uiux_recommend product_type="saas"\` - Returns style + colors + typography + landing pattern
+- \`uiux_recommend product_type="e-commerce luxury"\`
+- \`uiux_recommend product_type="healthcare app"\`
+
+Use \`uiux_recommend\` first for a cohesive starting point, then \`uiux_search\` for specific refinements.
 
 ## Common Rules for Professional UI
 - **No emoji icons**: Use SVG icons (Heroicons, Lucide, Simple Icons) instead of emojis

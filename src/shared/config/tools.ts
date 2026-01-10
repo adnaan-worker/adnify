@@ -616,6 +616,31 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
             max_results: { type: 'number', description: 'Maximum results (default: 3)', default: 3 },
         },
     },
+
+    uiux_recommend: {
+        name: 'uiux_recommend',
+        displayName: 'UI/UX Recommend',
+        description: 'Get a complete design system recommendation for a product type, including style, colors, typography, and landing page pattern.',
+        detailedDescription: `Input a product type and get a cohesive design recommendation:
+- Recommended UI style with CSS/Tailwind keywords
+- Color palette with hex values
+- Typography pairing with Google Fonts
+- Landing page pattern suggestion
+- Key design considerations`,
+        examples: [
+            'uiux_recommend product_type="saas"',
+            'uiux_recommend product_type="e-commerce luxury"',
+            'uiux_recommend product_type="healthcare app"',
+        ],
+        category: 'search',
+        approvalType: 'none',
+        parallel: true,
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            product_type: { type: 'string', description: 'Product type (e.g., saas, e-commerce, fintech, healthcare)', required: true },
+        },
+    },
 }
 
 

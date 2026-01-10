@@ -182,5 +182,45 @@
     "CSS/Technical Keywords": "font-family: 'Press Start 2P', image-rendering: pixelated, box-shadow: 4px 0 0 #000 (pixel border), no anti-aliasing",
     "Implementation Checklist": "☐ Pixelated fonts loaded, ☐ Images sharp (no blur), ☐ CSS box-shadow for pixel borders, ☐ Retro palette, ☐ Blocky layout",
     "Design System Variables": "--pixel-size: 4px, --font: pixel font, --border-style: pixel-shadow, --anti-alias: none"
+  },
+  {
+    "STT": "24",
+    "Style Category": "Structural Grid (Swiss Engineering)",
+    "AI Prompt Keywords (Copy-Paste Ready)": "Design a structural grid interface inspired by Swiss Style and engineering aesthetics. Use: visible grid lines, border-based layouts, mono-first typography (font-mono for nav/labels/buttons), sharp corners (rounded-none or 2px), no shadows, vertical rhythm with border-b dividers, high precision.",
+    "CSS/Technical Keywords": "display: grid, border-b for section dividers, font-family: monospace for UI elements, font-family: sans-serif for body, border-radius: 0-2px, no box-shadow, border: 1px solid",
+    "Implementation Checklist": "☐ Grid-based layout visible, ☐ Mono font for UI elements, ☐ Sans-serif for body text, ☐ Sharp corners (0-2px), ☐ No shadows, ☐ Border dividers between sections",
+    "Design System Variables": "--border-radius: 0px, --shadow: none, --font-ui: monospace, --font-body: sans-serif, --divider: border-b, --grid-visible: true"
+  },
+  {
+    "STT": "25",
+    "Style Category": "Material Design 3",
+    "AI Prompt Keywords (Copy-Paste Ready)": "Design using Material Design 3 (Material You) principles. Use: dynamic color theming, rounded corners (12-28px), elevation with tonal surfaces, expressive typography, motion with emphasis, adaptive layouts, color harmonies from seed color.",
+    "CSS/Technical Keywords": "border-radius: 12-28px, background: surface-tonal colors, box-shadow: elevation levels (1-5), font: Roboto/Google Sans, animation: emphasized easing, color: dynamic from seed",
+    "Implementation Checklist": "☐ Dynamic color from seed, ☐ Tonal surface elevation, ☐ Rounded corners 12-28px, ☐ Expressive motion, ☐ Adaptive breakpoints, ☐ Material icons",
+    "Design System Variables": "--seed-color: brand primary, --surface-tonal: 5 levels, --border-radius: 16px, --elevation: 1-5, --motion: emphasized"
+  },
+  {
+    "STT": "26",
+    "Style Category": "Apple Human Interface",
+    "AI Prompt Keywords (Copy-Paste Ready)": "Design following Apple Human Interface Guidelines. Use: SF Pro/SF Mono fonts, vibrancy effects, semantic colors, large touch targets (44pt), depth through materials, subtle animations, content-first hierarchy, system-integrated feel.",
+    "CSS/Technical Keywords": "font-family: -apple-system or SF Pro, backdrop-filter: blur + saturate, border-radius: 10-20px, min-height: 44px for touch, animation: spring curves, color: semantic (label, fill, separator)",
+    "Implementation Checklist": "☐ SF Pro/system font, ☐ Vibrancy/blur effects, ☐ 44pt touch targets, ☐ Semantic colors, ☐ Spring animations, ☐ Content hierarchy clear",
+    "Design System Variables": "--font: -apple-system, --blur: vibrancy, --touch-target: 44px, --radius: 12px, --animation: spring"
+  },
+  {
+    "STT": "27",
+    "Style Category": "IDE/Code Editor Theme",
+    "AI Prompt Keywords (Copy-Paste Ready)": "Design an IDE or code editor themed interface. Use: dark background (#1E1E1E or #0D1117), syntax highlighting colors, monospace fonts, line numbers, file tree sidebar, tab-based navigation, terminal-style elements, status bar.",
+    "CSS/Technical Keywords": "background: #1E1E1E, font-family: 'Fira Code' or 'JetBrains Mono', color: syntax colors (strings: #CE9178, keywords: #569CD6, comments: #6A9955), border: 1px solid #3C3C3C",
+    "Implementation Checklist": "☐ Dark IDE background, ☐ Monospace font, ☐ Syntax highlighting colors, ☐ File tree sidebar, ☐ Tab navigation, ☐ Status bar footer",
+    "Design System Variables": "--bg-editor: #1E1E1E, --bg-sidebar: #252526, --font: monospace, --syntax-string: #CE9178, --syntax-keyword: #569CD6"
+  },
+  {
+    "STT": "28",
+    "Style Category": "Dashboard Analytics",
+    "AI Prompt Keywords (Copy-Paste Ready)": "Design a data-rich analytics dashboard. Use: card-based metrics, chart visualizations, KPI highlights, data tables, filters/controls, real-time indicators, clean data hierarchy, actionable insights layout.",
+    "CSS/Technical Keywords": "display: grid for card layout, chart libraries (Recharts/Chart.js), table with sticky headers, badge for status, skeleton loading, responsive breakpoints",
+    "Implementation Checklist": "☐ KPI cards prominent, ☐ Charts readable, ☐ Data tables sortable, ☐ Filters accessible, ☐ Loading states, ☐ Mobile responsive",
+    "Design System Variables": "--card-gap: 24px, --chart-colors: 5-7 distinct, --table-stripe: alternating, --kpi-highlight: accent color"
   }
 ]

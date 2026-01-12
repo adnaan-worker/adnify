@@ -101,12 +101,21 @@ class UpdateService {
     autoUpdater.autoInstallOnAppQuit = true
     autoUpdater.allowDowngrade = false
 
+    // 根据架构选择正确的更新通道
+    const arch = process.arch
+    const channel = arch === 'arm64' ? 'latest-arm64' : 'latest'
+    
+    logger.system.info(`[Updater] Using update channel: ${channel} for arch: ${arch}`)
+
     // GitHub Releases 作为更新源
     autoUpdater.setFeedURL({
       provider: 'github',
       owner: 'adnaan-worker',
       repo: 'adnify',
     })
+    
+    // 设置更新通道（对应 yml 文件名）
+    autoUpdater.channel = channel
 
     // 事件监听
     autoUpdater.on('checking-for-update', () => {

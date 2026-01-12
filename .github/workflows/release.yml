@@ -189,8 +189,35 @@ jobs:
           mkdir -p release-files
           # 复制安装包
           find artifacts -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.tar.gz" \) -exec cp {} release-files/ \;
-          # 复制更新元数据文件（electron-updater 需要）
-          find artifacts -type f \( -name "*.yml" -o -name "*.yaml" -o -name "*.blockmap" \) -exec cp {} release-files/ \;
+          # 复制 blockmap 文件
+          find artifacts -type f -name "*.blockmap" -exec cp {} release-files/ \;
+          
+          # 处理 yml 文件 - 按架构重命名避免覆盖
+          # Windows x64
+          if [ -f "artifacts/windows-x64/latest.yml" ]; then
+            cp artifacts/windows-x64/latest.yml release-files/latest.yml
+          fi
+          # Windows arm64
+          if [ -f "artifacts/windows-arm64/latest.yml" ]; then
+            cp artifacts/windows-arm64/latest.yml release-files/latest-arm64.yml
+          fi
+          # macOS x64
+          if [ -f "artifacts/macos-x64/latest-mac.yml" ]; then
+            cp artifacts/macos-x64/latest-mac.yml release-files/latest-mac.yml
+          fi
+          # macOS arm64
+          if [ -f "artifacts/macos-arm64/latest-mac.yml" ]; then
+            cp artifacts/macos-arm64/latest-mac.yml release-files/latest-mac-arm64.yml
+          fi
+          # Linux x64
+          if [ -f "artifacts/linux-x64/latest-linux.yml" ]; then
+            cp artifacts/linux-x64/latest-linux.yml release-files/latest-linux.yml
+          fi
+          # Linux arm64
+          if [ -f "artifacts/linux-arm64/latest-linux.yml" ]; then
+            cp artifacts/linux-arm64/latest-linux.yml release-files/latest-linux-arm64.yml
+          fi
+          
           ls -la release-files/
 
       - name: Create GitHub Release

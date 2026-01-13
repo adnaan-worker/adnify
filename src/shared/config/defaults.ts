@@ -160,9 +160,9 @@ export const AGENT_DEFAULTS = {
 
   // 循环检测
   loopDetection: {
-    maxHistory: 20,
-    maxExactRepeats: 4,
-    maxSameTargetRepeats: 5,
+    maxHistory: 50,            // 历史记录保留数量
+    maxExactRepeats: 5,        // 相同参数的精确重复阈值
+    maxSameTargetRepeats: 8,   // 同一文件的连续编辑阈值
   },
 
   // 目录排除列表

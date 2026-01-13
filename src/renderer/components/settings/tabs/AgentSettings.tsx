@@ -355,56 +355,59 @@ export function AgentSettings({
 
                                 {/* 循环检测 */}
                                 <div className="space-y-2">
-                                    <label className="text-xs font-medium text-text-secondary">{t('循环检测', 'Loop Detection')}</label>
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs font-medium text-text-secondary">{t('循环检测', 'Loop Detection')}</label>
+                                        <span className="text-[10px] text-text-muted">{t('仅警告，不中断', 'Warning only, no interruption')}</span>
+                                    </div>
                                     <div className="grid grid-cols-3 gap-3">
                                         <div className="space-y-1">
                                             <label className="text-[10px] text-text-muted">{t('历史记录', 'History')}</label>
                                             <Input
                                                 type="number"
-                                                value={agentConfig.loopDetection?.maxHistory ?? 20}
+                                                value={agentConfig.loopDetection?.maxHistory ?? 50}
                                                 onChange={(e) => setAgentConfig({
                                                     ...agentConfig,
                                                     loopDetection: {
                                                         ...agentConfig.loopDetection,
-                                                        maxHistory: parseInt(e.target.value) || 20
+                                                        maxHistory: parseInt(e.target.value) || 50
                                                     }
                                                 })}
-                                                min={5}
-                                                max={50}
+                                                min={10}
+                                                max={100}
                                                 className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                             />
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="text-[10px] text-text-muted">{t('精确重复', 'Exact Repeats')}</label>
+                                            <label className="text-[10px] text-text-muted">{t('精确重复阈值', 'Exact Repeats')}</label>
                                             <Input
                                                 type="number"
-                                                value={agentConfig.loopDetection?.maxExactRepeats ?? 4}
+                                                value={agentConfig.loopDetection?.maxExactRepeats ?? 5}
                                                 onChange={(e) => setAgentConfig({
                                                     ...agentConfig,
                                                     loopDetection: {
                                                         ...agentConfig.loopDetection,
-                                                        maxExactRepeats: parseInt(e.target.value) || 4
+                                                        maxExactRepeats: parseInt(e.target.value) || 5
                                                     }
                                                 })}
-                                                min={1}
-                                                max={10}
+                                                min={3}
+                                                max={20}
                                                 className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                             />
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="text-[10px] text-text-muted">{t('同目标重复', 'Same Target')}</label>
+                                            <label className="text-[10px] text-text-muted">{t('同文件编辑阈值', 'Same File Edits')}</label>
                                             <Input
                                                 type="number"
-                                                value={agentConfig.loopDetection?.maxSameTargetRepeats ?? 5}
+                                                value={agentConfig.loopDetection?.maxSameTargetRepeats ?? 8}
                                                 onChange={(e) => setAgentConfig({
                                                     ...agentConfig,
                                                     loopDetection: {
                                                         ...agentConfig.loopDetection,
-                                                        maxSameTargetRepeats: parseInt(e.target.value) || 5
+                                                        maxSameTargetRepeats: parseInt(e.target.value) || 8
                                                     }
                                                 })}
-                                                min={1}
-                                                max={10}
+                                                min={3}
+                                                max={20}
                                                 className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                             />
                                         </div>

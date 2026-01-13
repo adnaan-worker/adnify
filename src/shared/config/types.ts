@@ -61,9 +61,9 @@ export interface AutoApproveSettings {
 // ============================================
 
 export interface LoopDetectionConfig {
-  maxHistory: number
-  maxExactRepeats: number
-  maxSameTargetRepeats: number
+  maxHistory: number           // 历史记录保留数量
+  maxExactRepeats: number      // 相同参数的精确重复阈值
+  maxSameTargetRepeats: number // 同一文件的连续编辑阈值
 }
 
 export interface AgentConfig {

@@ -1,15 +1,14 @@
 /**
  * 工具调用组组件
- * 用于合并显示连续的工具调用，减少刷屏
+ * 简化设计：聚焦当前，简化历史
  * 
- * 设计：
- * - 正在执行的工具：独立显示
- * - 最新完成的 1 个工具：独立显示（让用户看清结果）
- * - 更早完成的工具：折叠到组中
+ * - 正在执行的工具：独立显示，自动展开
+ * - 已完成的工具：全部折叠到组中
+ * - 用户可以展开折叠组查看历史
  */
 
-import { useState, useMemo } from 'react'
-import { ChevronDown, Layers, CheckCircle2 } from 'lucide-react'
+import { useState, useMemo, useCallback } from 'react'
+import { ChevronDown, Layers, CheckCircle2, XCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@/renderer/agent/types'
 import ToolCallCard from './ToolCallCard'
@@ -35,10 +34,11 @@ export default function ToolCallGroup({
     const [isExpanded, setIsExpanded] = useState(false)
     const { language } = useStore()
 
-    // 分类：折叠组 / 最新完成 / 正在执行
-    const { foldedCalls, latestCompleted, activeCalls } = useMemo(() => {
+    // 简单分类：已完成 vs 正在执行
+    const { completedCalls, activeCalls, hasError } = useMemo(() => {
         const completed: ToolCall[] = []
         const active: ToolCall[] = []
+        let hasErr = false
 
         toolCalls.forEach(tc => {
             const isRunning = tc.status === 'running' || tc.status === 'pending'
@@ -46,77 +46,75 @@ export default function ToolCallGroup({
                 active.push(tc)
             } else {
                 completed.push(tc)
+                if (tc.status === 'error') hasErr = true
             }
         })
 
-        // 最新完成的 1 个独立显示，其余折叠
-        const latest = completed.length > 0 ? completed[completed.length - 1] : null
-        const folded = completed.length > 1 ? completed.slice(0, -1) : []
-
-        return { 
-            foldedCalls: folded, 
-            latestCompleted: latest, 
-            activeCalls: active 
-        }
+        return { completedCalls: completed, activeCalls: active, hasError: hasErr }
     }, [toolCalls, pendingToolId])
 
-    const renderToolCard = (tc: ToolCall) => {
-        const isFileOp = isWriteTool(tc.name)
-        const isPending = tc.id === pendingToolId
+    const renderToolCard = useCallback(
+        (tc: ToolCall, options?: { inFoldedGroup?: boolean }) => {
+            const isFileOp = isWriteTool(tc.name)
+            const isPending = tc.id === pendingToolId
+            const isActive = tc.status === 'running' || tc.status === 'pending'
 
-        if (isFileOp) {
+            if (isFileOp) {
+                return (
+                    <FileChangeCard
+                        key={tc.id}
+                        toolCall={tc}
+                        isAwaitingApproval={isPending}
+                        onApprove={isPending ? onApproveTool : undefined}
+                        onReject={isPending ? onRejectTool : undefined}
+                        onOpenInEditor={onOpenDiff}
+                    />
+                )
+            }
+
             return (
-                <FileChangeCard
+                <ToolCallCard
                     key={tc.id}
                     toolCall={tc}
                     isAwaitingApproval={isPending}
                     onApprove={isPending ? onApproveTool : undefined}
                     onReject={isPending ? onRejectTool : undefined}
-                    onOpenInEditor={onOpenDiff}
+                    // 在折叠组内默认收起，活跃状态默认展开
+                    defaultExpanded={isActive && !options?.inFoldedGroup}
                 />
             )
-        }
-
-        return (
-            <ToolCallCard
-                key={tc.id}
-                toolCall={tc}
-                isAwaitingApproval={isPending}
-                onApprove={isPending ? onApproveTool : undefined}
-                onReject={isPending ? onRejectTool : undefined}
-            />
-        )
-    }
+        },
+        [pendingToolId, onApproveTool, onRejectTool, onOpenDiff]
+    )
 
     return (
         <div className="my-2 space-y-2">
-            {/* 1. 折叠的历史工具组（2个及以上才折叠） */}
-            {foldedCalls.length > 0 && (
-                <motion.div 
-                    layout
-                    className="rounded-2xl border border-border bg-surface/20 backdrop-blur-md overflow-hidden transition-all duration-300 hover:bg-surface/30 hover:shadow-md"
-                >
+            {/* 1. 已完成的工具折叠组 */}
+            {completedCalls.length > 0 && (
+                <div className="rounded-xl border border-border bg-surface/20 overflow-hidden">
                     <div
-                        className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none"
+                        className="flex items-center gap-3 px-3 py-2 cursor-pointer select-none hover:bg-surface/30 transition-colors"
                         onClick={() => setIsExpanded(!isExpanded)}
                     >
-                        <div className="p-2 rounded-xl bg-accent/10 text-accent border border-accent/20">
-                            <Layers className="w-4 h-4" />
+                        <div className={`p-1.5 rounded-lg ${hasError ? 'bg-red-500/10 text-red-400' : 'bg-accent/10 text-accent'}`}>
+                            <Layers className="w-3.5 h-3.5" />
                         </div>
                         <div className="flex-1 min-w-0 flex items-center gap-2">
-                            <span className="text-xs font-bold text-text-primary tracking-tight">
+                            <span className="text-xs font-medium text-text-secondary">
                                 {language === 'zh'
-                                    ? `已执行 ${foldedCalls.length} 个步骤`
-                                    : `${foldedCalls.length} completed step${foldedCalls.length > 1 ? 's' : ''}`}
+                                    ? `${completedCalls.length} 个步骤已完成`
+                                    : `${completedCalls.length} step${completedCalls.length > 1 ? 's' : ''} completed`}
                             </span>
-                            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3" />
-                                Success
-                            </span>
+                            {hasError ? (
+                                <XCircle className="w-3.5 h-3.5 text-red-400" />
+                            ) : (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            )}
                         </div>
-                        <motion.div 
+                        <motion.div
                             animate={{ rotate: isExpanded ? 180 : 0 }}
-                            className="p-1 rounded-lg text-text-muted hover:bg-white/5 transition-colors"
+                            transition={{ duration: 0.15 }}
+                            className="text-text-muted"
                         >
                             <ChevronDown className="w-4 h-4" />
                         </motion.div>
@@ -125,36 +123,23 @@ export default function ToolCallGroup({
                     <AnimatePresence initial={false}>
                         {isExpanded && (
                             <motion.div
-                                layout
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.25, ease: "easeInOut" }}
+                                initial={{ height: 0 }}
+                                animate={{ height: 'auto' }}
+                                exit={{ height: 0 }}
+                                transition={{ duration: 0.2, ease: 'easeInOut' }}
+                                className="overflow-hidden"
                             >
-                                <div className="border-t border-border p-3 space-y-3 bg-black/10">
-                                    {foldedCalls.map(renderToolCard)}
+                                <div className="border-t border-border p-2 space-y-2 bg-black/5">
+                                    {completedCalls.map(tc => renderToolCard(tc, { inFoldedGroup: true }))}
                                 </div>
                             </motion.div>
                         )}
                     </AnimatePresence>
-                </motion.div>
+                </div>
             )}
 
-            {/* 2. 最新完成的工具（独立显示） */}
-            {latestCompleted && renderToolCard(latestCompleted)}
-
-            {/* 3. 正在运行的工具 */}
-            <AnimatePresence>
-                {activeCalls.length > 0 && (
-                    <motion.div 
-                        className="space-y-3"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                    >
-                        {activeCalls.map(renderToolCard)}
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {/* 2. 正在运行的工具（独立显示） */}
+            {activeCalls.map(tc => renderToolCard(tc))}
         </div>
     )
 }

@@ -8,7 +8,7 @@
 import { logger } from '@utils/Logger'
 import { useAgentStore } from '../store/AgentStore'
 import { buildOpenAIMessages, validateOpenAIMessages, OpenAIMessage } from './MessageConverter'
-import { prepareMessages, estimateMessagesTokens, CompressionLevel, LEVEL_NAMES } from '../context/CompressionManager'
+import { prepareMessages, estimateMessagesTokens, CompressionLevel, LEVEL_NAMES, calculateLevel } from '../context/CompressionManager'
 import { MessageContent, ChatMessage } from '../types'
 
 // 从 ContextBuilder 导入已有的函数
@@ -115,9 +115,12 @@ export async function buildLLMMessages(
   }
 
   // 更新压缩统计
+  // 注意：level 表示当前使用率对应的等级（用于 UI 显示）
+  // appliedLevel 表示实际应用的压缩等级（用于消息处理）
+  const displayLevel = calculateLevel(finalRatio)
   store.setCompressionStats({
-    level: appliedLevel,
-    levelName: LEVEL_NAMES[appliedLevel],
+    level: displayLevel,
+    levelName: LEVEL_NAMES[displayLevel],
     ratio: finalRatio,
     inputTokens: estimatedTokens,
     outputTokens: 0,
@@ -125,7 +128,7 @@ export async function buildLLMMessages(
     savedTokens: 0,
     savedPercent: 0,
     messageCount: openaiMessages.length,
-    needsHandoff: appliedLevel >= 4,
+    needsHandoff: displayLevel >= 4,
     lastUpdatedAt: Date.now(),
   })
 

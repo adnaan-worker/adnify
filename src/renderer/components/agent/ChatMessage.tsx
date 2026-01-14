@@ -27,7 +27,7 @@ import FileChangeCard from './FileChangeCard'
 import ToolCallCard from './ToolCallCard'
 import ToolCallGroup from './ToolCallGroup'
 import { OptionCard } from './OptionCard'
-import { isWriteTool } from '@/shared/config/tools'
+import { needsDiffPreview } from '@/shared/config/tools'
 import { useStore } from '@store'
 import { MessageBranchActions } from './BranchManager'
 
@@ -276,10 +276,10 @@ const RenderPart = React.memo(({
 
   if (isToolCallPart(part)) {
     const tc = part.toolCall
-    const isFileOp = isWriteTool(tc.name)
     const isPending = tc.id === pendingToolId
 
-    if (isFileOp) {
+    // 需要 Diff 预览的工具使用 FileChangeCard
+    if (needsDiffPreview(tc.name)) {
       return (
         <div className="my-3">
           <FileChangeCard
@@ -294,6 +294,7 @@ const RenderPart = React.memo(({
       )
     }
 
+    // 其他工具使用 ToolCallCard
     return (
       <div className="my-3">
         <ToolCallCard

@@ -67,7 +67,7 @@ Adnify 不仅仅是一个编辑器，它是你的**智能编程伴侣**。它复
 - **23 个内置工具**: AI 可自主调用的完整工具集
   - 文件读取: `read_file`, `read_multiple_files`, `list_directory`, `get_dir_tree`
   - 文件写入: `write_file`, `edit_file`, `replace_file_content`, `create_file_or_folder`, `delete_file_or_folder`
-  - 搜索功能: `search_files`, `search_in_file`, `codebase_search`
+  - 搜索功能: `search_files`, `codebase_search`
   - LSP 分析: `find_references`, `go_to_definition`, `get_hover_info`, `get_document_symbols`, `get_lint_errors`
   - 终端执行: `run_command`
   - 网络功能: `web_search`, `read_url`

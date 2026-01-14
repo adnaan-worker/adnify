@@ -243,8 +243,8 @@ export function updateStats(
 ): CompressionStats {
   const inputTokens = usage.promptTokens
   const outputTokens = usage.completionTokens
-  const totalTokens = inputTokens + outputTokens
-  const ratio = totalTokens / contextLimit
+  // 只用 inputTokens 计算比例，输出 token 不占用上下文窗口
+  const ratio = inputTokens / contextLimit
   const level = calculateLevel(ratio)
   
   // 计算节省的 token（与上一次比较）

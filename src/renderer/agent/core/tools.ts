@@ -63,12 +63,13 @@ async function saveFileSnapshots(
   const store = useAgentStore.getState()
   const { workspacePath } = context
 
-  // 找出所有文件编辑工具
-  const editTools = toolCalls.filter(tc => isFileEditTool(tc.name))
-  if (editTools.length === 0) return
+  // 找出所有需要保存快照的工具（包括删除操作）
+  const { needsFileSnapshot } = await import('@/shared/config/tools')
+  const snapshotTools = toolCalls.filter(tc => needsFileSnapshot(tc.name))
+  if (snapshotTools.length === 0) return
 
   // 并行读取所有文件的当前内容
-  const snapshotPromises = editTools.map(async (tc) => {
+  const snapshotPromises = snapshotTools.map(async (tc) => {
     const path = tc.arguments?.path as string
     if (!path) return null
 
@@ -239,7 +240,12 @@ async function executeSingle(
 }
 
 /**
- * 执行工具列表（智能并行）
+ * 执行工具列表（智能并行 + 逐个审批）
+ * 
+ * 审批策略：
+ * - 不需要审批的工具：并行执行
+ * - 需要审批的工具：逐个审批，用户可以选择批准或拒绝每个工具
+ * - 如果用户拒绝某个工具，该工具被跳过，继续执行其他工具
  */
 export async function executeTools(
   toolCalls: ToolCall[],
@@ -257,67 +263,83 @@ export async function executeTools(
   // 分析依赖
   const deps = analyzeToolDependencies(toolCalls)
   const completed = new Set<string>()
+  const rejected = new Set<string>()
   const pending = new Set(toolCalls.map(tc => tc.id))
 
-  // 检查是否需要审批
-  const needsApprovalTools = toolCalls.filter(tc => needsApproval(tc.name))
-  
-  if (needsApprovalTools.length > 0) {
-    // 设置第一个需要审批的工具为当前工具
-    const firstPendingTool = needsApprovalTools[0]
-    store.setStreamPhase('tool_pending', firstPendingTool)
-    
-    for (const tc of needsApprovalTools) {
-      if (context.currentAssistantId) {
-        store.updateToolCall(context.currentAssistantId, tc.id, { status: 'awaiting' })
-      }
-      EventBus.emit({ type: 'tool:pending', id: tc.id, name: tc.name, args: tc.arguments })
-    }
-
-    const approved = await approvalService.waitForApproval()
-    
-    if (!approved || abortSignal?.aborted) {
-      userRejected = true
-      for (const tc of toolCalls) {
-        if (context.currentAssistantId) {
-          store.updateToolCall(context.currentAssistantId, tc.id, { status: 'rejected' })
-        }
-        EventBus.emit({ type: 'tool:rejected', id: tc.id })
-        results.push({ toolCall: tc, result: { content: 'Rejected by user' } })
-      }
-      store.setStreamPhase('idle')
-      return { results, userRejected }
-    }
-  }
-
-  store.setStreamPhase('tool_running')
+  // 分离需要审批和不需要审批的工具
+  const approvalRequired = toolCalls.filter(tc => needsApproval(tc.name))
+  const noApprovalRequired = toolCalls.filter(tc => !needsApproval(tc.name))
 
   // 在执行前保存文件快照
   await saveFileSnapshots(toolCalls, context)
 
-  // 执行工具（考虑依赖关系）
-  while (pending.size > 0 && !abortSignal?.aborted) {
-    // 找出可以执行的工具
-    const ready = toolCalls.filter(tc => 
-      pending.has(tc.id) && 
-      Array.from(deps.get(tc.id) || []).every(dep => completed.has(dep))
+  // 1. 先并行执行不需要审批的工具
+  if (noApprovalRequired.length > 0) {
+    store.setStreamPhase('tool_running')
+    
+    const noApprovalResults = await Promise.all(
+      noApprovalRequired.map(tc => executeSingle(tc, context))
     )
-
-    if (ready.length === 0) {
-      logger.agent.error('[Tools] Circular dependency detected')
-      break
-    }
-
-    // 并行执行
-    const batchResults = await Promise.all(
-      ready.map(tc => executeSingle(tc, context))
-    )
-
-    for (const result of batchResults) {
+    
+    for (const result of noApprovalResults) {
       results.push(result)
       completed.add(result.toolCall.id)
       pending.delete(result.toolCall.id)
     }
+  }
+
+  // 2. 逐个处理需要审批的工具
+  for (const tc of approvalRequired) {
+    if (abortSignal?.aborted) break
+
+    // 检查依赖是否满足（依赖的工具必须已完成且未被拒绝）
+    const tcDeps = deps.get(tc.id) || new Set()
+    const depsOk = Array.from(tcDeps).every(dep => completed.has(dep) && !rejected.has(dep))
+    
+    if (!depsOk) {
+      // 依赖未满足，跳过此工具
+      if (context.currentAssistantId) {
+        store.updateToolCall(context.currentAssistantId, tc.id, { 
+          status: 'error', 
+          result: 'Skipped: dependency not met' 
+        })
+      }
+      results.push({ toolCall: tc, result: { content: 'Skipped: dependency not met' } })
+      pending.delete(tc.id)
+      continue
+    }
+
+    // 设置当前工具为待审批状态
+    store.setStreamPhase('tool_pending', tc)
+    if (context.currentAssistantId) {
+      store.updateToolCall(context.currentAssistantId, tc.id, { status: 'awaiting' })
+    }
+    EventBus.emit({ type: 'tool:pending', id: tc.id, name: tc.name, args: tc.arguments })
+
+    // 等待用户审批
+    const approved = await approvalService.waitForApproval()
+
+    if (!approved || abortSignal?.aborted) {
+      // 用户拒绝了这个工具
+      userRejected = true
+      rejected.add(tc.id)
+      if (context.currentAssistantId) {
+        store.updateToolCall(context.currentAssistantId, tc.id, { status: 'rejected' })
+      }
+      EventBus.emit({ type: 'tool:rejected', id: tc.id })
+      results.push({ toolCall: tc, result: { content: 'Rejected by user' } })
+      pending.delete(tc.id)
+      
+      // 继续处理下一个工具，而不是中断整个流程
+      continue
+    }
+
+    // 用户批准，执行工具
+    store.setStreamPhase('tool_running')
+    const result = await executeSingle(tc, context)
+    results.push(result)
+    completed.add(tc.id)
+    pending.delete(tc.id)
   }
 
   // 确保状态更新

@@ -37,17 +37,39 @@ interface ToolCallCardProps {
 
 // 工具标签映射
 const TOOL_LABELS: Record<string, string> = {
-    run_command: 'Run Command',
-    search_files: 'Search Files',
-    list_directory: 'List Directory',
+    // 读取类
     read_file: 'Read File',
+    read_multiple_files: 'Read Files',
+    list_directory: 'List Directory',
+    get_dir_tree: 'Directory Tree',
+    // 搜索类
+    search_files: 'Search Files',
+    codebase_search: 'Semantic Search',
+    // 编辑类
+    edit_file: 'Edit File',
+    replace_file_content: 'Replace Lines',
     write_file: 'Write File',
     create_file: 'Create File',
-    edit_file: 'Edit File',
+    create_file_or_folder: 'Create',
     delete_file_or_folder: 'Delete',
+    // 终端
+    run_command: 'Run Command',
+    // LSP
+    get_lint_errors: 'Lint Errors',
+    find_references: 'Find References',
+    go_to_definition: 'Go to Definition',
+    get_hover_info: 'Hover Info',
+    get_document_symbols: 'Document Symbols',
+    // 网络
     web_search: 'Web Search',
     read_url: 'Read URL',
+    // Plan
+    create_plan: 'Create Plan',
+    update_plan: 'Update Plan',
     ask_user: 'Ask User',
+    // UI/UX
+    uiux_search: 'UI/UX Search',
+    uiux_recommend: 'UI/UX Recommend',
 }
 
 const ToolCallCard = memo(function ToolCallCard({
@@ -77,24 +99,48 @@ const ToolCallCard = memo(function ToolCallCard({
     // 获取简短描述
     const description = useMemo(() => {
         const name = toolCall.name
+        // 终端命令
         if (name === 'run_command') {
             return args.command as string
         }
-        if (['read_file', 'write_file', 'create_file', 'edit_file'].includes(name)) {
+        // 文件路径类工具
+        if ([
+            'read_file', 'write_file', 'create_file', 'edit_file',
+            'create_file_or_folder', 'delete_file_or_folder',
+            'replace_file_content', 'get_lint_errors',
+            'find_references', 'go_to_definition', 'get_hover_info', 'get_document_symbols'
+        ].includes(name)) {
             const path = args.path as string
-            return path ? getFileName(path) : path
+            return path ? getFileName(path) : ''
         }
+        // 多文件读取
+        if (name === 'read_multiple_files') {
+            const paths = args.paths as string[]
+            return paths?.length ? `${paths.length} files` : ''
+        }
+        // 目录类
+        if (name === 'list_directory' || name === 'get_dir_tree') {
+            const path = args.path as string
+            return path ? getFileName(path) || '.' : '.'
+        }
+        // 搜索类
         if (name === 'search_files') {
             const pattern = (args.pattern || args.query) as string
             return pattern ? `"${pattern}"` : ''
         }
-        if (name === 'list_directory') {
-            const path = args.path as string
-            return path ? getFileName(path) : '.'
-        }
-        if (name === 'web_search') {
+        if (name === 'codebase_search' || name === 'web_search' || name === 'uiux_search') {
             const query = args.query as string
             return query ? `"${query}"` : ''
+        }
+        // URL
+        if (name === 'read_url') {
+            const url = args.url as string
+            return url ? new URL(url).hostname : ''
+        }
+        // Plan
+        if (name === 'ask_user') {
+            const question = args.question as string
+            return question ? question.slice(0, 30) + (question.length > 30 ? '...' : '') : ''
         }
         return ''
     }, [toolCall.name, args])
@@ -166,15 +212,19 @@ const ToolCallCard = memo(function ToolCallCard({
             )
         }
 
-        // 搜索
-        if (name === 'search_files' || name === 'web_search') {
+        // 搜索类工具（统一样式）
+        if (['search_files', 'codebase_search', 'web_search', 'uiux_search'].includes(name)) {
+            const query = (args.pattern || args.query) as string
+            const searchType = name === 'codebase_search' ? 'Semantic' 
+                : name === 'web_search' ? 'Web'
+                : name === 'uiux_search' ? 'UI/UX'
+                : 'Files'
             return (
                 <div className="bg-black/20 rounded-md border border-border overflow-hidden">
                     <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
                         <Search className="w-3 h-3" />
-                        <span>
-                            Query: <span className="text-text-primary font-medium">{(args.pattern || args.query) as string}</span>
-                        </span>
+                        <span className="text-text-muted/60">{searchType}:</span>
+                        <span className="text-text-primary font-medium truncate">"{query}"</span>
                     </div>
                     {toolCall.result && (
                         <div className="max-h-48 overflow-y-auto custom-scrollbar p-1">
@@ -185,7 +235,27 @@ const ToolCallCard = memo(function ToolCallCard({
             )
         }
 
-        // 文件编辑
+        // 目录类工具
+        if (['list_directory', 'get_dir_tree'].includes(name)) {
+            const path = args.path as string
+            const displayName = getFileName(path) || path || '.'
+            return (
+                <div className="bg-black/20 rounded-md border border-border overflow-hidden">
+                    <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
+                        <FileCode className="w-3 h-3" />
+                        <span className="text-text-primary font-medium" title={path}>{displayName}</span>
+                    </div>
+                    {toolCall.result && (
+                        <div className="max-h-64 overflow-y-auto custom-scrollbar p-3 font-mono text-xs text-text-secondary whitespace-pre">
+                            {toolCall.result.slice(0, 3000)}
+                            {toolCall.result.length > 3000 && <span className="opacity-50">... (truncated)</span>}
+                        </div>
+                    )}
+                </div>
+            )
+        }
+
+        // 文件编辑类工具（带 diff 预览）
         if (['edit_file', 'write_file', 'create_file', 'replace_file_content'].includes(name)) {
             const filePath = (args.path as string) || ''
             const MAX_CHARS = 5000
@@ -226,6 +296,91 @@ const ToolCallCard = memo(function ToolCallCard({
                     </div>
                 )
             }
+        }
+
+        // 文件/文件夹创建删除（简洁显示）
+        if (['create_file_or_folder', 'delete_file_or_folder'].includes(name)) {
+            const path = args.path as string
+            const isDelete = name === 'delete_file_or_folder'
+            const isFolder = path?.endsWith('/')
+            const displayName = getFileName(path) || path
+            return (
+                <div className={`bg-black/20 rounded-md border overflow-hidden ${isDelete ? 'border-red-500/20' : 'border-border'}`}>
+                    <div className="px-3 py-2 flex items-center gap-2 text-xs">
+                        <FileCode className={`w-3 h-3 ${isDelete ? 'text-red-400' : 'text-emerald-400'}`} />
+                        <span className={`font-medium ${isDelete ? 'text-red-400' : 'text-emerald-400'}`}>
+                            {isDelete ? 'Delete' : 'Create'} {isFolder ? 'folder' : 'file'}:
+                        </span>
+                        <span className="text-text-primary font-mono truncate" title={path}>{displayName}</span>
+                    </div>
+                    {toolCall.result && (
+                        <div className="px-3 py-2 border-t border-border text-xs text-text-muted">
+                            {toolCall.result.slice(0, 200)}
+                        </div>
+                    )}
+                </div>
+            )
+        }
+
+        // 读取文件（显示文件内容预览）
+        if (['read_file', 'read_multiple_files'].includes(name)) {
+            const filePath = name === 'read_file' ? args.path as string : ''
+            const displayName = name === 'read_file' ? getFileName(filePath) : `${(args.paths as string[])?.length || 0} files`
+            return (
+                <div className="bg-black/20 rounded-md border border-border overflow-hidden">
+                    <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
+                        <FileCode className="w-3 h-3" />
+                        <span className="text-text-primary font-medium" title={filePath}>{displayName}</span>
+                    </div>
+                    {toolCall.result && (
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar p-3 font-mono text-xs text-text-secondary whitespace-pre-wrap">
+                            {toolCall.result.slice(0, 2000)}
+                            {toolCall.result.length > 2000 && <span className="opacity-50">... (truncated)</span>}
+                        </div>
+                    )}
+                </div>
+            )
+        }
+
+        // URL 读取
+        if (name === 'read_url') {
+            const url = args.url as string
+            let hostname = ''
+            try { hostname = new URL(url).hostname } catch { hostname = url }
+            return (
+                <div className="bg-black/20 rounded-md border border-border overflow-hidden">
+                    <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
+                        <Search className="w-3 h-3" />
+                        <span className="text-text-primary font-medium truncate">{hostname}</span>
+                    </div>
+                    {toolCall.result && (
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar p-3 text-xs text-text-secondary">
+                            {toolCall.result.slice(0, 2000)}
+                            {toolCall.result.length > 2000 && <span className="opacity-50">... (truncated)</span>}
+                        </div>
+                    )}
+                </div>
+            )
+        }
+
+        // LSP 工具（简洁显示）
+        if (['get_lint_errors', 'find_references', 'go_to_definition', 'get_hover_info', 'get_document_symbols'].includes(name)) {
+            const path = args.path as string
+            const line = args.line as number | undefined
+            return (
+                <div className="bg-black/20 rounded-md border border-border overflow-hidden">
+                    <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
+                        <FileCode className="w-3 h-3" />
+                        <span className="text-text-primary font-medium">{getFileName(path)}</span>
+                        {line && <span className="text-text-muted/60">:{line}</span>}
+                    </div>
+                    {toolCall.result && (
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar p-2">
+                            <JsonHighlight data={toolCall.result} maxHeight="max-h-48" maxLength={2000} />
+                        </div>
+                    )}
+                </div>
+            )
         }
 
         // 默认：显示参数和结果

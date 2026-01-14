@@ -148,29 +148,46 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
     },
 
     async search_files(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath, true)
-        const results = await api.file.search(args.pattern as string, path, {
-            isRegex: !!args.is_regex, include: args.file_pattern as string | undefined, isCaseSensitive: false
+        const pathArg = args.path as string
+        const resolvedPath = resolvePath(pathArg, ctx.workspacePath, true)
+        const pattern = args.pattern as string
+        // 自动启用 regex 模式（如果包含 | 符号）
+        const isRegex = !!args.is_regex || pattern.includes('|')
+        
+        // 判断是文件还是目录：尝试读取目录内容，如果失败则认为是文件
+        const dirItems = await api.file.readDir(resolvedPath)
+        const isDirectory = dirItems !== null
+        
+        if (!isDirectory) {
+            // 单文件搜索模式（替代原 search_in_file）
+            const content = await api.file.read(resolvedPath)
+            if (content === null) return { success: false, result: '', error: `File not found: ${resolvedPath}` }
+
+            const matches: string[] = []
+            
+            content.split('\n').forEach((line, index) => {
+                const matched = isRegex
+                    ? (() => { try { return new RegExp(pattern, 'gi').test(line) } catch { return false } })()
+                    : line.toLowerCase().includes(pattern.toLowerCase())
+                if (matched) matches.push(`${pathArg}:${index + 1}: ${line.trim()}`)
+            })
+
+            return { 
+                success: true, 
+                result: matches.length 
+                    ? `Found ${matches.length} matches:\n${matches.slice(0, 100).join('\n')}` 
+                    : `No matches found for "${pattern}"` 
+            }
+        }
+        
+        // 目录搜索模式（原有逻辑）
+        const results = await api.file.search(pattern, resolvedPath, {
+            isRegex,
+            include: args.file_pattern as string | undefined,
+            isCaseSensitive: false
         })
         if (!results) return { success: false, result: 'Search failed' }
         return { success: true, result: results.slice(0, 50).map(r => `${r.path}:${r.line}: ${r.text.trim()}`).join('\n') || 'No matches found' }
-    },
-
-    async search_in_file(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath, true)
-        const content = await api.file.read(path)
-        if (content === null) return { success: false, result: '', error: `File not found: ${path}` }
-
-        const pattern = args.pattern as string
-        const matches: string[] = []
-        content.split('\n').forEach((line, index) => {
-            const matched = args.is_regex
-                ? (() => { try { return new RegExp(pattern, 'gi').test(line) } catch { return false } })()
-                : line.toLowerCase().includes(pattern.toLowerCase())
-            if (matched) matches.push(`${index + 1}: ${line.trim()}`)
-        })
-
-        return { success: true, result: matches.length ? `Found ${matches.length} matches:\n${matches.slice(0, 100).join('\n')}` : `No matches found for "${pattern}"` }
     },
 
     async read_multiple_files(args, ctx) {

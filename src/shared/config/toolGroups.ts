@@ -51,7 +51,6 @@ const CORE_TOOLS: string[] = [
   'list_directory',
   'get_dir_tree',
   'search_files',
-  'search_in_file',
   'read_multiple_files',
   // 文件编辑
   'edit_file',

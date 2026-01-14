@@ -13,7 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@/renderer/agent/types'
 import ToolCallCard from './ToolCallCard'
 import FileChangeCard from './FileChangeCard'
-import { isWriteTool } from '@/shared/config/tools'
+import { needsDiffPreview } from '@/shared/config/tools'
 import { useStore } from '@store'
 
 interface ToolCallGroupProps {
@@ -55,11 +55,11 @@ export default function ToolCallGroup({
 
     const renderToolCard = useCallback(
         (tc: ToolCall, options?: { inFoldedGroup?: boolean }) => {
-            const isFileOp = isWriteTool(tc.name)
             const isPending = tc.id === pendingToolId
             const isActive = tc.status === 'running' || tc.status === 'pending'
 
-            if (isFileOp) {
+            // 需要 Diff 预览的工具使用 FileChangeCard
+            if (needsDiffPreview(tc.name)) {
                 return (
                     <FileChangeCard
                         key={tc.id}
@@ -72,6 +72,7 @@ export default function ToolCallGroup({
                 )
             }
 
+            // 其他工具使用 ToolCallCard
             return (
                 <ToolCallCard
                     key={tc.id}
@@ -79,7 +80,6 @@ export default function ToolCallGroup({
                     isAwaitingApproval={isPending}
                     onApprove={isPending ? onApproveTool : undefined}
                     onReject={isPending ? onRejectTool : undefined}
-                    // 在折叠组内默认收起，活跃状态默认展开
                     defaultExpanded={isActive && !options?.inFoldedGroup}
                 />
             )

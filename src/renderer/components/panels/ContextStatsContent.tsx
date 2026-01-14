@@ -100,10 +100,8 @@ export default function ContextStatsContent({
           {/* 刻度标记 */}
           <div className="flex justify-between mt-1 text-[9px] text-text-muted/50 font-mono">
             <span>0</span>
-            <span className="text-yellow-500/50">70%</span>
-            <span className="text-orange-500/50">85%</span>
-            <span className="text-red-500/50">95%</span>
-            <span>{formatK(contextLimit)}</span>
+            <span className="text-yellow-500/50">50%</span>
+            <span className="text-red-500/50">100%</span>
           </div>
         </div>
 

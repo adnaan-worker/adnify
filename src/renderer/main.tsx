@@ -1,9 +1,14 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './styles/globals.css'
+import { logger } from '@utils/Logger'
 
 // 注入生产环境标记（供 shared 代码使用）
+// 必须在 Logger 首次使用前设置，确保生产环境检测正确
 ;(globalThis as any).__PROD__ = import.meta.env.PROD
+
+// 刷新 Logger 的生产环境检测（确保配置已更新）
+logger.refreshProductionMode()
 
 // 性能优化：延迟加载 Monaco worker 配置
 // Monaco 是最大的依赖，延迟到实际需要时再初始化

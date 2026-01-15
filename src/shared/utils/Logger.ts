@@ -96,24 +96,55 @@ interface LoggerConfig {
 
 // 检测是否为生产环境
 function isProduction(): boolean {
-  // 检查 NODE_ENV（适用于所有环境）
-  if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
-    return true
+  // 1. Renderer 进程 - 检查 window.__PROD__ 标记（由 main.tsx 注入）
+  // 这个值来自 import.meta.env.PROD，在 Vite 构建时会被正确替换
+  if (typeof globalThis !== 'undefined') {
+    const prodFlag = (globalThis as any).__PROD__
+    if (prodFlag === true) {
+      return true
+    }
   }
-  // Electron 主进程 - 检查是否打包后运行
+  
+  // 2. Electron 主进程 - 检查是否打包后运行
   if (typeof process !== 'undefined') {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { app } = require('electron')
-      if (app?.isPackaged) return true
+      if (app?.isPackaged === true) {
+        return true
+      }
     } catch {
-      // 不在 Electron 主进程环境中
+      // 不在 Electron 主进程环境中，继续其他检查
     }
   }
-  // Renderer 进程 - 检查 window.__PROD__ 标记（由 Vite 注入）
-  if (typeof globalThis !== 'undefined' && (globalThis as any).__PROD__) {
+  
+  // 3. 检查 NODE_ENV（适用于所有环境）
+  if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
     return true
   }
+  
+  // 4. 检查是否在打包后的环境中（通过检查路径，作为后备方案）
+  if (typeof process !== 'undefined' && process.execPath) {
+    const execPath = process.execPath.toLowerCase()
+    // 在打包后的 Electron 应用中，execPath 通常指向 .asar 文件或打包后的可执行文件
+    // 且不包含开发相关的路径
+    if (execPath.includes('.asar')) {
+      return true
+    }
+    // 检查是否不在典型的开发环境中
+    const cwd = (process.cwd?.() || '').toLowerCase()
+    if (!execPath.includes('node_modules') && 
+        !execPath.includes('electron') && 
+        !cwd.includes('src') &&
+        !cwd.includes('node_modules')) {
+      // 可能是生产环境，但需要更严格的检查
+      // 只有在明确不是开发环境时才返回 true
+      if (!execPath.includes('dev') && !cwd.includes('dev')) {
+        return true
+      }
+    }
+  }
+  
   return false
 }
 
@@ -126,15 +157,7 @@ interface PerformanceTimer {
 }
 
 class LoggerClass {
-  private config: LoggerConfig = {
-    minLevel: isProduction() ? 'warn' : 'info',  // 生产环境只显示警告和错误
-    enabled: true,
-    maxLogs: 1000,
-    fileLogging: false,
-    consoleLogging: !isProduction(),  // 生产环境默认关闭控制台日志
-    maxFileSize: 10 * 1024 * 1024, // 10MB
-    maxFiles: 5,
-  }
+  private config: LoggerConfig
   private logs: LogEntry[] = []
   private timers: Map<string, PerformanceTimer> = new Map()
   private fileWriteQueue: LogEntry[] = []
@@ -143,8 +166,36 @@ class LoggerClass {
   // 检测是否在主进程中运行
   private isMain = typeof process !== 'undefined' && process.versions?.node && !(globalThis as Record<string, unknown>).window
   
-  // 缓存生产环境检测结果
-  private isProd = isProduction()
+  // 缓存生产环境检测结果（延迟初始化）
+  private _isProd: boolean | null = null
+  
+  constructor() {
+    // 立即检测生产环境并初始化配置
+    const isProd = isProduction()
+    this._isProd = isProd
+    this.config = {
+      minLevel: isProd ? 'warn' : 'info',  // 生产环境只显示警告和错误
+      enabled: true,
+      maxLogs: 1000,
+      fileLogging: false,
+      consoleLogging: !isProd,  // 生产环境默认关闭控制台日志
+      maxFileSize: 10 * 1024 * 1024, // 10MB
+      maxFiles: 5,
+    }
+  }
+  
+  // 获取生产环境状态（延迟检测，确保环境变量已设置）
+  private get isProd(): boolean {
+    if (this._isProd === null) {
+      this._isProd = isProduction()
+      // 如果是生产环境，更新配置
+      if (this._isProd) {
+        this.config.minLevel = 'warn'  // 生产环境只显示警告和错误
+        this.config.consoleLogging = false  // 生产环境默认关闭控制台日志
+      }
+    }
+    return this._isProd
+  }
 
   /**
    * 配置日志器
@@ -179,6 +230,19 @@ class LoggerClass {
    */
   isProductionMode(): boolean {
     return this.isProd
+  }
+  
+  /**
+   * 重新检测生产环境（用于环境变量延迟设置的情况）
+   */
+  refreshProductionMode(): void {
+    this._isProd = null
+    // 触发 getter 以更新配置
+    const wasProd = this.isProd
+    if (wasProd) {
+      this.config.minLevel = 'warn'
+      this.config.consoleLogging = false
+    }
   }
 
   /**
@@ -313,6 +377,10 @@ class LoggerClass {
     duration?: number
   ): void {
     if (!this.config.enabled) return
+    
+    // 确保生产环境检测已完成（延迟初始化）
+    this.isProd // 触发 getter，确保配置已更新
+    
     if (LEVEL_PRIORITY[level] < LEVEL_PRIORITY[this.config.minLevel]) return
 
     const entry: LogEntry = {

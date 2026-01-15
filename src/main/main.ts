@@ -156,7 +156,6 @@ function createWindow(isEmpty = false): BrowserWindow {
   // 窗口事件
   win.on('focus', () => {
     lastActiveWindow = win
-    ipcModule?.updateLLMServiceWindow(win)
   })
 
   win.on('close', async (e) => {
@@ -279,8 +278,6 @@ async function initializeModules(firstWin: BrowserWindow) {
     setWindowWorkspace: (id: number, roots: string[]) => windowWorkspaces.set(id, roots),
     getWindowWorkspace: (id: number) => windowWorkspaces.get(id) || null,
   })
-
-  securityManager.setMainWindow(firstWin)
 
   // 设置菜单
   Menu.setApplicationMenu(Menu.buildFromTemplate([

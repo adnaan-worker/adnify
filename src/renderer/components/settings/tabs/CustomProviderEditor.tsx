@@ -45,7 +45,7 @@ export function CustomProviderEditor({
   onCancel, 
   isNew = false 
 }: CustomProviderEditorProps) {
-  const { setProviderConfig } = useStore()
+  const { setProvider } = useStore()
 
   const [name, setName] = useState(config?.displayName || '')
   const [baseUrl, setBaseUrl] = useState(config?.baseUrl || '')
@@ -161,7 +161,7 @@ export function CustomProviderEditor({
       updatedAt: now,
     }
 
-    setProviderConfig(id, newConfig)
+    setProvider(id, newConfig)
     toast.success(language === 'zh' ? '已保存' : 'Saved')
     onSave()
   }

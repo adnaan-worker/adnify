@@ -49,11 +49,3 @@ export function getLanguage(path: string): string {
   
   return 'plaintext'
 }
-
-// 保留旧的导出以兼容现有代码
-export const LANGUAGE_MAP: Record<string, string> = Object.fromEntries(
-  Object.entries(EXTENSION_TO_LANGUAGE).map(([ext, lang]) => [
-    ext,
-    MONACO_LANGUAGE_OVERRIDES[lang] || MONACO_LANGUAGE_OVERRIDES[ext] || lang
-  ])
-)

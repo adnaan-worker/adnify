@@ -1,248 +1,112 @@
 /**
  * 设置状态切片
  * 
- * 管理 Zustand 状态，委托实际的加载/保存逻辑给 settingsService
+ * 统一的设置管理，使用 set/update API
  */
-import { logger } from '@utils/Logger'
+
 import { StateCreator } from 'zustand'
-import { BUILTIN_PROVIDERS, getAdapterConfig } from '@shared/config/providers'
+import { logger } from '@shared/utils/Logger'
+import { settingsService } from '@renderer/settings/service'
 import {
-  settingsService,
-  getEditorConfig,
-  saveEditorConfig,
-} from '@renderer/settings'
-import type {
-  LLMConfig,
-  LLMParameters,
-  AgentConfig,
-  AutoApproveSettings,
-  EditorConfig,
-  ProviderConfig,
-  SecuritySettings,
-  WebSearchConfig,
-  McpConfig,
-} from '@shared/config/types'
+  type SettingsState,
+  type SettingKey,
+  type ProviderModelConfig,
+  getAllDefaults,
+} from '@shared/config/settings'
 import type { ApiProtocol } from '@shared/config/providers'
-import {
-  defaultLLMConfig,
-  defaultAgentConfig,
-  defaultAutoApprove,
-  defaultEditorConfig,
-  defaultSecuritySettings,
-  defaultWebSearchConfig,
-  defaultMcpConfig,
-} from '@renderer/settings'
-import { SECURITY_DEFAULTS } from '@shared/constants'
 
-// ============ 导出类型 ============
+// ============================================
+// Slice 接口
+// ============================================
 
-export type ProviderType = string
-export type { LLMConfig, LLMParameters, AgentConfig, AutoApproveSettings, EditorConfig, ProviderConfig }
-
-// ============ Provider 模型配置 ============
-
-export interface ProviderModelConfig extends Omit<ProviderConfig, 'protocol'> {
-  customModels?: string[]
-  protocol?: ApiProtocol
-}
-
-// ============ Slice 接口 ============
-
-export interface SettingsSlice {
-  llmConfig: LLMConfig
-  language: 'en' | 'zh'
-  autoApprove: AutoApproveSettings
-  promptTemplateId: string
-  providerConfigs: Record<string, ProviderModelConfig>
-  securitySettings: SecuritySettings
-  webSearchConfig: WebSearchConfig
-  mcpConfig: McpConfig
-  agentConfig: AgentConfig
-  editorConfig: EditorConfig
-  onboardingCompleted: boolean
+export interface SettingsSlice extends SettingsState {
   hasExistingConfig: boolean
-  aiInstructions: string
 
-  setLLMConfig: (config: Partial<LLMConfig>) => void
-  setLanguage: (lang: 'en' | 'zh') => void
-  setAutoApprove: (settings: Partial<AutoApproveSettings>) => void
-  setPromptTemplateId: (id: string) => void
-  setProviderConfig: (providerId: string, config: ProviderModelConfig) => void
-  updateProviderConfig: (providerId: string, updates: Partial<ProviderModelConfig>) => void
-  removeProviderConfig: (providerId: string) => void
-  addCustomModel: (providerId: string, model: string) => void
-  removeCustomModel: (providerId: string, model: string) => void
-  setSecuritySettings: (settings: Partial<SecuritySettings>) => void
-  setWebSearchConfig: (config: Partial<WebSearchConfig>) => void
-  setMcpConfig: (config: Partial<McpConfig>) => void
-  setAgentConfig: (config: Partial<AgentConfig>) => void
-  setEditorConfig: (config: Partial<EditorConfig>) => void
-  setOnboardingCompleted: (completed: boolean) => void
-  setHasExistingConfig: (hasConfig: boolean) => void
-  setAiInstructions: (instructions: string) => void
-  loadSettings: (isEmptyWindow?: boolean) => Promise<void>
+  // 统一设置 API
+  set: <K extends SettingKey>(key: K, value: SettingsState[K]) => void
+  update: <K extends SettingKey>(key: K, partial: Partial<SettingsState[K]>) => void
+
+  // Provider 方法
+  setProvider: (id: string, config: ProviderModelConfig) => void
+  updateProvider: (id: string, updates: Partial<ProviderModelConfig>) => void
+  removeProvider: (id: string) => void
+  addModel: (providerId: string, model: string) => void
+  removeModel: (providerId: string, model: string) => void
   getCustomProviders: () => Array<{ id: string; config: ProviderModelConfig }>
+
+  // 生命周期
+  load: () => Promise<void>
+  save: () => Promise<void>
 }
 
-// ============ 默认 Provider 配置 ============
-
-function generateDefaultProviderConfigs(): Record<string, ProviderModelConfig> {
-  const configs: Record<string, ProviderModelConfig> = {}
-  for (const [id, provider] of Object.entries(BUILTIN_PROVIDERS)) {
-    configs[id] = {
-      customModels: [],
-      adapterConfig: provider.adapter,
-      model: provider.defaultModel || '',
-      baseUrl: provider.baseUrl,
-    }
-  }
-  return configs
-}
-
-const defaultProviderConfigs = generateDefaultProviderConfigs()
-
-// ============ Slice 创建 ============
+// ============================================
+// Slice 实现
+// ============================================
 
 export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSlice> = (set, get) => ({
-  llmConfig: { ...defaultLLMConfig, adapterConfig: getAdapterConfig('openai') },
-  language: 'en',
-  autoApprove: defaultAutoApprove,
-  promptTemplateId: 'default',
-  providerConfigs: defaultProviderConfigs,
-  securitySettings: {
-    ...defaultSecuritySettings,
-    allowedShellCommands: [...SECURITY_DEFAULTS.SHELL_COMMANDS],
-  },
-  webSearchConfig: defaultWebSearchConfig,
-  mcpConfig: defaultMcpConfig,
-  agentConfig: defaultAgentConfig,
-  editorConfig: defaultEditorConfig,
-  onboardingCompleted: true,
-  hasExistingConfig: true,
-  aiInstructions: '',
+  ...getAllDefaults(),
+  hasExistingConfig: false,
 
-  setLLMConfig: (config) =>
-    set((state) => {
+  set: (key, value) => {
+    set({ [key]: value } as Partial<SettingsState>)
+    if (key === 'llmConfig') {
+      const config = value as SettingsState['llmConfig']
       if (config.apiKey !== undefined || config.baseUrl !== undefined) {
         window.electronAPI?.invalidateProviders?.()
       }
-      return { llmConfig: { ...state.llmConfig, ...config } }
-    }),
+    }
+  },
 
-  setLanguage: (lang) => set({ language: lang }),
-
-  setAutoApprove: (settings) =>
-    set((state) => ({ autoApprove: { ...state.autoApprove, ...settings } })),
-
-  setPromptTemplateId: (id) => set({ promptTemplateId: id }),
-
-  setProviderConfig: (providerId, config) =>
+  update: (key, partial) => {
     set((state) => ({
-      providerConfigs: { ...state.providerConfigs, [providerId]: config },
+      [key]: { ...(state[key] as object), ...partial },
+    } as Partial<SettingsState>))
+  },
+
+  setProvider: (id, config) =>
+    set((state) => ({
+      providerConfigs: { ...state.providerConfigs, [id]: config },
     })),
 
-  updateProviderConfig: (providerId, updates) =>
+  updateProvider: (id, updates) =>
     set((state) => {
-      const current = state.providerConfigs[providerId] || {}
+      const current = state.providerConfigs[id] || {}
       return {
         providerConfigs: {
           ...state.providerConfigs,
-          [providerId]: { ...current, ...updates, updatedAt: Date.now() },
+          [id]: { ...current, ...updates, updatedAt: Date.now() },
         },
       }
     }),
 
-  removeProviderConfig: (providerId) =>
+  removeProvider: (id) =>
     set((state) => {
-      const { [providerId]: _, ...rest } = state.providerConfigs
+      const { [id]: _, ...rest } = state.providerConfigs
       return { providerConfigs: rest }
     }),
 
-  addCustomModel: (providerId, model) =>
+  addModel: (providerId, model) =>
     set((state) => {
       const current = state.providerConfigs[providerId] || { customModels: [] }
-      const customModels = [...(current.customModels || []), model]
       return {
         providerConfigs: {
           ...state.providerConfigs,
-          [providerId]: { ...current, customModels },
+          [providerId]: { ...current, customModels: [...(current.customModels || []), model] },
         },
       }
     }),
 
-  removeCustomModel: (providerId, model) =>
+  removeModel: (providerId, model) =>
     set((state) => {
       const current = state.providerConfigs[providerId]
       if (!current) return state
-      const customModels = (current.customModels || []).filter((m) => m !== model)
       return {
         providerConfigs: {
           ...state.providerConfigs,
-          [providerId]: { ...current, customModels },
+          [providerId]: { ...current, customModels: (current.customModels || []).filter((m) => m !== model) },
         },
       }
     }),
-
-  setSecuritySettings: (settings) =>
-    set((state) => ({ securitySettings: { ...state.securitySettings, ...settings } })),
-
-  setWebSearchConfig: (config) =>
-    set((state) => ({ webSearchConfig: { ...state.webSearchConfig, ...config } })),
-
-  setMcpConfig: (config) =>
-    set((state) => ({ mcpConfig: { ...state.mcpConfig, ...config } })),
-
-  setAgentConfig: (config) =>
-    set((state) => ({ agentConfig: { ...state.agentConfig, ...config } })),
-
-  setEditorConfig: (config) => {
-    const newConfig = { ...get().editorConfig, ...config }
-    saveEditorConfig(newConfig)
-    set({ editorConfig: newConfig })
-  },
-
-  setOnboardingCompleted: (completed) => set({ onboardingCompleted: completed }),
-  setHasExistingConfig: (hasConfig) => set({ hasExistingConfig: hasConfig }),
-  setAiInstructions: (instructions) => set({ aiInstructions: instructions }),
-
-  loadSettings: async (_isEmptyWindow = false) => {
-    try {
-      const settings = await settingsService.loadAll()
-
-      logger.settings.info('[SettingsSlice] loadSettings:', {
-        hasAdapterConfig: !!settings.llmConfig.adapterConfig,
-        provider: settings.llmConfig.provider,
-      })
-
-      // 转换 providerConfigs，确保 customModels 是数组，并正确转换类型
-      const providerConfigs: Record<string, ProviderModelConfig> = {}
-      for (const [id, config] of Object.entries(settings.providerConfigs)) {
-        providerConfigs[id] = { 
-          ...config, 
-          customModels: config.customModels || [],
-          protocol: config.protocol as ApiProtocol | undefined,
-        }
-      }
-
-      set({
-        llmConfig: settings.llmConfig,
-        language: (settings.language as 'en' | 'zh') || 'en',
-        autoApprove: { ...defaultAutoApprove, ...settings.autoApprove },
-        providerConfigs,
-        agentConfig: { ...defaultAgentConfig, ...settings.agentConfig },
-        promptTemplateId: settings.promptTemplateId || 'default',
-        onboardingCompleted: settings.onboardingCompleted ?? !!settings.llmConfig?.apiKey,
-        hasExistingConfig: !!settings.llmConfig?.apiKey,
-        aiInstructions: settings.aiInstructions || '',
-        editorConfig: getEditorConfig(),
-        securitySettings: settings.securitySettings,
-        webSearchConfig: settings.webSearchConfig || defaultWebSearchConfig,
-        mcpConfig: settings.mcpConfig || defaultMcpConfig,
-      })
-    } catch (e) {
-      logger.settings.error('[SettingsSlice] Failed to load settings:', e)
-    }
-  },
 
   getCustomProviders: () => {
     const { providerConfigs } = get()
@@ -250,4 +114,58 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
       .filter(([id]) => id.startsWith('custom-'))
       .map(([id, config]) => ({ id, config }))
   },
+
+  load: async () => {
+    try {
+      const settings = await settingsService.load()
+      logger.settings.info('[Settings] Loaded')
+
+      const providerConfigs: Record<string, ProviderModelConfig> = {}
+      for (const [id, config] of Object.entries(settings.providerConfigs)) {
+        providerConfigs[id] = {
+          ...config,
+          customModels: config.customModels || [],
+          protocol: config.protocol as ApiProtocol | undefined,
+        }
+      }
+
+      set({
+        ...settings,
+        providerConfigs,
+        hasExistingConfig: !!settings.llmConfig.apiKey,
+      })
+    } catch (e) {
+      logger.settings.error('[Settings] Load failed:', e)
+    }
+  },
+
+  save: async () => {
+    try {
+      const state = get()
+      await settingsService.save({
+        llmConfig: state.llmConfig,
+        language: state.language,
+        autoApprove: state.autoApprove,
+        promptTemplateId: state.promptTemplateId,
+        providerConfigs: state.providerConfigs,
+        agentConfig: state.agentConfig,
+        editorConfig: state.editorConfig,
+        securitySettings: state.securitySettings,
+        webSearchConfig: state.webSearchConfig,
+        mcpConfig: state.mcpConfig,
+        aiInstructions: state.aiInstructions,
+        onboardingCompleted: state.onboardingCompleted,
+      })
+      logger.settings.info('[Settings] Saved')
+    } catch (e) {
+      logger.settings.error('[Settings] Save failed:', e)
+      throw e
+    }
+  },
 })
+
+// ============================================
+// 类型导出
+// ============================================
+
+export type { SettingsState, SettingKey, ProviderModelConfig }

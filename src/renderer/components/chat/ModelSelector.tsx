@@ -30,7 +30,7 @@ interface ModelSelectorProps {
 }
 
 export default function ModelSelector({ className = '' }: ModelSelectorProps) {
-  const { llmConfig, setLLMConfig, providerConfigs } = useStore()
+  const { llmConfig, update, providerConfigs } = useStore()
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -50,7 +50,6 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
   const hasApiKey = useCallback((providerId: string) => {
     const config = providerConfigs[providerId]
     if (config?.apiKey) return true
-    // 当前选中的 provider 可能 apiKey 在 llmConfig 中
     return llmConfig.provider === providerId && !!llmConfig.apiKey
   }, [llmConfig, providerConfigs])
 
@@ -58,7 +57,6 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
   const groupedModels = useMemo<ModelGroup[]>(() => {
     const groups: ModelGroup[] = []
 
-    // 内置 Provider
     for (const [providerId, provider] of Object.entries(BUILTIN_PROVIDERS)) {
       if (!hasApiKey(providerId)) continue
 
@@ -78,12 +76,10 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
       }
     }
 
-    // 自定义 Provider - 从 providerConfigs 中查找 custom- 开头的配置
     for (const [providerId, config] of Object.entries(providerConfigs)) {
       if (!providerId.startsWith('custom-')) continue
       if (!config?.apiKey) continue
 
-      // 模型列表存储在 customModels 中
       const modelIds = config.customModels || []
       if (modelIds.length === 0) continue
 
@@ -94,7 +90,7 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
     }
 
     return groups
-  }, [providerConfigs])
+  }, [providerConfigs, hasApiKey])
 
   // 选择模型
   const handleSelectModel = useCallback((providerId: string, modelId: string) => {
@@ -104,22 +100,19 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
     const newConfig: Partial<typeof llmConfig> = { provider: providerId, model: modelId }
 
     if (builtinProvider) {
-      // 内置厂商
       newConfig.apiKey = config?.apiKey || (llmConfig.provider === providerId ? llmConfig.apiKey : undefined)
       newConfig.baseUrl = config?.baseUrl || builtinProvider.baseUrl
       newConfig.adapterConfig = config?.adapterConfig || builtinProvider.adapter
     } else if (providerId.startsWith('custom-') && config) {
-      // 自定义厂商 - 配置存储在 providerConfigs 中
       newConfig.apiKey = config.apiKey || (llmConfig.provider === providerId ? llmConfig.apiKey : undefined)
       newConfig.baseUrl = config.baseUrl
       newConfig.adapterConfig = config.adapterConfig
     }
 
-    setLLMConfig(newConfig)
+    update('llmConfig', newConfig)
     setIsOpen(false)
-  }, [llmConfig, providerConfigs, setLLMConfig])
+  }, [llmConfig, providerConfigs, update])
 
-  // 获取 Provider 图标
   const getIcon = (providerId: string) => PROVIDER_ICONS[providerId] || '🔮'
 
   if (groupedModels.length === 0) return null

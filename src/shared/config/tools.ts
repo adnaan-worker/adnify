@@ -979,7 +979,6 @@ export function generateZodSchema(config: ToolConfig): z.ZodSchema {
  * 生成单个工具的详细提示词描述
  * 
  * 使用 description 作为主要描述（包含反碎片化规则）
- * detailedDescription 已废弃，保留字段仅为兼容性
  */
 export function generateToolPromptDescription(config: ToolConfig): string {
     const lines: string[] = []

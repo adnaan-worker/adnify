@@ -8,7 +8,6 @@ import { logger } from '@utils/Logger'
 import { startupMetrics } from '@shared/utils/startupMetrics'
 import { useStore } from '../store'
 import { useAgentStore, initializeAgentStore } from '@renderer/agent/store/AgentStore'
-import { settingsService } from '@renderer/settings'
 import { themeManager } from '../config/themeConfig'
 import { keybindingService } from './keybindingService'
 import { registerCoreCommands } from '../config/commands'
@@ -50,7 +49,6 @@ async function initCoreModules(): Promise<void> {
   await Promise.all([
     keybindingService.init(),
     initializeAgentStore(),
-    settingsService.loadAll(), // 初始化设置服务
     themeManager.init(),
     snippetService.init(), // snippet 必须在编辑器可用前初始化
   ])
@@ -61,11 +59,11 @@ async function initCoreModules(): Promise<void> {
 /**
  * 第二阶段：加载用户设置
  */
-async function loadUserSettings(isEmptyWindow: boolean): Promise<string | null> {
+async function loadUserSettings(_isEmptyWindow: boolean): Promise<string | null> {
   startupMetrics.start('load-settings')
 
   const [, savedTheme] = await Promise.all([
-    useStore.getState().loadSettings(isEmptyWindow),
+    useStore.getState().load(),
     api.settings.get('currentTheme'),
   ])
 
@@ -216,34 +214,34 @@ export async function initializeApp(
  * 注册设置同步监听器
  */
 export function registerSettingsSync(): () => void {
-  const { setLLMConfig, setLanguage, setAutoApprove, setPromptTemplateId, setTheme } = useStore.getState()
+  const store = useStore.getState()
 
   return api.settings.onChanged(({ key, value }: { key: string; value: unknown }) => {
     logger.system.debug(`[Init] Setting changed: ${key}`)
     switch (key) {
       case 'llmConfig':
         if (isLLMConfig(value)) {
-          setLLMConfig(value)
+          store.update('llmConfig', value)
         }
         break
       case 'language':
         if (value === 'en' || value === 'zh') {
-          setLanguage(value)
+          store.set('language', value)
         }
         break
       case 'autoApprove':
         if (isAutoApproveSettings(value)) {
-          setAutoApprove(value)
+          store.update('autoApprove', value)
         }
         break
       case 'promptTemplateId':
         if (typeof value === 'string') {
-          setPromptTemplateId(value)
+          store.set('promptTemplateId', value)
         }
         break
       case 'currentTheme':
         if (isThemeName(value)) {
-          setTheme(value)
+          store.setTheme(value)
         }
         break
     }

@@ -221,15 +221,3 @@ export interface AppSettings {
   webSearchConfig?: WebSearchConfig
   mcpConfig?: McpConfig
 }
-
-// ============================================
-// 运行时完整设置（内存中使用）
-// ============================================
-
-export interface RuntimeSettings extends Omit<AppSettings, 'llmConfig'> {
-  llmConfig: LLMConfig // 运行时包含完整 LLMConfig
-  editorConfig: EditorConfig
-  securitySettings: SecuritySettings
-  webSearchConfig: WebSearchConfig
-  mcpConfig: McpConfig
-}

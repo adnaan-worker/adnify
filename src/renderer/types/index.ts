@@ -53,9 +53,6 @@ export type {
 // LLMError 是接口类型（从 shared 导出）
 export type { LLMError } from '@shared/types'
 
-// Provider 类型
-export type ProviderType = 'openai' | 'anthropic' | 'gemini' | 'custom'
-
 // 工作模式 - 统一从 modes 导出
 export type { WorkMode } from '@/renderer/modes/types'
 
@@ -119,10 +116,3 @@ export type ContextItem =
   | GitContext
   | TerminalContext
   | SymbolsContext
-
-// 自动审批设置
-export interface AutoApproveSettings {
-  edits: boolean
-  terminal: boolean
-  dangerous: boolean
-}

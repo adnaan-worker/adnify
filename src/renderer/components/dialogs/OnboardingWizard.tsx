@@ -33,7 +33,7 @@ const LANGUAGES: { id: Language; name: string; native: string }[] = [
 ]
 
 export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
-  const { setLLMConfig, setLanguage, language, workspacePath } = useStore()
+  const { set, language, workspacePath } = useStore()
 
   const [currentStep, setCurrentStep] = useState<Step>('welcome')
   const [selectedLanguage, setSelectedLanguage] = useState<Language>(language)
@@ -75,16 +75,16 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
   }
 
   const handleComplete = async () => {
-    const { settingsService, defaultAgentConfig, defaultAutoApprove, defaultEditorConfig, defaultSecuritySettings, defaultWebSearchConfig } = await import('@renderer/settings')
+    const { settingsService, defaultAgentConfig, defaultAutoApprove, defaultEditorConfig, defaultSecuritySettings, defaultWebSearchConfig, defaultMcpConfig } = await import('@renderer/settings')
 
-    setLanguage(selectedLanguage)
-    setLLMConfig(providerConfig)
+    set('language', selectedLanguage)
+    set('llmConfig', providerConfig)
 
     if (providerConfig.apiKey) {
-      useStore.getState().setHasExistingConfig(true)
+      useStore.getState().set('onboardingCompleted', true)
     }
 
-    await settingsService.saveAll({
+    await settingsService.save({
       llmConfig: providerConfig as any,
       language: selectedLanguage,
       autoApprove: defaultAutoApprove,
@@ -95,6 +95,8 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
       editorConfig: defaultEditorConfig,
       securitySettings: defaultSecuritySettings,
       webSearchConfig: defaultWebSearchConfig,
+      mcpConfig: defaultMcpConfig,
+      promptTemplateId: 'default',
     })
 
     setIsExiting(true)

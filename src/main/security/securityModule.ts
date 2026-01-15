@@ -119,10 +119,6 @@ class SecurityManager implements SecurityModule {
   private config: Partial<SecuritySettings> = {}
   private workspacePath: string | null = null
 
-  setMainWindow(_window: any) {
-    // 暂时保留方法签名以兼容 main.ts，但不再存储 window 引用以消除 lint 警告
-  }
-
   /**
    * 设置当前工作区路径
    */

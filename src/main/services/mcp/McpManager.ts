@@ -3,7 +3,7 @@
  * 统一管理所有 MCP 服务器的生命周期
  */
 
-import { BrowserWindow, shell, ipcMain } from 'electron'
+import { BrowserWindow, shell } from 'electron'
 import { EventEmitter } from 'events'
 import { logger } from '@shared/utils/Logger'
 import { McpClient } from './McpClient'

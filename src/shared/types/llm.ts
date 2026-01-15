@@ -194,7 +194,7 @@ export interface ToolCall {
 
 export interface ToolExecutionResult {
     success: boolean
-    /** 文本结果（向后兼容） */
+    /** 文本结果 */
     result: string
     error?: string
     /** 元数据 */

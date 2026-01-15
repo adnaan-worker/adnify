@@ -116,7 +116,7 @@ export function ProviderSettings({
   providers,
   language,
 }: ProviderSettingsProps) {
-  const { addCustomModel, removeCustomModel, providerConfigs, removeProviderConfig } = useStore()
+  const { addModel, removeModel, providerConfigs, removeProvider } = useStore()
   const [newModelName, setNewModelName] = useState('')
   const [isAddingCustom, setIsAddingCustom] = useState(false)
 
@@ -136,7 +136,7 @@ export function ProviderSettings({
 
   const handleAddModel = () => {
     if (newModelName.trim()) {
-      addCustomModel(localConfig.provider, newModelName.trim())
+      addModel(localConfig.provider, newModelName.trim())
       setNewModelName('')
     }
   }
@@ -214,7 +214,7 @@ export function ProviderSettings({
       variant: 'danger',
     })
     if (confirmed) {
-      removeProviderConfig(id)
+      removeProvider(id)
       if (localConfig.provider === id) {
         handleSelectBuiltinProvider('openai')
       }
@@ -429,7 +429,7 @@ export function ProviderSettings({
                         >
                           <span>{model}</span>
                           <button 
-                            onClick={() => removeCustomModel(localConfig.provider, model)} 
+                            onClick={() => removeModel(localConfig.provider, model)} 
                             className="text-text-muted hover:text-red-400 opacity-50 group-hover:opacity-100 transition-opacity"
                           >
                             <Trash className="w-3 h-3" />

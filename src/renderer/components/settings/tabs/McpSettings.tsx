@@ -31,16 +31,18 @@ import {
 } from 'lucide-react'
 import { useStore } from '@store'
 import { mcpService } from '@services/mcpService'
-import { Button } from '@components/ui'
+import { Button, Switch } from '@components/ui'
 import type { McpServerState, McpServerStatus } from '@shared/types/mcp'
 import { MCP_PRESETS } from '@shared/config/mcpPresets'
 import McpAddServerModal, { type McpServerFormData } from './McpAddServerModal'
 
 interface McpSettingsProps {
   language: 'en' | 'zh'
+  mcpConfig: { autoConnect?: boolean }
+  setMcpConfig: (config: { autoConnect?: boolean }) => void
 }
 
-export default function McpSettings({ language }: McpSettingsProps) {
+export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSettingsProps) {
   const { mcpServers, mcpLoading, mcpError } = useStore()
   const [expandedServer, setExpandedServer] = useState<string | null>(null)
   const [configPaths, setConfigPaths] = useState<{ user: string; workspace: string[] } | null>(null)
@@ -544,6 +546,31 @@ export default function McpSettings({ language }: McpSettingsProps) {
 
   return (
     <div className="space-y-6">
+      {/* Auto Connect Setting */}
+      <div className="p-4 bg-surface/20 rounded-xl border border-border">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-accent/10">
+              <Power className="w-4 h-4 text-accent" />
+            </div>
+            <div>
+              <h4 className="text-sm font-medium text-text-primary">
+                {language === 'zh' ? '启动时自动连接' : 'Auto-connect on Startup'}
+              </h4>
+              <p className="text-xs text-text-muted mt-0.5">
+                {language === 'zh'
+                  ? '应用启动时自动连接所有已启用的 MCP 服务器'
+                  : 'Automatically connect all enabled MCP servers when the app starts'}
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={mcpConfig.autoConnect ?? true}
+            onChange={(e) => setMcpConfig({ autoConnect: e.target.checked })}
+          />
+        </div>
+      </div>
+
       {/* Header Actions */}
       <div className="flex items-center justify-between">
         <div>

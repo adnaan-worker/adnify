@@ -10,13 +10,14 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    "moduleResolution": "node",
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
       "@shared/*": ["src/shared/*"],
-      "@main/*": ["src/main/*"],
-      "@renderer/*": ["src/renderer/*"]
-    }
+      "@main/*": ["src/main/*"]
+    },
+    "types": ["node"]
   },
   "include": ["src/main/**/*", "src/shared/**/*"]
 }

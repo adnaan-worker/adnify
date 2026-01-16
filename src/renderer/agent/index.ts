@@ -31,7 +31,7 @@ export type { ContextStats } from './store/AgentStore'
 
 // 核心模块（新架构）
 export { Agent, EventBus, approvalService } from './core'
-export type { LLMConfig, CompressionStats, AgentEvent, EventType } from './core'
+export type { LLMConfig, AgentEvent, EventType } from './core'
 
 // 工具系统
 export {
@@ -52,13 +52,14 @@ export { composerService } from './services/composerService'
 
 // 上下文管理
 export {
-    pruneMessages,
-    getCompressionLevel,
-    COMPRESSION_LEVEL_NAMES,
+    prepareMessages,
+    updateStats,
+    calculateLevel,
+    LEVEL_NAMES,
     buildHandoffContext,
     buildWelcomeMessage,
 } from './context'
-export type { CompressionLevel, StructuredSummary, HandoffDocument } from './context'
+export type { CompressionLevel, CompressionStats, StructuredSummary, HandoffDocument } from './context'
 
 // LLM 相关
 export { buildContextContent, buildUserContent, calculateContextStats } from './llm/ContextBuilder'

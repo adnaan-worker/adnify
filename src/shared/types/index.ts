@@ -57,7 +57,9 @@ export interface SearchFileResult {
 // 索引相关类型
 // ==========================================
 
-export type EmbeddingProviderType = 'jina' | 'voyage' | 'openai' | 'cohere' | 'huggingface' | 'ollama'
+export type EmbeddingProviderType = 'jina' | 'voyage' | 'openai' | 'cohere' | 'huggingface' | 'ollama' | 'custom'
+
+export type IndexMode = 'structural' | 'semantic'
 
 export interface EmbeddingConfig {
     provider?: EmbeddingProviderType
@@ -67,12 +69,33 @@ export interface EmbeddingConfig {
 }
 
 export interface IndexStatus {
+    mode: IndexMode
     isIndexing: boolean
     totalFiles: number
     indexedFiles: number
     totalChunks: number
     lastIndexedAt?: number
     error?: string
+}
+
+export interface SymbolInfo {
+    name: string
+    kind: string
+    filePath: string
+    relativePath: string
+    startLine: number
+    endLine: number
+    signature?: string
+}
+
+export interface ProjectSummary {
+    name: string
+    structure: { path: string; description?: string; fileCount: number; mainFiles: string[] }[]
+    keyFiles: { relativePath: string; language: string; symbols: SymbolInfo[] }[]
+    totalFiles: number
+    totalSymbols: number
+    languages: Record<string, number>
+    generatedAt: number
 }
 
 export interface IndexSearchResult {

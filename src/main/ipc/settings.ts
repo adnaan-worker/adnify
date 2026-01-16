@@ -8,6 +8,7 @@ import * as fs from 'fs'
 import Store from 'electron-store'
 import { getUserConfigDir, setUserConfigDir } from '../services/configPath'
 import { cleanConfigValue } from '@shared/config/configCleaner'
+import { SECURITY_DEFAULTS } from '@shared/constants'
 
 // 安全模块接口
 interface SecurityModuleRef {
@@ -56,9 +57,13 @@ export function registerSettingsHandlers(
       const securitySettings = value as any
       securityRef.securityManager.updateConfig(securitySettings)
 
-      // 更新白名单
-      const shellCommands = securitySettings.allowedShellCommands || []
-      const gitCommands = securitySettings.allowedGitSubcommands || []
+      // 更新白名单（使用默认值兜底）
+      const shellCommands = securitySettings.allowedShellCommands?.length > 0
+        ? securitySettings.allowedShellCommands
+        : SECURITY_DEFAULTS.SHELL_COMMANDS
+      const gitCommands = securitySettings.allowedGitSubcommands?.length > 0
+        ? securitySettings.allowedGitSubcommands
+        : SECURITY_DEFAULTS.GIT_SUBCOMMANDS
       securityRef.updateWhitelist(shellCommands, gitCommands)
     }
 
@@ -75,8 +80,8 @@ export function registerSettingsHandlers(
 
   // 重置白名单到默认值
   ipcMain.handle('settings:resetWhitelist', () => {
-    const defaultShellCommands = ['npm', 'yarn', 'pnpm', 'node', 'npx', 'git', 'python', 'python3', 'java', 'go', 'rust', 'cargo', 'make', 'gcc', 'clang', 'pwd', 'ls', 'cat', 'echo', 'mkdir', 'touch', 'rm', 'mv', 'cd']
-    const defaultGitCommands = ['status', 'log', 'diff', 'add', 'commit', 'push', 'pull', 'branch', 'checkout', 'merge', 'rebase', 'clone', 'remote', 'fetch', 'show', 'rev-parse', 'init']
+    const defaultShellCommands = [...SECURITY_DEFAULTS.SHELL_COMMANDS]
+    const defaultGitCommands = [...SECURITY_DEFAULTS.GIT_SUBCOMMANDS]
 
     if (securityRef) {
       securityRef.updateWhitelist(defaultShellCommands, defaultGitCommands)

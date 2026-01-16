@@ -39,16 +39,6 @@ export interface PresetTemplate {
 }
 
 // ============================================
-// Store 类型（已废弃，保留类型定义以兼容）
-// ============================================
-
-/** API Key 存储 - 已废弃，API Key 现在存储在 providerConfigs 中 */
-export interface ProviderApiKey {
-  providerId: string
-  apiKey: string
-}
-
-// ============================================
 // 辅助类型
 // ============================================
 

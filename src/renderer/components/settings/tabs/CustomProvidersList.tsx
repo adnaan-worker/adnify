@@ -22,7 +22,7 @@ const MODE_LABELS: Record<string, string> = {
 }
 
 export function CustomProvidersList({ language }: CustomProvidersListProps) {
-  const { providerConfigs, removeProviderConfig } = useStore()
+  const { providerConfigs, removeProvider } = useStore()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isAddingNew, setIsAddingNew] = useState(false)
 
@@ -39,7 +39,7 @@ export function CustomProvidersList({ language }: CustomProvidersListProps) {
       variant: 'danger',
     })
     if (confirmed) {
-      removeProviderConfig(id)
+      removeProvider(id)
     }
   }
 

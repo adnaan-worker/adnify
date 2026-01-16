@@ -217,6 +217,17 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
     }
   })
 
+  // 设置自动连接选项
+  ipcMain.handle('mcp:setAutoConnect', async (_, enabled: boolean) => {
+    try {
+      mcpManager.setAutoConnectEnabled(enabled)
+      return { success: true }
+    } catch (err: any) {
+      logger.mcp?.error('[MCP IPC] Set auto-connect failed:', err)
+      return { success: false, error: err.message }
+    }
+  })
+
   logger.mcp?.info('[MCP IPC] Handlers registered')
 }
 

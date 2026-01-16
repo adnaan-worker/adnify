@@ -30,8 +30,8 @@
       "@hooks/*": ["src/renderer/hooks/*"],
       "@utils/*": ["src/renderer/utils/*"],
       "@app-types/*": ["src/renderer/types/*"]
-    }
+    },
+    "types": ["node"]
   },
-  "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src/**/*", "src/renderer/vite-env.d.ts"]
 }

@@ -6,10 +6,11 @@
 const fs = require('fs')
 const path = require('path')
 
-const SOURCE_DIR = path.join(__dirname, '../ui-ux-pro-max-skill-main/.claude/skills/ui-ux-pro-max/data')
-const TARGET_DIR = path.join(__dirname, '../public/uiux/data')
+// 更新源目录为 .shared 路径
+const SOURCE_DIR = path.join(__dirname, '../ui-ux-pro-max-skill-main/.shared/ui-ux-pro-max/data')
+const TARGET_DIR = path.join(__dirname, '../resources/uiux/data')
 
-// CSV 文件映射
+// CSV 文件映射（更新为最新的文件列表）
 const CSV_FILES = {
   'styles.csv': 'styles.json',
   'colors.csv': 'colors.json',
@@ -19,9 +20,14 @@ const CSV_FILES = {
   'products.csv': 'products.json',
   'ux-guidelines.csv': 'ux-guidelines.json',
   'prompts.csv': 'prompts.json',
+  // 新增文件
+  'icons.csv': 'icons.json',
+  'react-performance.csv': 'react-performance.json',
+  'ui-reasoning.csv': 'ui-reasoning.json',
+  'web-interface.csv': 'web-interface.json',
 }
 
-// 技术栈文件
+// 技术栈文件（更新为最新的文件列表）
 const STACK_FILES = [
   'html-tailwind.csv',
   'react.csv',
@@ -31,6 +37,11 @@ const STACK_FILES = [
   'swiftui.csv',
   'react-native.csv',
   'flutter.csv',
+  // 新增文件
+  'jetpack-compose.csv',
+  'nuxt-ui.csv',
+  'nuxtjs.csv',
+  'shadcn.csv',
 ]
 
 /**
@@ -92,6 +103,11 @@ function parseCSV(content) {
  */
 function convertFile(sourcePath, targetPath) {
   try {
+    if (!fs.existsSync(sourcePath)) {
+      console.log(`⚠ Skipped: ${path.basename(sourcePath)} (not found)`)
+      return false
+    }
+    
     const content = fs.readFileSync(sourcePath, 'utf-8')
     const data = parseCSV(content)
     
@@ -114,15 +130,31 @@ function convertFile(sourcePath, targetPath) {
  * 主函数
  */
 function main() {
-  console.log('Converting UI/UX data from CSV to JSON...\n')
+  console.log('Converting UI/UX data from CSV to JSON...')
+  console.log(`Source: ${SOURCE_DIR}`)
+  console.log(`Target: ${TARGET_DIR}\n`)
+  
+  // 检查源目录是否存在
+  if (!fs.existsSync(SOURCE_DIR)) {
+    console.error(`Error: Source directory not found: ${SOURCE_DIR}`)
+    process.exit(1)
+  }
   
   let success = 0
   let failed = 0
+  let skipped = 0
   
   // 转换主数据文件
+  console.log('Converting main data files...')
   for (const [csvFile, jsonFile] of Object.entries(CSV_FILES)) {
     const sourcePath = path.join(SOURCE_DIR, csvFile)
     const targetPath = path.join(TARGET_DIR, jsonFile)
+    
+    if (!fs.existsSync(sourcePath)) {
+      console.log(`⚠ Skipped: ${csvFile} (not found)`)
+      skipped++
+      continue
+    }
     
     if (convertFile(sourcePath, targetPath)) {
       success++
@@ -138,6 +170,12 @@ function main() {
     const jsonFile = csvFile.replace('.csv', '.json')
     const targetPath = path.join(TARGET_DIR, 'stacks', jsonFile)
     
+    if (!fs.existsSync(sourcePath)) {
+      console.log(`⚠ Skipped: stacks/${csvFile} (not found)`)
+      skipped++
+      continue
+    }
+    
     if (convertFile(sourcePath, targetPath)) {
       success++
     } else {
@@ -145,7 +183,7 @@ function main() {
     }
   }
   
-  console.log(`\nDone! Success: ${success}, Failed: ${failed}`)
+  console.log(`\nDone! Success: ${success}, Failed: ${failed}, Skipped: ${skipped}`)
 }
 
 main()

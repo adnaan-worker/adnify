@@ -4,8 +4,8 @@
 
 import type { OpenAIMessage } from '../llm/MessageConverter'
 
-// 从 compaction.ts 导入 CompressionLevel，避免重复定义
-export type { CompressionLevel } from './compaction'
+// 从 CompressionManager.ts 导入 CompressionLevel，避免重复定义
+export type { CompressionLevel } from './CompressionManager'
 
 /** 压缩级别配置 */
 export interface LevelConfig {
@@ -13,15 +13,12 @@ export interface LevelConfig {
   description: string
 }
 
-// 导入 CompressionLevel 用于类型
-import type { CompressionLevel } from './compaction'
-
 /** 压缩级别配置表 */
-export const COMPRESSION_LEVELS: Record<CompressionLevel, LevelConfig> = {
+export const COMPRESSION_LEVELS: Record<import('./CompressionManager').CompressionLevel, LevelConfig> = {
   0: { threshold: 0, description: 'Full Context' },
-  1: { threshold: 0.5, description: 'Smart Truncation' },
-  2: { threshold: 0.7, description: 'Sliding Window + Summary' },
-  3: { threshold: 0.85, description: 'Deep Compression' },
+  1: { threshold: 0.5, description: 'Truncate Args' },
+  2: { threshold: 0.7, description: 'Clear Results' },
+  3: { threshold: 0.85, description: 'Deep Compress' },
   4: { threshold: 0.95, description: 'Session Handoff' },
 }
 

@@ -53,7 +53,13 @@ export default defineConfig({
           resolve: { alias: aliases },
           build: {
             outDir: 'dist/main',
-            rollupOptions: { external: EXTERNAL_DEPS }
+            rollupOptions: {
+              external: EXTERNAL_DEPS,
+              onwarn(warning, warn) {
+                if (warning.code === 'EVAL' && warning.id?.includes('web-tree-sitter')) return
+                warn(warning)
+              }
+            }
           }
         }
       },
@@ -69,7 +75,11 @@ export default defineConfig({
               fileName: () => 'indexer.worker.js'
             },
             rollupOptions: {
-              external: ['electron', '@lancedb/lancedb', 'apache-arrow', 'web-tree-sitter']
+              external: ['electron', '@lancedb/lancedb', 'apache-arrow', 'web-tree-sitter'],
+              onwarn(warning, warn) {
+                if (warning.code === 'EVAL' && warning.id?.includes('web-tree-sitter')) return
+                warn(warning)
+              }
             }
           }
         }
@@ -88,6 +98,13 @@ export default defineConfig({
   build: {
     outDir: 'dist/renderer',
     rollupOptions: {
+      // 忽略 web-tree-sitter 的 eval 警告（这是库内部使用，无法避免）
+      onwarn(warning, warn) {
+        if (warning.code === 'EVAL' && warning.id?.includes('web-tree-sitter')) {
+          return
+        }
+        warn(warning)
+      },
       output: {
         manualChunks(id) {
           // Monaco Editor

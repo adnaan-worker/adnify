@@ -4,343 +4,356 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { useState, useEffect } from 'react'
-import { Eye, EyeOff, AlertTriangle, Database, Settings2 } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Eye, EyeOff, AlertTriangle, Database, Settings2, Zap, Brain } from 'lucide-react'
 import { useStore } from '@store'
 import { toast } from '@components/common/ToastProvider'
 import { Button, Input, Select } from '@components/ui'
 import { Language } from '@renderer/i18n'
-import type { EmbeddingConfigInput } from '@renderer/types/electron'
+import type { EmbeddingConfigInput, IndexStatus } from '@renderer/types/electron'
 
 interface IndexSettingsProps {
-    language: Language
+  language: Language
 }
 
-// Embedding 配置状态
+type IndexMode = 'structural' | 'semantic'
+
 interface EmbeddingConfigState {
-    provider: string
-    apiKey: string
-    model: string
-    baseUrl: string
-    dimensions: number
+  provider: string
+  apiKey: string
+  model: string
+  baseUrl: string
 }
 
-// 默认索引配置
-const DEFAULT_INDEX_OPTIONS = {
-    chunkSize: 80,
-    chunkOverlap: 10,
-    maxFileSize: 1024 * 1024, // 1MB
-}
-
-// 默认 Embedding 配置
 const DEFAULT_EMBEDDING_CONFIG: EmbeddingConfigState = {
-    provider: 'jina',
-    apiKey: '',
-    model: '',
-    baseUrl: '',
-    dimensions: 768,
+  provider: 'jina',
+  apiKey: '',
+  model: '',
+  baseUrl: '',
 }
 
 export function IndexSettings({ language }: IndexSettingsProps) {
-    const { workspacePath } = useStore()
-    const [embeddingConfig, setEmbeddingConfig] = useState<EmbeddingConfigState>(DEFAULT_EMBEDDING_CONFIG)
-    const [showApiKey, setShowApiKey] = useState(false)
-    const [isIndexing, setIsIndexing] = useState(false)
-    const [indexStatus, setIndexStatus] = useState<{ totalFiles: number; indexedFiles: number; isIndexing: boolean } | null>(null)
-    const [showAdvanced, setShowAdvanced] = useState(false)
-    const [indexOptions, setIndexOptions] = useState(DEFAULT_INDEX_OPTIONS)
+  const { workspacePath } = useStore()
+  const [indexMode, setIndexMode] = useState<IndexMode>('structural')
+  const [embeddingConfig, setEmbeddingConfig] = useState<EmbeddingConfigState>(DEFAULT_EMBEDDING_CONFIG)
+  const [showApiKey, setShowApiKey] = useState(false)
+  const [isIndexing, setIsIndexing] = useState(false)
+  const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
-    const EMBEDDING_PROVIDERS = [
-        { id: 'jina', name: 'Jina AI', description: language === 'zh' ? '免费 100万 tokens/月，专为代码优化' : 'Free 100M tokens/month, optimized for code' },
-        { id: 'voyage', name: 'Voyage AI', description: language === 'zh' ? '免费 5000万 tokens，代码专用模型' : 'Free 50M tokens, code-specific model' },
-        { id: 'cohere', name: 'Cohere', description: language === 'zh' ? '免费 100次/分钟' : 'Free 100 calls/min' },
-        { id: 'huggingface', name: 'HuggingFace', description: language === 'zh' ? '免费，有速率限制' : 'Free with rate limits' },
-        { id: 'ollama', name: 'Ollama', description: language === 'zh' ? '本地运行，完全免费' : 'Local, completely free' },
-        { id: 'openai', name: 'OpenAI', description: language === 'zh' ? '付费，质量最高' : 'Paid, highest quality' },
-        { id: 'custom', name: language === 'zh' ? '自定义服务' : 'Custom Service', description: language === 'zh' ? '兼容 OpenAI API 格式的自定义服务' : 'OpenAI API compatible custom service' },
-    ]
+  const EMBEDDING_PROVIDERS = [
+    { id: 'jina', name: 'Jina AI', description: language === 'zh' ? '免费 100万 tokens/月' : 'Free 100M tokens/month' },
+    { id: 'voyage', name: 'Voyage AI', description: language === 'zh' ? '免费 5000万 tokens' : 'Free 50M tokens' },
+    { id: 'cohere', name: 'Cohere', description: language === 'zh' ? '免费 100次/分钟' : 'Free 100 calls/min' },
+    { id: 'ollama', name: 'Ollama', description: language === 'zh' ? '本地运行' : 'Local' },
+    { id: 'openai', name: 'OpenAI', description: language === 'zh' ? '付费' : 'Paid' },
+    { id: 'custom', name: language === 'zh' ? '自定义' : 'Custom', description: 'OpenAI API compatible' },
+  ]
 
-    useEffect(() => {
-        api.settings.get('embeddingConfig').then(config => {
-            if (config) {
-                const cfg = config as Partial<EmbeddingConfigState>
-                setEmbeddingConfig(prev => ({
-                    ...prev,
-                    provider: cfg.provider || prev.provider,
-                    apiKey: cfg.apiKey || '',
-                    model: cfg.model || '',
-                    baseUrl: cfg.baseUrl || '',
-                    dimensions: cfg.dimensions || 768,
-                }))
-            }
-        })
-        api.settings.get('indexOptions').then(options => {
-            if (options) {
-                setIndexOptions({ ...DEFAULT_INDEX_OPTIONS, ...(options as typeof DEFAULT_INDEX_OPTIONS) })
-            }
-        })
-    }, [])
+  // 加载配置
+  useEffect(() => {
+    api.settings.get('indexConfig').then(config => {
+      if (config) {
+        const cfg = config as { mode?: IndexMode; embedding?: Partial<EmbeddingConfigState> }
+        if (cfg.mode) setIndexMode(cfg.mode)
+        if (cfg.embedding) setEmbeddingConfig(prev => ({ ...prev, ...cfg.embedding }))
+      }
+    })
+  }, [])
 
-    // 切换 provider 时重置相关字段
-    const handleProviderChange = (provider: string) => {
-        setEmbeddingConfig(prev => ({
-            ...prev,
-            provider,
-            model: '',  // 重置 model，让后端使用默认值
-            baseUrl: provider === 'custom' ? prev.baseUrl : '',  // 只有自定义服务保留 baseUrl
-        }))
+  // 监听索引状态
+  useEffect(() => {
+    if (!workspacePath) return
+
+    const loadStatus = async () => {
+      try {
+        const status = await api.index.status(workspacePath)
+        setIndexStatus(status)
+        if (status.mode) setIndexMode(status.mode)
+      } catch { }
     }
 
-    useEffect(() => {
-        if (workspacePath) {
-            api.index.status?.(workspacePath).then(status => {
-                setIndexStatus(status)
-            }).catch(() => { })
-        }
-    }, [workspacePath])
+    loadStatus()
+    const unsubscribe = api.index.onProgress((status) => {
+      setIndexStatus(status)
+      setIsIndexing(status.isIndexing)
+    })
 
-    const handleSaveEmbeddingConfig = async () => {
-        // 自定义服务必须填写 baseUrl
-        if (embeddingConfig.provider === 'custom' && !embeddingConfig.baseUrl) {
-            toast.error(language === 'zh' ? '自定义服务必须填写 API 地址' : 'Custom service requires API URL')
-            return
-        }
+    return unsubscribe
+  }, [workspacePath])
 
-        // 构建配置对象，只包含有值的字段
-        const configToSave: EmbeddingConfigInput = {
-            provider: embeddingConfig.provider as EmbeddingConfigInput['provider'],
-        }
+  // 切换索引模式
+  const handleModeChange = useCallback(async (mode: IndexMode) => {
+    setIndexMode(mode)
+    // 保存到配置文件
+    const currentConfig = await api.settings.get('indexConfig') as { mode?: string; embedding?: object } || {}
+    await api.settings.set('indexConfig', { ...currentConfig, mode })
+    // 同步到索引服务
+    if (workspacePath) {
+      await api.index.setMode(workspacePath, mode)
+    }
+    toast.success(language === 'zh'
+      ? `已切换到${mode === 'structural' ? '结构化' : '语义'}索引模式`
+      : `Switched to ${mode} index mode`)
+  }, [workspacePath, language])
 
-        // 只有非空值才添加到配置中
-        if (embeddingConfig.apiKey) {
-            configToSave.apiKey = embeddingConfig.apiKey
-        }
-        if (embeddingConfig.model) {
-            configToSave.model = embeddingConfig.model
-        }
-        if (embeddingConfig.baseUrl) {
-            configToSave.baseUrl = embeddingConfig.baseUrl
-        }
-        if (embeddingConfig.provider === 'custom' && embeddingConfig.dimensions) {
-            configToSave.dimensions = embeddingConfig.dimensions
-        }
-
-        logger.settings.info('[IndexSettings] Saving embedding config:', configToSave)
-
-        try {
-            await api.settings.set('embeddingConfig', configToSave)
-            await api.settings.set('indexOptions', indexOptions)
-            if (workspacePath) {
-                await api.index.updateEmbeddingConfig?.(workspacePath, configToSave)
-            }
-            toast.success(language === 'zh' ? '索引配置已保存' : 'Indexing configuration saved')
-        } catch (error) {
-            logger.settings.error('[IndexSettings] Save failed:', error)
-            toast.error(language === 'zh' ? '保存失败' : 'Save failed')
-        }
+  // 保存 Embedding 配置
+  const handleSaveEmbeddingConfig = async () => {
+    if (embeddingConfig.provider === 'custom' && !embeddingConfig.baseUrl) {
+      toast.error(language === 'zh' ? '自定义服务必须填写 API 地址' : 'Custom service requires API URL')
+      return
     }
 
-    const handleStartIndexing = async () => {
-        if (!workspacePath) {
-            toast.error(language === 'zh' ? '请先打开一个工作区' : 'Please open a workspace first')
-            return
-        }
-        setIsIndexing(true)
-        try {
-            await handleSaveEmbeddingConfig()
-            await api.index.start(workspacePath)
-            toast.success(language === 'zh' ? '索引已开始，后台运行中...' : 'Indexing started, running in background...')
-        } catch (error) {
-            logger.settings.error('[IndexSettings] Start indexing failed:', error)
-            toast.error(language === 'zh' ? '启动索引失败' : 'Failed to start indexing')
-        } finally {
-            setIsIndexing(false)
-        }
+    const configToSave: EmbeddingConfigInput = {
+      provider: embeddingConfig.provider as EmbeddingConfigInput['provider'],
+    }
+    if (embeddingConfig.apiKey) configToSave.apiKey = embeddingConfig.apiKey
+    if (embeddingConfig.model) configToSave.model = embeddingConfig.model
+    if (embeddingConfig.baseUrl) configToSave.baseUrl = embeddingConfig.baseUrl
+
+    try {
+      // 保存到配置文件（统一使用 indexConfig）
+      const currentConfig = await api.settings.get('indexConfig') as { mode?: string; embedding?: object } || {}
+      await api.settings.set('indexConfig', { ...currentConfig, embedding: configToSave })
+      // 同步到索引服务
+      if (workspacePath) {
+        await api.index.updateEmbeddingConfig(workspacePath, configToSave)
+      }
+      toast.success(language === 'zh' ? '配置已保存' : 'Configuration saved')
+    } catch (error) {
+      logger.settings.error('[IndexSettings] Save failed:', error)
+      toast.error(language === 'zh' ? '保存失败' : 'Save failed')
+    }
+  }
+
+  // 开始索引
+  const handleStartIndexing = async () => {
+    if (!workspacePath) {
+      toast.error(language === 'zh' ? '请先打开工作区' : 'Please open a workspace first')
+      return
     }
 
-    const handleClearIndex = async () => {
-        if (!workspacePath) return
-        try {
-            await api.index.clear?.(workspacePath)
-            toast.success(language === 'zh' ? '索引已清除' : 'Index cleared')
-            setIndexStatus(null)
-        } catch {
-            toast.error(language === 'zh' ? '清除索引失败' : 'Failed to clear index')
-        }
+    setIsIndexing(true)
+    try {
+      if (indexMode === 'semantic') {
+        await handleSaveEmbeddingConfig()
+      }
+      await api.index.start(workspacePath)
+      toast.success(language === 'zh' ? '索引已开始' : 'Indexing started')
+    } catch (error) {
+      logger.settings.error('[IndexSettings] Start indexing failed:', error)
+      toast.error(language === 'zh' ? '启动索引失败' : 'Failed to start indexing')
+      setIsIndexing(false)
     }
+  }
 
-    return (
-        <div className="space-y-8 animate-fade-in">
-            <section>
-                <h4 className="text-sm font-medium text-text-secondary uppercase tracking-wider text-xs mb-4">
-                    {language === 'zh' ? 'Embedding 提供商' : 'Embedding Provider'}
-                </h4>
-                <div className="space-y-4">
-                    <div className="p-5 bg-surface/30 rounded-xl border border-border-subtle space-y-4">
-                        <div>
-                            <label className="text-sm font-medium text-text-primary block mb-2">{language === 'zh' ? '选择提供商' : 'Select Provider'}</label>
-                            <Select value={embeddingConfig.provider} onChange={handleProviderChange} options={EMBEDDING_PROVIDERS.map(p => ({ value: p.id, label: `${p.name} - ${p.description}` }))} />
-                        </div>
+  // 清除索引
+  const handleClearIndex = async () => {
+    if (!workspacePath) return
+    try {
+      await api.index.clear(workspacePath)
+      toast.success(language === 'zh' ? '索引已清除' : 'Index cleared')
+      setIndexStatus(null)
+    } catch {
+      toast.error(language === 'zh' ? '清除失败' : 'Failed to clear')
+    }
+  }
 
-                        {/* 自定义服务配置 */}
-                        {embeddingConfig.provider === 'custom' && (
-                            <div className="space-y-3 p-3 bg-surface/50 rounded-lg border border-border-subtle">
-                                <div>
-                                    <label className="text-sm font-medium text-text-primary block mb-2">
-                                        API URL <span className="text-error">*</span>
-                                    </label>
-                                    <Input
-                                        type="text"
-                                        value={embeddingConfig.baseUrl}
-                                        onChange={(e) => setEmbeddingConfig(prev => ({ ...prev, baseUrl: e.target.value }))}
-                                        placeholder="https://your-service.com/v1/embeddings"
-                                        className="bg-background/50 border-border/50 text-xs rounded-lg focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
-                                    />
-                                    <p className="text-xs text-text-muted mt-1">
-                                        {language === 'zh' ? '兼容 OpenAI embeddings API 格式' : 'OpenAI embeddings API compatible endpoint'}
-                                    </p>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="text-sm font-medium text-text-primary block mb-2">
-                                            {language === 'zh' ? '模型名称' : 'Model Name'}
-                                        </label>
-                                        <Input
-                                            type="text"
-                                            value={embeddingConfig.model}
-                                            onChange={(e) => setEmbeddingConfig(prev => ({ ...prev, model: e.target.value }))}
-                                            placeholder="text-embedding-3-small"
-                                            className="bg-background/50 border-border/50 text-xs rounded-lg focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-sm font-medium text-text-primary block mb-2">
-                                            {language === 'zh' ? '向量维度' : 'Vector Dimensions'}
-                                        </label>
-                                        <Input
-                                            type="number"
-                                            value={embeddingConfig.dimensions}
-                                            onChange={(e) => setEmbeddingConfig(prev => ({ ...prev, dimensions: parseInt(e.target.value) || 768 }))}
-                                            min={128}
-                                            max={4096}
-                                            className="bg-background/50 border-border/50 text-xs rounded-lg focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+  return (
+    <div className="space-y-6 animate-fade-in">
+      {/* 索引模式选择 */}
+      <section>
+        <h4 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">
+          {language === 'zh' ? '索引模式' : 'Index Mode'}
+        </h4>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => handleModeChange('structural')}
+            className={`p-4 rounded-xl border transition-all text-left ${indexMode === 'structural'
+              ? 'border-accent bg-accent/10'
+              : 'border-border-subtle bg-surface/30 hover:border-border'
+              }`}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Zap className={`w-4 h-4 ${indexMode === 'structural' ? 'text-accent' : 'text-text-muted'}`} />
+              <span className="font-medium text-sm">{language === 'zh' ? '结构化索引' : 'Structural'}</span>
+              <span className="text-xs px-1.5 py-0.5 rounded bg-success/20 text-success">
+                {language === 'zh' ? '推荐' : 'Recommended'}
+              </span>
+            </div>
+            <p className="text-xs text-text-muted">
+              {language === 'zh'
+                ? '零配置，本地运行，基于代码结构分析'
+                : 'Zero config, local, based on code structure'}
+            </p>
+          </button>
 
-                        {embeddingConfig.provider !== 'ollama' && (
-                            <div>
-                                <label className="text-sm font-medium text-text-primary block mb-2">
-                                    API Key {embeddingConfig.provider !== 'custom' && <span className="text-text-muted text-xs">({language === 'zh' ? '必填' : 'required'})</span>}
-                                </label>
-                                <div className="relative">
-                                    <Input type={showApiKey ? 'text' : 'password'} value={embeddingConfig.apiKey} onChange={(e) => setEmbeddingConfig(prev => ({ ...prev, apiKey: e.target.value }))} placeholder={language === 'zh' ? '输入 API Key' : 'Enter API Key'} className="bg-background/50 border-border/50 text-xs rounded-lg focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all" />
-                                    <button type="button" onClick={() => setShowApiKey(!showApiKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary">
-                                        {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                    </button>
-                                </div>
-                                {embeddingConfig.provider === 'custom' && (
-                                    <p className="text-xs text-text-muted mt-1">
-                                        {language === 'zh' ? '如果服务不需要认证可留空' : 'Leave empty if service does not require authentication'}
-                                    </p>
-                                )}
-                            </div>
-                        )}
-
-                        {/* 高级配置 */}
-                        <div className="pt-2">
-                            <button
-                                onClick={() => setShowAdvanced(!showAdvanced)}
-                                className="flex items-center gap-2 text-xs font-medium text-text-muted hover:text-accent transition-colors"
-                            >
-                                <Settings2 className="w-3.5 h-3.5" />
-                                <span className={`transition-transform duration-200 ${showAdvanced ? 'rotate-90' : ''}`}>▶</span>
-                                {language === 'zh' ? '高级配置' : 'Advanced Settings'}
-                            </button>
-
-                            {showAdvanced && (
-                                <div className="mt-3 space-y-3 pl-2 animate-slide-down">
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="space-y-1">
-                                            <label className="text-xs text-text-muted">{language === 'zh' ? '块大小 (行)' : 'Chunk Size (lines)'}</label>
-                                            <Input
-                                                type="number"
-                                                value={indexOptions.chunkSize}
-                                                onChange={(e) => setIndexOptions({ ...indexOptions, chunkSize: parseInt(e.target.value) || 80 })}
-                                                min={20}
-                                                max={200}
-                                                className="bg-background/50 border-border/50 text-xs rounded-lg focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
-                                            />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-xs text-text-muted">{language === 'zh' ? '块重叠 (行)' : 'Chunk Overlap (lines)'}</label>
-                                            <Input
-                                                type="number"
-                                                value={indexOptions.chunkOverlap}
-                                                onChange={(e) => setIndexOptions({ ...indexOptions, chunkOverlap: parseInt(e.target.value) || 10 })}
-                                                min={0}
-                                                max={50}
-                                                className="bg-background/50 border-border/50 text-xs rounded-lg focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-text-muted">{language === 'zh' ? '最大文件大小 (KB)' : 'Max File Size (KB)'}</label>
-                                        <Input
-                                            type="number"
-                                            value={Math.round(indexOptions.maxFileSize / 1024)}
-                                            onChange={(e) => setIndexOptions({ ...indexOptions, maxFileSize: (parseInt(e.target.value) || 1024) * 1024 })}
-                                            min={100}
-                                            max={10240}
-                                            className="bg-background/50 border-border/50 text-xs rounded-lg focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        <Button variant="secondary" size="sm" onClick={handleSaveEmbeddingConfig}>
-                            {language === 'zh' ? '保存配置' : 'Save Configuration'}
-                        </Button>
-                    </div>
-                </div>
-            </section>
-
-            <section>
-                <h4 className="text-sm font-medium text-text-secondary uppercase tracking-wider text-xs mb-4">
-                    {language === 'zh' ? '代码库索引' : 'Codebase Index'}
-                </h4>
-                <div className="space-y-4">
-                    {indexStatus && (
-                        <div className="p-4 bg-surface/30 rounded-xl border border-border-subtle">
-                            <div className="text-sm text-text-primary">
-                                {language === 'zh' ? '索引状态' : 'Index Status'}: {indexStatus.isIndexing ? (language === 'zh' ? '索引中...' : 'Indexing...') : (language === 'zh' ? '就绪' : 'Ready')}
-                            </div>
-                            <div className="text-xs text-text-muted mt-1">
-                                {language === 'zh' ? '已索引文件' : 'Indexed files'}: {indexStatus.indexedFiles} / {indexStatus.totalFiles}
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="flex gap-3">
-                        <Button variant="primary" onClick={handleStartIndexing} disabled={isIndexing || !workspacePath} leftIcon={<Database className="w-4 h-4" />}>
-                            {isIndexing ? (language === 'zh' ? '索引中...' : 'Indexing...') : (language === 'zh' ? '开始索引' : 'Start Indexing')}
-                        </Button>
-                        <Button variant="secondary" onClick={handleClearIndex} disabled={!workspacePath}>
-                            {language === 'zh' ? '清除索引' : 'Clear Index'}
-                        </Button>
-                    </div>
-
-                    {!workspacePath && (
-                        <div className="flex items-center gap-2 text-xs text-warning">
-                            <AlertTriangle className="w-4 h-4" />
-                            {language === 'zh' ? '请先打开一个工作区才能进行索引' : 'Please open a workspace first to start indexing'}
-                        </div>
-                    )}
-                </div>
-            </section>
+          <button
+            onClick={() => handleModeChange('semantic')}
+            className={`p-4 rounded-xl border transition-all text-left ${indexMode === 'semantic'
+              ? 'border-accent bg-accent/10'
+              : 'border-border-subtle bg-surface/30 hover:border-border'
+              }`}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Brain className={`w-4 h-4 ${indexMode === 'semantic' ? 'text-accent' : 'text-text-muted'}`} />
+              <span className="font-medium text-sm">{language === 'zh' ? '语义索引' : 'Semantic'}</span>
+            </div>
+            <p className="text-xs text-text-muted">
+              {language === 'zh'
+                ? '需要 Embedding API，更好的语义理解'
+                : 'Requires Embedding API, better semantic understanding'}
+            </p>
+          </button>
         </div>
-    )
+      </section>
+
+      {/* 语义模式配置 */}
+      {indexMode === 'semantic' && (
+        <section className="animate-slide-down">
+          <h4 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">
+            {language === 'zh' ? 'Embedding 配置' : 'Embedding Configuration'}
+          </h4>
+          <div className="p-4 bg-surface/30 rounded-xl border border-border-subtle space-y-4">
+            <div>
+              <label className="text-sm font-medium text-text-primary block mb-2">
+                {language === 'zh' ? '提供商' : 'Provider'}
+              </label>
+              <Select
+                value={embeddingConfig.provider}
+                onChange={(v) => setEmbeddingConfig(prev => ({ ...prev, provider: v, model: '', baseUrl: v === 'custom' ? prev.baseUrl : '' }))}
+                options={EMBEDDING_PROVIDERS.map(p => ({ value: p.id, label: `${p.name} - ${p.description}` }))}
+              />
+            </div>
+
+            {embeddingConfig.provider === 'custom' && (
+              <div>
+                <label className="text-sm font-medium text-text-primary block mb-2">
+                  API URL <span className="text-error">*</span>
+                </label>
+                <Input
+                  type="text"
+                  value={embeddingConfig.baseUrl}
+                  onChange={(e) => setEmbeddingConfig(prev => ({ ...prev, baseUrl: e.target.value }))}
+                  placeholder="https://your-service.com/v1/embeddings"
+                />
+              </div>
+            )}
+
+            {embeddingConfig.provider !== 'ollama' && (
+              <div>
+                <label className="text-sm font-medium text-text-primary block mb-2">API Key</label>
+                <div className="relative">
+                  <Input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={embeddingConfig.apiKey}
+                    onChange={(e) => setEmbeddingConfig(prev => ({ ...prev, apiKey: e.target.value }))}
+                    placeholder={language === 'zh' ? '输入 API Key' : 'Enter API Key'}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+                  >
+                    {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="flex items-center gap-2 text-xs text-text-muted hover:text-accent transition-colors"
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+              <span className={`transition-transform ${showAdvanced ? 'rotate-90' : ''}`}>▶</span>
+              {language === 'zh' ? '高级配置' : 'Advanced'}
+            </button>
+
+            {showAdvanced && (
+              <div className="space-y-3 animate-slide-down">
+                <div>
+                  <label className="text-xs text-text-muted block mb-1">
+                    {language === 'zh' ? '模型名称（留空使用默认）' : 'Model (leave empty for default)'}
+                  </label>
+                  <Input
+                    type="text"
+                    value={embeddingConfig.model}
+                    onChange={(e) => setEmbeddingConfig(prev => ({ ...prev, model: e.target.value }))}
+                    placeholder="e.g. text-embedding-3-small"
+                  />
+                </div>
+              </div>
+            )}
+
+            <Button variant="secondary" size="sm" onClick={handleSaveEmbeddingConfig}>
+              {language === 'zh' ? '保存配置' : 'Save Configuration'}
+            </Button>
+          </div>
+        </section>
+      )}
+
+      {/* 索引状态和操作 */}
+      <section>
+        <h4 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">
+          {language === 'zh' ? '索引状态' : 'Index Status'}
+        </h4>
+
+        {indexStatus && (
+          <div className="p-4 bg-surface/30 rounded-xl border border-border-subtle mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-text-primary">
+                {indexStatus.isIndexing
+                  ? (language === 'zh' ? '索引中...' : 'Indexing...')
+                  : (language === 'zh' ? '就绪' : 'Ready')}
+              </span>
+              <span className="text-xs px-2 py-0.5 rounded bg-surface border border-border-subtle">
+                {indexStatus.mode === 'structural'
+                  ? (language === 'zh' ? '结构化' : 'Structural')
+                  : (language === 'zh' ? '语义' : 'Semantic')}
+              </span>
+            </div>
+            <div className="text-xs text-text-muted space-y-1">
+              <div>{language === 'zh' ? '文件' : 'Files'}: {indexStatus.indexedFiles} / {indexStatus.totalFiles}</div>
+              <div>{language === 'zh' ? '代码块' : 'Chunks'}: {indexStatus.totalChunks}</div>
+              {indexStatus.lastIndexedAt && (
+                <div>{language === 'zh' ? '上次索引' : 'Last indexed'}: {new Date(indexStatus.lastIndexedAt).toLocaleString()}</div>
+              )}
+            </div>
+            {indexStatus.isIndexing && (
+              <div className="mt-2 h-1 bg-surface rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-accent transition-all duration-300"
+                  style={{ width: `${indexStatus.totalFiles ? (indexStatus.indexedFiles / indexStatus.totalFiles) * 100 : 0}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <Button
+            variant="primary"
+            onClick={handleStartIndexing}
+            disabled={isIndexing || !workspacePath}
+            leftIcon={<Database className="w-4 h-4" />}
+          >
+            {isIndexing
+              ? (language === 'zh' ? '索引中...' : 'Indexing...')
+              : (language === 'zh' ? '开始索引' : 'Start Indexing')}
+          </Button>
+          <Button variant="secondary" onClick={handleClearIndex} disabled={!workspacePath}>
+            {language === 'zh' ? '清除索引' : 'Clear Index'}
+          </Button>
+        </div>
+
+        {!workspacePath && (
+          <div className="flex items-center gap-2 text-xs text-warning mt-3">
+            <AlertTriangle className="w-4 h-4" />
+            {language === 'zh' ? '请先打开工作区' : 'Please open a workspace first'}
+          </div>
+        )}
+      </section>
+    </div>
+  )
 }

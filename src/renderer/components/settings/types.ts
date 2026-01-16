@@ -3,9 +3,8 @@
  */
 
 import { Language } from '@renderer/i18n'
-import { LLMConfig, AutoApproveSettings } from '@store'
-import { ProviderModelConfig } from '@app-types/provider'
-import { AgentConfig } from '@renderer/store/slices/settingsSlice'
+import type { LLMConfig, AutoApproveSettings, AgentConfig, WebSearchConfig } from '@shared/config/types'
+import type { ProviderModelConfig } from '@shared/config/settings'
 
 export type SettingsTab = 'provider' | 'editor' | 'snippets' | 'agent' | 'rules' | 'mcp' | 'lsp' | 'keybindings' | 'indexing' | 'security' | 'system'
 
@@ -76,6 +75,8 @@ export interface AgentSettingsProps {
     setPromptTemplateId: (value: string) => void
     agentConfig: AgentConfig
     setAgentConfig: React.Dispatch<React.SetStateAction<AgentConfig>>
+    webSearchConfig: WebSearchConfig
+    setWebSearchConfig: React.Dispatch<React.SetStateAction<WebSearchConfig>>
     language: Language
 }
 

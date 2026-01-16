@@ -46,9 +46,22 @@ export async function buildLLMMessages(
   // 预估当前用户消息的 token（包括 context）
   const { buildUserContent } = await import('./ContextBuilder')
   const userContent = buildUserContent(currentMessage, contextContent)
-  const userMessageTokens = Math.ceil(
-    (typeof userContent === 'string' ? userContent : JSON.stringify(userContent)).length / 4
-  )
+  
+  // 正确估算用户消息 token（支持图片）
+  let userMessageTokens = 0
+  if (typeof userContent === 'string') {
+    userMessageTokens = Math.ceil(userContent.length / 4)
+  } else {
+    // 处理结构化内容（可能包含文本和图片）
+    for (const part of userContent) {
+      if (part.type === 'text' && part.text) {
+        userMessageTokens += Math.ceil(part.text.length / 4)
+      } else if (part.type === 'image') {
+        // 图片固定估算为 1600 tokens（不按 base64 长度计算）
+        userMessageTokens += 1600
+      }
+    }
+  }
 
   // 动态压缩：从 L0 开始，逐步提升直到满足限制
   // 不再从上次等级开始，而是每次重新评估
@@ -93,11 +106,6 @@ export async function buildLLMMessages(
     store.setHandoffRequired(true)
   }
 
-  // 设置压缩阶段（用于 UI 显示）
-  if (truncatedToolCalls > 0 || clearedToolResults > 0 || removedMessages > 0) {
-    store.setCompressionPhase('compressing')
-  }
-
   // 排除最后一条用户消息（会在后面重新添加带上下文的版本）
   const lastMsg = preparedMessages[preparedMessages.length - 1]
   const messagesToConvert = lastMsg?.role === 'user' 
@@ -137,7 +145,8 @@ export async function buildLLMMessages(
   logger.agent.info(
     `[MessageBuilder] Built ${openaiMessages.length} messages, ` +
     `L${appliedLevel} (${LEVEL_NAMES[appliedLevel]}), ` +
-    `~${estimatedTokens}/${contextLimit} tokens (${(finalRatio * 100).toFixed(1)}%)`
+    `~${estimatedTokens}/${contextLimit} tokens (${(finalRatio * 100).toFixed(1)}%), ` +
+    `compressed: ${truncatedToolCalls + clearedToolResults + removedMessages > 0}`
   )
 
   return openaiMessages

@@ -24,6 +24,7 @@ export class McpManager extends EventEmitter {
   private clients = new Map<string, McpClient>()
   private configLoader: McpConfigLoader
   private initialized = false
+  private autoConnectEnabled = true // 默认启用
 
   constructor() {
     super()
@@ -31,11 +32,19 @@ export class McpManager extends EventEmitter {
     this.configLoader.setOnConfigChange(() => this.handleConfigChange())
   }
 
+  /** 设置是否启用自动连接 */
+  setAutoConnectEnabled(enabled: boolean): void {
+    this.autoConnectEnabled = enabled
+    logger.mcp?.info(`[McpManager] Auto-connect ${enabled ? 'enabled' : 'disabled'}`)
+  }
+
   /** 初始化 MCP 管理器 */
   async initialize(workspaceRoots: string[] = []): Promise<void> {
     if (this.initialized) {
       this.configLoader.setWorkspaceRoots(workspaceRoots)
       this.notifyStateChange()
+      // 重新初始化时也尝试自动连接
+      this.autoConnectServers()
       return
     }
 
@@ -44,6 +53,46 @@ export class McpManager extends EventEmitter {
     this.notifyStateChange()
     this.initialized = true
     logger.mcp?.info('[McpManager] Initialized')
+
+    // 异步后台自动连接所有未禁用的服务器
+    this.autoConnectServers()
+  }
+
+  /** 异步后台自动连接所有未禁用的服务器 */
+  private autoConnectServers(): void {
+    // 检查是否启用自动连接
+    if (!this.autoConnectEnabled) {
+      logger.mcp?.info('[McpManager] Auto-connect is disabled, skipping')
+      return
+    }
+
+    const configs = this.configLoader.loadConfig()
+    const enabledConfigs = configs.filter((c) => !c.disabled)
+
+    if (enabledConfigs.length === 0) {
+      logger.mcp?.info('[McpManager] No enabled servers to auto-connect')
+      return
+    }
+
+    logger.mcp?.info(`[McpManager] Auto-connecting ${enabledConfigs.length} server(s) in background...`)
+
+    // 异步并行连接所有服务器，不阻塞主流程
+    Promise.all(
+      enabledConfigs.map(async (config) => {
+        try {
+          // 跳过已连接的服务器
+          if (this.clients.has(config.id)) {
+            return
+          }
+          await this.connectServer(config)
+          logger.mcp?.info(`[McpManager] Auto-connected: ${config.id}`)
+        } catch (err: any) {
+          logger.mcp?.warn(`[McpManager] Auto-connect failed for ${config.id}:`, err.message)
+        }
+      })
+    ).then(() => {
+      logger.mcp?.info('[McpManager] Auto-connect completed')
+    })
   }
 
   /** 重新加载配置 */
@@ -67,6 +116,9 @@ export class McpManager extends EventEmitter {
     }
 
     this.notifyStateChange()
+
+    // 自动连接新添加或重新启用的服务器
+    this.autoConnectServers()
   }
 
   /** 连接服务器 */

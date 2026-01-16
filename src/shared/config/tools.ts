@@ -589,30 +589,59 @@ This OVERWRITES entire file. For partial edits, use edit_file.`,
     web_search: {
         name: 'web_search',
         displayName: 'Web Search',
-        description: 'Search the web for information.',
+        description: 'Search the web for information. Use ONE comprehensive search query instead of multiple separate searches.',
+        detailedDescription: `Search the web using Google or DuckDuckGo.
+
+IMPORTANT GUIDELINES:
+- Use ONE well-crafted search query that covers your information need
+- DO NOT make multiple separate searches for related topics - combine them into one query
+- Use specific keywords and phrases for better results
+- For technical topics, include version numbers or specific terms
+- After getting results, use read_url to get detailed content from relevant pages
+
+GOOD: "React 18 useEffect cleanup function best practices"
+BAD: Multiple searches like "React useEffect", "useEffect cleanup", "React best practices"
+
+GOOD: "Python asyncio vs threading performance comparison 2024"
+BAD: Separate searches for "Python asyncio" and "Python threading"`,
         category: 'network',
         approvalType: 'none',
-        parallel: true,
+        parallel: false,  // 禁止并行，避免多次分散搜索
         requiresWorkspace: false,
         enabled: true,
         parameters: {
-            query: { type: 'string', description: 'Search query', required: true },
-            max_results: { type: 'number', description: 'Maximum results (default: 5)', default: 5 },
+            query: {
+                type: 'string',
+                description: 'Search query - use ONE comprehensive query with specific keywords. Combine related topics into a single search.',
+                required: true,
+            },
+            max_results: { type: 'number', description: 'Maximum results to return (default: 5, max: 10)', default: 5 },
         },
     },
 
     read_url: {
         name: 'read_url',
         displayName: 'Read URL',
-        description: 'Fetch and read content from a URL.',
+        description: 'Fetch and read content from a URL. Use after web_search to get detailed information from specific pages.',
+        detailedDescription: `Read the content of a web page using Jina Reader for optimized LLM-friendly output.
+
+WHEN TO USE:
+- After web_search returns relevant URLs that need detailed reading
+- When you have a specific URL from the user or documentation
+- To read API documentation, blog posts, or technical articles
+
+TIPS:
+- Jina Reader handles JavaScript-rendered pages (SPAs)
+- For API endpoints or raw files, content is fetched directly
+- Large pages are automatically truncated to 500KB`,
         category: 'network',
         approvalType: 'none',
         parallel: true,
         requiresWorkspace: false,
         enabled: true,
         parameters: {
-            url: { type: 'string', description: 'URL to fetch', required: true },
-            timeout: { type: 'number', description: 'Timeout in seconds (default: 30)', default: 30 },
+            url: { type: 'string', description: 'Full URL to fetch (must start with http:// or https://)', required: true },
+            timeout: { type: 'number', description: 'Timeout in seconds (default: 60, minimum: 30). Use higher values for complex pages.', default: 60 },
         },
     },
 
@@ -717,18 +746,24 @@ This OVERWRITES entire file. For partial edits, use edit_file.`,
     uiux_search: {
         name: 'uiux_search',
         displayName: 'UI/UX Search',
-        description: 'Search UI/UX design database for styles, colors, typography, and best practices.',
+        description: 'Search UI/UX design database for styles, colors, typography, icons, performance tips, and best practices.',
         detailedDescription: `Search the design knowledge base for:
 - UI styles (glassmorphism, minimalism, etc.)
 - Color palettes for different industries
 - Typography and font pairings
 - Chart recommendations
 - Landing page patterns
-- UX best practices`,
+- UX best practices
+- Icon sets and recommendations
+- React performance optimization
+- UI reasoning and decision making
+- Web interface components`,
         examples: [
             'uiux_search query="glassmorphism" domain="style"',
             'uiux_search query="saas dashboard" domain="color"',
             'uiux_search query="elegant font" domain="typography"',
+            'uiux_search query="lucide heroicons" domain="icons"',
+            'uiux_search query="memo optimization" domain="react-performance"',
         ],
         category: 'search',
         approvalType: 'none',
@@ -740,12 +775,12 @@ This OVERWRITES entire file. For partial edits, use edit_file.`,
             domain: {
                 type: 'string',
                 description: 'Search domain (auto-detected if not specified)',
-                enum: ['style', 'color', 'typography', 'chart', 'landing', 'product', 'ux', 'prompt'],
+                enum: ['style', 'color', 'typography', 'chart', 'landing', 'product', 'ux', 'prompt', 'icons', 'react-performance', 'ui-reasoning', 'web-interface'],
             },
             stack: {
                 type: 'string',
                 description: 'Tech stack for stack-specific guidelines',
-                enum: ['html-tailwind', 'react', 'nextjs', 'vue', 'svelte', 'swiftui', 'react-native', 'flutter'],
+                enum: ['html-tailwind', 'react', 'nextjs', 'vue', 'svelte', 'swiftui', 'react-native', 'flutter', 'jetpack-compose', 'nuxt-ui', 'nuxtjs', 'shadcn'],
             },
             max_results: { type: 'number', description: 'Maximum results (default: 3)', default: 3 },
         },
@@ -950,7 +985,6 @@ export function generateZodSchema(config: ToolConfig): z.ZodSchema {
  * 生成单个工具的详细提示词描述
  * 
  * 使用 description 作为主要描述（包含反碎片化规则）
- * detailedDescription 已废弃，保留字段仅为兼容性
  */
 export function generateToolPromptDescription(config: ToolConfig): string {
     const lines: string[] = []

@@ -25,6 +25,11 @@ const DATA_FILES: Record<UiuxDomain, string> = {
   product: 'products.json',
   ux: 'ux-guidelines.json',
   typography: 'typography.json',
+  // 新增数据文件
+  icons: 'icons.json',
+  'react-performance': 'react-performance.json',
+  'ui-reasoning': 'ui-reasoning.json',
+  'web-interface': 'web-interface.json',
 }
 
 /** 域关键词映射（用于自动检测） */
@@ -37,6 +42,11 @@ const DOMAIN_KEYWORDS: Record<UiuxDomain, string[]> = {
   style: ['style', 'design', 'ui', 'minimalism', 'glassmorphism', 'neumorphism', 'brutalism', 'dark mode', 'flat', 'aurora'],
   ux: ['ux', 'usability', 'accessibility', 'wcag', 'touch', 'scroll', 'animation', 'keyboard', 'navigation', 'mobile'],
   typography: ['font', 'typography', 'heading', 'serif', 'sans'],
+  // 新增域关键词
+  icons: ['icon', 'icons', 'svg', 'lucide', 'heroicons', 'feather', 'phosphor'],
+  'react-performance': ['react', 'performance', 'optimization', 'memo', 'useMemo', 'useCallback', 'lazy', 'suspense', 'render'],
+  'ui-reasoning': ['reasoning', 'why', 'decision', 'choice', 'rationale', 'explain'],
+  'web-interface': ['interface', 'component', 'button', 'input', 'form', 'modal', 'dropdown', 'table'],
 }
 
 /**

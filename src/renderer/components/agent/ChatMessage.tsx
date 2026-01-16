@@ -8,6 +8,7 @@ import React, { useState, useCallback, useEffect } from 'react'
 import { User, Copy, Check, RefreshCw, Edit2, RotateCcw, ChevronDown } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import aiAvatar from '../../assets/icon/ai-avatar.gif'
@@ -48,13 +49,13 @@ interface ChatMessageProps {
 // 代码块组件 - 更加精致的玻璃质感
 const CodeBlock = React.memo(({ language, children, fontSize }: { language: string | undefined; children: React.ReactNode; fontSize: number }) => {
   const [copied, setCopied] = useState(false)
+  const codeText = String(children).replace(/\n$/, '')
 
   const handleCopy = useCallback(() => {
-    const text = String(children).replace(/\n$/, '')
-    navigator.clipboard.writeText(text)
+    navigator.clipboard.writeText(codeText)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-  }, [children])
+  }, [codeText])
 
   return (
     <div className="relative group/code my-4 rounded-xl overflow-hidden border border-border bg-black/40 shadow-sm">
@@ -79,10 +80,15 @@ const CodeBlock = React.memo(({ language, children, fontSize }: { language: stri
         wrapLines
         wrapLongLines
       >
-        {String(children).replace(/\n$/, '')}
+        {codeText}
       </SyntaxHighlighter>
     </div>
   )
+}, (prevProps, nextProps) => {
+  // 自定义比较函数，只有当内容或语言变化时才重新渲染
+  return prevProps.language === nextProps.language && 
+         prevProps.fontSize === nextProps.fontSize &&
+         String(prevProps.children) === String(nextProps.children)
 })
 
 CodeBlock.displayName = 'CodeBlock'
@@ -98,7 +104,14 @@ const cleanStreamingContent = (text: string): string => {
 }
 
 // ThinkingBlock 组件 - 扁平化折叠样式
-const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }: { content: string; startTime?: number; isStreaming: boolean; fontSize: number }) => {
+interface ThinkingBlockProps {
+  content: string
+  startTime?: number
+  isStreaming: boolean
+  fontSize: number
+}
+
+const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }: ThinkingBlockProps) => {
   const [isExpanded, setIsExpanded] = useState(isStreaming)
   const [elapsed, setElapsed] = useState<number>(0)
   const lastElapsed = React.useRef<number>(0)
@@ -182,6 +195,10 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
       )}
     </div>
   )
+}, (prev, next) => {
+  return prev.content === next.content && 
+         prev.isStreaming === next.isStreaming && 
+         prev.fontSize === next.fontSize
 })
 ThinkingBlock.displayName = 'ThinkingBlock'
 
@@ -199,14 +216,15 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming }: { conten
       const isInline = !isCodeBlock && !codeContent.includes('\n')
 
       return isInline ? (
-        <code className="bg-white/10 px-1.5 py-0.5 rounded-md text-accent-light font-mono text-[0.9em] border border-white/5" {...props}>
+        <code className="bg-white/10 px-1.5 py-0.5 rounded-md text-accent-light font-mono text-[0.9em] border border-white/5 break-all" {...props}>
           {children}
         </code>
       ) : (
         <CodeBlock language={match?.[1]} fontSize={fontSize}>{children}</CodeBlock>
       )
     },
-    p: ({ children }: any) => <p className="mb-3 last:mb-0 leading-7">{children}</p>,
+    pre: ({ children }: any) => <div className="overflow-x-auto max-w-full">{children}</div>,
+    p: ({ children }: any) => <p className="mb-3 last:mb-0 leading-7 break-words">{children}</p>,
     ul: ({ children }: any) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
     ol: ({ children }: any) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
     li: ({ children }: any) => <li className="pl-1">{children}</li>,
@@ -234,16 +252,19 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming }: { conten
   if (!cleanedContent) return null
 
   return (
-    <div style={{ fontSize: `${fontSize}px` }} className="text-text-primary/90 leading-relaxed tracking-wide">
+    <div style={{ fontSize: `${fontSize}px` }} className="text-text-primary/90 leading-relaxed tracking-wide overflow-hidden">
       <ReactMarkdown
         className="prose prose-invert max-w-none"
-        remarkPlugins={[remarkGfm]}
         components={markdownComponents}
       >
         {cleanedContent}
       </ReactMarkdown>
     </div>
   )
+}, (prev, next) => {
+  return prev.content === next.content && 
+         prev.fontSize === next.fontSize && 
+         prev.isStreaming === next.isStreaming
 })
 MarkdownContent.displayName = 'MarkdownContent'
 
@@ -321,9 +342,124 @@ const RenderPart = React.memo(({
   }
 
   return null
+}, (prev, next) => {
+  // 比较 part 内容
+  if (prev.index !== next.index || prev.fontSize !== next.fontSize || prev.isStreaming !== next.isStreaming) return false
+  if (prev.pendingToolId !== next.pendingToolId) return false
+  
+  // 比较 part 类型和内容
+  if (isTextPart(prev.part) && isTextPart(next.part)) {
+    return prev.part.content === next.part.content
+  }
+  if (isReasoningPart(prev.part) && isReasoningPart(next.part)) {
+    return prev.part.content === next.part.content && prev.part.isStreaming === next.part.isStreaming
+  }
+  if (isToolCallPart(prev.part) && isToolCallPart(next.part)) {
+    return prev.part.toolCall.id === next.part.toolCall.id && 
+           prev.part.toolCall.status === next.part.toolCall.status
+  }
+  return false
 })
 
 RenderPart.displayName = 'RenderPart'
+
+// 助手消息内容组件 - 将分组逻辑提取出来并 memoize
+const AssistantMessageContent = React.memo(({
+  parts,
+  pendingToolId,
+  onApproveTool,
+  onRejectTool,
+  onOpenDiff,
+  fontSize,
+  isStreaming,
+}: {
+  parts: AssistantPart[]
+  pendingToolId?: string
+  onApproveTool?: () => void
+  onRejectTool?: () => void
+  onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
+  fontSize: number
+  isStreaming?: boolean
+}) => {
+  // Memoize 分组逻辑
+  const groups = React.useMemo(() => {
+    const result: Array<
+      | { type: 'part'; part: AssistantPart; index: number }
+      | { type: 'tool_group'; toolCalls: ToolCall[]; startIndex: number }
+    > = []
+
+    let currentToolCalls: ToolCall[] = []
+    let startIndex = -1
+
+    parts.forEach((part, index) => {
+      if (isToolCallPart(part)) {
+        if (currentToolCalls.length === 0) startIndex = index
+        currentToolCalls.push(part.toolCall)
+      } else {
+        if (currentToolCalls.length > 0) {
+          result.push({ type: 'tool_group', toolCalls: currentToolCalls, startIndex })
+          currentToolCalls = []
+        }
+        result.push({ type: 'part', part, index })
+      }
+    })
+
+    if (currentToolCalls.length > 0) {
+      result.push({ type: 'tool_group', toolCalls: currentToolCalls, startIndex })
+    }
+
+    return result
+  }, [parts])
+
+  return (
+    <>
+      {groups.map((group) => {
+        if (group.type === 'part') {
+          return (
+            <RenderPart
+              key={`part-${group.index}`}
+              part={group.part}
+              index={group.index}
+              pendingToolId={pendingToolId}
+              onApproveTool={onApproveTool}
+              onRejectTool={onRejectTool}
+              onOpenDiff={onOpenDiff}
+              fontSize={fontSize}
+              isStreaming={isStreaming}
+            />
+          )
+        } else {
+          if (group.toolCalls.length === 1) {
+            return (
+              <RenderPart
+                key={`part-${group.startIndex}`}
+                part={parts[group.startIndex]}
+                index={group.startIndex}
+                pendingToolId={pendingToolId}
+                onApproveTool={onApproveTool}
+                onRejectTool={onRejectTool}
+                onOpenDiff={onOpenDiff}
+                fontSize={fontSize}
+                isStreaming={isStreaming}
+              />
+            )
+          }
+          return (
+            <ToolCallGroup
+              key={`group-${group.startIndex}`}
+              toolCalls={group.toolCalls}
+              pendingToolId={pendingToolId}
+              onApproveTool={onApproveTool}
+              onRejectTool={onRejectTool}
+              onOpenDiff={onOpenDiff}
+            />
+          )
+        }
+      })}
+    </>
+  )
+})
+AssistantMessageContent.displayName = 'AssistantMessageContent'
 
 const ChatMessage = React.memo(({
   message,
@@ -369,8 +505,8 @@ const ChatMessage = React.memo(({
   }
 
   return (
-    <div className="w-full py-6 group transition-colors duration-200 border-b border-border/40 animate-fade-in">
-      <div className="max-w-3xl mx-auto px-6 relative">
+    <div className="w-full py-6 group transition-colors duration-200 border-b border-border/40 animate-fade-in overflow-hidden">
+      <div className="max-w-3xl mx-auto px-6 relative overflow-hidden">
         {/* Header Row: Avatar + Name + Actions */}
         <div className="flex items-center gap-3 mb-3 select-none">
           <div className="flex-shrink-0">
@@ -465,80 +601,17 @@ const ChatMessage = React.memo(({
               {/* User message */}
               {isUser && <MarkdownContent content={textContent} fontSize={fontSize} />}
 
-              {/* Assistant message */}
+              {/* Assistant message - 使用 memoized groups */}
               {isAssistantMessage(message) && message.parts && message.parts.length > 0 && (
-                <>
-                  {(() => {
-                    const groups: Array<
-                      | { type: 'part'; part: AssistantPart; index: number }
-                      | { type: 'tool_group'; toolCalls: ToolCall[]; startIndex: number }
-                    > = []
-
-                    let currentToolCalls: ToolCall[] = []
-                    let startIndex = -1
-
-                    message.parts.forEach((part, index) => {
-                      if (isToolCallPart(part)) {
-                        if (currentToolCalls.length === 0) startIndex = index
-                        currentToolCalls.push(part.toolCall)
-                      } else {
-                        if (currentToolCalls.length > 0) {
-                          groups.push({ type: 'tool_group', toolCalls: currentToolCalls, startIndex })
-                          currentToolCalls = []
-                        }
-                        groups.push({ type: 'part', part, index })
-                      }
-                    })
-
-                    if (currentToolCalls.length > 0) {
-                      groups.push({ type: 'tool_group', toolCalls: currentToolCalls, startIndex })
-                    }
-
-                    return groups.map((group) => {
-                      if (group.type === 'part') {
-                        return (
-                          <RenderPart
-                            key={`part-${group.index}`}
-                            part={group.part}
-                            index={group.index}
-                            pendingToolId={pendingToolId}
-                            onApproveTool={onApproveTool}
-                            onRejectTool={onRejectTool}
-                            onOpenDiff={onOpenDiff}
-                            fontSize={fontSize}
-                            isStreaming={message.isStreaming}
-                          />
-                        )
-                      } else {
-                        if (group.toolCalls.length === 1) {
-                          return (
-                            <RenderPart
-                              key={`part-${group.startIndex}`}
-                              part={message.parts![group.startIndex]}
-                              index={group.startIndex}
-                              pendingToolId={pendingToolId}
-                              onApproveTool={onApproveTool}
-                              onRejectTool={onRejectTool}
-                              onOpenDiff={onOpenDiff}
-                              fontSize={fontSize}
-                              isStreaming={message.isStreaming}
-                            />
-                          )
-                        }
-                        return (
-                          <ToolCallGroup
-                            key={`group-${group.startIndex}`}
-                            toolCalls={group.toolCalls}
-                            pendingToolId={pendingToolId}
-                            onApproveTool={onApproveTool}
-                            onRejectTool={onRejectTool}
-                            onOpenDiff={onOpenDiff}
-                          />
-                        )
-                      }
-                    })
-                  })()}
-                </>
+                <AssistantMessageContent
+                  parts={message.parts}
+                  pendingToolId={pendingToolId}
+                  onApproveTool={onApproveTool}
+                  onRejectTool={onRejectTool}
+                  onOpenDiff={onOpenDiff}
+                  fontSize={fontSize}
+                  isStreaming={message.isStreaming}
+                />
               )}
 
               {/* Streaming indicator */}
@@ -575,11 +648,11 @@ const ChatMessage = React.memo(({
   )
 })
 
-// 流式指示器组件
+// 流式指示器组件 - 移到组件外部避免重复创建
 const THINKING_TEXTS = ['Thinking', 'Analyzing', 'Processing', 'Generating', 'Composing', 'Crafting']
 const THINKING_TEXTS_ZH = ['思考中', '分析中', '处理中', '生成中', '编写中', '构思中']
 
-function StreamingIndicator() {
+const StreamingIndicator = React.memo(function StreamingIndicator() {
   const { language } = useStore()
   const [textIndex, setTextIndex] = useState(() => Math.floor(Math.random() * THINKING_TEXTS.length))
   
@@ -609,7 +682,7 @@ function StreamingIndicator() {
       </span>
     </div>
   )
-}
+})
 
 ChatMessage.displayName = 'ChatMessage'
 

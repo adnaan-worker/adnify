@@ -9,16 +9,18 @@ import { DEFAULT_AGENT_CONFIG } from '@shared/config/agentConfig'
 import { Button, Input, Select, Switch } from '@components/ui'
 import { AgentSettingsProps } from '../types'
 import { PromptPreviewModal } from './PromptPreviewModal'
-import { Bot, FileText, Zap, BrainCircuit, AlertOctagon, Terminal } from 'lucide-react'
+import { Bot, FileText, Zap, BrainCircuit, AlertOctagon, Terminal, Search, Eye, EyeOff } from 'lucide-react'
 
 export function AgentSettings({
     autoApprove, setAutoApprove, aiInstructions, setAiInstructions,
-    promptTemplateId, setPromptTemplateId, agentConfig, setAgentConfig, language
+    promptTemplateId, setPromptTemplateId, agentConfig, setAgentConfig,
+    webSearchConfig, setWebSearchConfig, language
 }: AgentSettingsProps) {
     const templates = getPromptTemplates()
     const [showPreview, setShowPreview] = useState(false)
     const [selectedTemplateForPreview, setSelectedTemplateForPreview] = useState<string | null>(null)
     const [showAdvanced, setShowAdvanced] = useState(false)
+    const [showGoogleApiKey, setShowGoogleApiKey] = useState(false)
     
     // 使用 DEFAULT_AGENT_CONFIG 中的忽略目录作为默认值
     const defaultIgnoredDirs = DEFAULT_AGENT_CONFIG.ignoredDirectories
@@ -144,6 +146,60 @@ export function AgentSettings({
                             )}
                             className="w-full h-32 p-3 bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg rounded-lg border border-border focus:border-accent/50 focus:ring-1 focus:ring-accent/20 outline-none transition-all resize-none text-xs font-mono custom-scrollbar text-text-primary placeholder-text-muted/50"
                         />
+                    </section>
+
+                    {/* 网络搜索配置 */}
+                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Search className="w-4 h-4 text-accent" />
+                            <h5 className="text-sm font-medium text-text-primary">{t('网络搜索', 'Web Search')}</h5>
+                        </div>
+                        <p className="text-xs text-text-muted">
+                            {t(
+                                '配置 Google Programmable Search Engine 以获得更好的搜索结果。未配置时将使用 DuckDuckGo 作为备选。',
+                                'Configure Google Programmable Search Engine for better search results. Falls back to DuckDuckGo when not configured.'
+                            )}
+                        </p>
+                        <div className="space-y-3">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-text-secondary">Google API Key</label>
+                                <div className="relative">
+                                    <Input
+                                        type={showGoogleApiKey ? 'text' : 'password'}
+                                        value={webSearchConfig.googleApiKey || ''}
+                                        onChange={(e) => setWebSearchConfig({ ...webSearchConfig, googleApiKey: e.target.value })}
+                                        placeholder={t('输入 Google API Key', 'Enter Google API Key')}
+                                        className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs pr-10"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowGoogleApiKey(!showGoogleApiKey)}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
+                                    >
+                                        {showGoogleApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-text-secondary">{t('搜索引擎 ID (CX)', 'Search Engine ID (CX)')}</label>
+                                <Input
+                                    type="text"
+                                    value={webSearchConfig.googleCx || ''}
+                                    onChange={(e) => setWebSearchConfig({ ...webSearchConfig, googleCx: e.target.value })}
+                                    placeholder={t('输入搜索引擎 ID', 'Enter Search Engine ID')}
+                                    className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs">
+                            <Search className="w-4 h-4 shrink-0 mt-0.5" />
+                            <p>
+                                {t(
+                                    '免费额度：每天 100 次搜索。获取密钥：console.cloud.google.com',
+                                    'Free tier: 100 searches/day. Get keys at: console.cloud.google.com'
+                                )}
+                            </p>
+                        </div>
                     </section>
                 </div>
 

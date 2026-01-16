@@ -4,41 +4,36 @@
 
 import { logger } from '@shared/utils/Logger'
 import { ipcMain, BrowserWindow } from 'electron'
-import { getIndexService, EmbeddingConfig, initIndexServiceWithConfig } from '../indexing'
+import { getIndexService, initIndexServiceWithConfig, EmbeddingConfig, IndexMode, IndexConfig } from '../indexing'
 import { ok, failFromError, Result } from '@shared/types/result'
 import Store from 'electron-store'
 
-// mainStore 引用
 let _mainStore: Store | null = null
 
-/**
- * 从 mainStore 获取保存的 embedding 配置
- */
-function getSavedEmbeddingConfig(): Partial<EmbeddingConfig> | undefined {
+function getSavedConfig(): Partial<IndexConfig> | undefined {
   if (!_mainStore) return undefined
-  const saved = _mainStore.get('embeddingConfig') as Partial<EmbeddingConfig> | undefined
-  if (saved) {
-    logger.index.info('[Indexing] Loaded saved embedding config:', { provider: saved.provider })
-  }
-  return saved
+  return _mainStore.get('indexConfig') as Partial<IndexConfig> | undefined
+}
+
+function saveConfig(updates: Partial<IndexConfig>): void {
+  if (!_mainStore) return
+  const current = getSavedConfig() || {}
+  _mainStore.set('indexConfig', { ...current, ...updates })
 }
 
 export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | null, mainStore?: Store) {
   _mainStore = mainStore || null
 
-  // 初始化索引服务
+  // 初始化
   ipcMain.handle('index:initialize', async (_, workspacePath: string): Promise<Result<void>> => {
     try {
-      // 使用保存的配置初始化
-      const savedConfig = getSavedEmbeddingConfig()
-      const indexService = savedConfig 
-        ? initIndexServiceWithConfig(workspacePath, { embedding: savedConfig as EmbeddingConfig })
+      const saved = getSavedConfig()
+      const indexService = saved
+        ? initIndexServiceWithConfig(workspacePath, saved)
         : getIndexService(workspacePath)
-      
+
       const mainWindow = getMainWindow()
-      if (mainWindow) {
-        indexService.setMainWindow(mainWindow)
-      }
+      if (mainWindow) indexService.setMainWindow(mainWindow)
       await indexService.initialize()
       return ok(undefined)
     } catch (e) {
@@ -47,26 +42,18 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
     }
   })
 
-  // 开始全量索引
+  // 开始索引
   ipcMain.handle('index:start', async (_, workspacePath: string): Promise<Result<void>> => {
     try {
-      // 使用保存的配置
-      const savedConfig = getSavedEmbeddingConfig()
-      const indexService = savedConfig 
-        ? initIndexServiceWithConfig(workspacePath, { embedding: savedConfig as EmbeddingConfig })
+      const saved = getSavedConfig()
+      const indexService = saved
+        ? initIndexServiceWithConfig(workspacePath, saved)
         : getIndexService(workspacePath)
-      
+
       const mainWindow = getMainWindow()
-      if (mainWindow) {
-        indexService.setMainWindow(mainWindow)
-      }
+      if (mainWindow) indexService.setMainWindow(mainWindow)
       await indexService.initialize()
-
-      // 异步执行索引
-      indexService.indexWorkspace().catch(e => {
-        logger.ipc.error('[Index] Indexing failed:', e)
-      })
-
+      indexService.indexWorkspace().catch(e => logger.ipc.error('[Index] Indexing failed:', e))
       return ok(undefined)
     } catch (e) {
       logger.ipc.error('[Index] Start failed:', e)
@@ -74,14 +61,17 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
     }
   })
 
-  // 获取索引状态
+  // 获取状态
   ipcMain.handle('index:status', async (_, workspacePath: string) => {
     try {
-      const indexService = getIndexService(workspacePath)
+      const saved = getSavedConfig()
+      const indexService = saved
+        ? initIndexServiceWithConfig(workspacePath, saved)
+        : getIndexService(workspacePath)
       await indexService.initialize()
       return indexService.getStatus()
     } catch {
-      return { isIndexing: false, totalFiles: 0, indexedFiles: 0, totalChunks: 0 }
+      return { mode: 'structural', isIndexing: false, totalFiles: 0, indexedFiles: 0, totalChunks: 0 }
     }
   })
 
@@ -96,10 +86,13 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
     }
   })
 
-  // 语义搜索
+  // 搜索
   ipcMain.handle('index:search', async (_, workspacePath: string, query: string, topK?: number) => {
     try {
-      const indexService = getIndexService(workspacePath)
+      const saved = getSavedConfig()
+      const indexService = saved
+        ? initIndexServiceWithConfig(workspacePath, saved)
+        : getIndexService(workspacePath)
       await indexService.initialize()
       return await indexService.search(query, topK || 10)
     } catch (e) {
@@ -108,10 +101,13 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
     }
   })
 
-  // 混合搜索（向量 + 关键词）
+  // 混合搜索
   ipcMain.handle('index:hybridSearch', async (_, workspacePath: string, query: string, topK?: number) => {
     try {
-      const indexService = getIndexService(workspacePath)
+      const saved = getSavedConfig()
+      const indexService = saved
+        ? initIndexServiceWithConfig(workspacePath, saved)
+        : getIndexService(workspacePath)
       await indexService.initialize()
       return await indexService.hybridSearch(query, topK || 10)
     } catch (e) {
@@ -120,14 +116,42 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
     }
   })
 
-  // 更新单个文件的索引
-  ipcMain.handle('index:updateFile', async (_, workspacePath: string, filePath: string): Promise<Result<void>> => {
+  // 符号搜索
+  ipcMain.handle('index:searchSymbols', async (_, workspacePath: string, query: string, topK?: number) => {
     try {
       const indexService = getIndexService(workspacePath)
-      await indexService.updateFile(filePath)
-      return ok(undefined)
+      return indexService.searchSymbols(query, topK || 20)
     } catch (e) {
-      return failFromError(e)
+      logger.ipc.error('[Index] Symbol search failed:', e)
+      return []
+    }
+  })
+
+  // 获取项目摘要
+  ipcMain.handle('index:getProjectSummary', async (_, workspacePath: string) => {
+    try {
+      const saved = getSavedConfig()
+      const indexService = saved
+        ? initIndexServiceWithConfig(workspacePath, saved)
+        : getIndexService(workspacePath)
+      await indexService.initialize()
+      return indexService.getProjectSummary()
+    } catch {
+      return null
+    }
+  })
+
+  // 获取项目摘要文本
+  ipcMain.handle('index:getProjectSummaryText', async (_, workspacePath: string) => {
+    try {
+      const saved = getSavedConfig()
+      const indexService = saved
+        ? initIndexServiceWithConfig(workspacePath, saved)
+        : getIndexService(workspacePath)
+      await indexService.initialize()
+      return indexService.getProjectSummaryText()
+    } catch {
+      return ''
     }
   })
 
@@ -142,15 +166,25 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
     }
   })
 
+  // 切换索引模式
+  ipcMain.handle('index:setMode', async (_, workspacePath: string, mode: IndexMode): Promise<Result<void>> => {
+    try {
+      const indexService = getIndexService(workspacePath)
+      await indexService.setMode(mode)
+      saveConfig({ mode })
+      return ok(undefined)
+    } catch (e) {
+      return failFromError(e)
+    }
+  })
+
   // 更新 Embedding 配置
-  ipcMain.handle('index:updateEmbeddingConfig', async (
-    _,
-    workspacePath: string,
-    config: Partial<EmbeddingConfig>
-  ): Promise<Result<void>> => {
+  ipcMain.handle('index:updateEmbeddingConfig', async (_, workspacePath: string, config: Partial<EmbeddingConfig>): Promise<Result<void>> => {
     try {
       const indexService = getIndexService(workspacePath)
       indexService.updateEmbeddingConfig(config)
+      const saved = getSavedConfig() || {}
+      saveConfig({ embedding: { ...saved.embedding, ...config } as EmbeddingConfig })
       return ok(undefined)
     } catch (e) {
       return failFromError(e)
@@ -167,15 +201,26 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
     }
   })
 
-  // 获取支持的 Embedding 提供商列表
+  // 获取支持的 Embedding 提供商
   ipcMain.handle('index:getProviders', () => {
     return [
-      { id: 'jina', name: 'Jina AI', description: '免费 100万 tokens/月，专为代码优化', free: true },
-      { id: 'voyage', name: 'Voyage AI', description: '免费 5000万 tokens，代码专用模型', free: true },
+      { id: 'jina', name: 'Jina AI', description: '免费 100万 tokens/月', free: true },
+      { id: 'voyage', name: 'Voyage AI', description: '免费 5000万 tokens', free: true },
       { id: 'cohere', name: 'Cohere', description: '免费 100次/分钟', free: true },
       { id: 'huggingface', name: 'HuggingFace', description: '免费，有速率限制', free: true },
       { id: 'ollama', name: 'Ollama', description: '本地运行，完全免费', free: true },
       { id: 'openai', name: 'OpenAI', description: '付费，质量最高', free: false },
     ]
+  })
+
+  // 更新单个文件索引（用于文件监听）
+  ipcMain.handle('index:updateFile', async (_, _workspacePath: string, _filePath: string): Promise<Result<void>> => {
+    try {
+      // 结构化模式下暂不支持增量更新，需要重建
+      // 语义模式通过 worker 处理
+      return ok(undefined)
+    } catch (e) {
+      return failFromError(e)
+    }
   })
 }

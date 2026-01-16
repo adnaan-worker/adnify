@@ -185,7 +185,25 @@ export interface SecuritySettings {
   enableAuditLog: boolean
   strictWorkspaceMode: boolean
   allowedShellCommands: string[]
+  allowedGitSubcommands: string[]
   showSecurityWarnings: boolean
+}
+
+// ============================================
+// 网络搜索配置
+// ============================================
+
+export interface WebSearchConfig {
+  googleApiKey?: string
+  googleCx?: string // Google Programmable Search Engine ID
+}
+
+// ============================================
+// MCP 配置
+// ============================================
+
+export interface McpConfig {
+  autoConnect?: boolean // 启动时自动连接 MCP 服务器
 }
 
 // ============================================
@@ -193,7 +211,7 @@ export interface SecuritySettings {
 // ============================================
 
 export interface AppSettings {
-  llmConfig: Pick<LLMConfig, 'provider' | 'model'>  // 只保存 provider 和 model
+  llmConfig: Pick<LLMConfig, 'provider' | 'model'> // 只保存 provider 和 model
   language: string
   autoApprove: AutoApproveSettings
   promptTemplateId?: string
@@ -201,14 +219,6 @@ export interface AppSettings {
   providerConfigs: Record<string, ProviderConfig>
   aiInstructions: string
   onboardingCompleted: boolean
-}
-
-// ============================================
-// 运行时完整设置（内存中使用）
-// ============================================
-
-export interface RuntimeSettings extends Omit<AppSettings, 'llmConfig'> {
-  llmConfig: LLMConfig  // 运行时包含完整 LLMConfig
-  editorConfig: EditorConfig
-  securitySettings: SecuritySettings
+  webSearchConfig?: WebSearchConfig
+  mcpConfig?: McpConfig
 }

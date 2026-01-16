@@ -11,6 +11,9 @@ export type {
   SearchFileResult,
   IndexStatus,
   IndexSearchResult,
+  IndexMode,
+  SymbolInfo,
+  ProjectSummary,
   EmbeddingProvider,
   LspPosition,
   LspRange,
@@ -254,7 +257,7 @@ export interface ElectronAPI {
   onLLMDone: (callback: (result: LLMResult) => void) => () => void
 
   // Terminal
-  createTerminal: (options: { id: string; cwd?: string; shell?: string }) => Promise<boolean>
+  createTerminal: (options: { id: string; cwd?: string; shell?: string }) => Promise<{ success: boolean; error?: string }>
   writeTerminal: (id: string, data: string) => Promise<void>
   resizeTerminal: (id: string, cols: number, rows: number) => Promise<void>
   killTerminal: (id?: string) => void
@@ -290,6 +293,10 @@ export interface ElectronAPI {
   indexHasIndex: (workspacePath: string) => Promise<boolean>
   indexSearch: (workspacePath: string, query: string, topK?: number) => Promise<IndexSearchResult[]>
   indexHybridSearch: (workspacePath: string, query: string, topK?: number) => Promise<IndexSearchResult[]>
+  indexSearchSymbols: (workspacePath: string, query: string, topK?: number) => Promise<SymbolInfo[]>
+  indexGetProjectSummary: (workspacePath: string) => Promise<ProjectSummary | null>
+  indexGetProjectSummaryText: (workspacePath: string) => Promise<string>
+  indexSetMode: (workspacePath: string, mode: 'structural' | 'semantic') => Promise<{ success: boolean; error?: string }>
   indexUpdateFile: (workspacePath: string, filePath: string) => Promise<{ success: boolean; error?: string }>
   indexClear: (workspacePath: string) => Promise<{ success: boolean; error?: string }>
   indexUpdateEmbeddingConfig: (workspacePath: string, config: EmbeddingConfigInput) => Promise<{ success: boolean; error?: string }>
@@ -346,6 +353,7 @@ export interface ElectronAPI {
   httpWebSearch: (query: string, maxResults?: number) => Promise<{
     success: boolean; results?: Array<{ title: string; url: string; snippet: string }>; error?: string
   }>
+  httpSetGoogleSearch: (apiKey: string, cx: string) => Promise<{ success: boolean }>
 
   // MCP
   mcpInitialize: (workspaceRoots: string[]) => Promise<{ success: boolean; error?: string }>
@@ -375,6 +383,7 @@ export interface ElectronAPI {
   }) => Promise<{ success: boolean; error?: string }>
   mcpRemoveServer: (serverId: string) => Promise<{ success: boolean; error?: string }>
   mcpToggleServer: (serverId: string, disabled: boolean) => Promise<{ success: boolean; error?: string }>
+  mcpSetAutoConnect: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
   mcpStartOAuth: (serverId: string) => Promise<{ success: boolean; authorizationUrl?: string; error?: string }>
   mcpFinishOAuth: (serverId: string, authorizationCode: string) => Promise<{ success: boolean; error?: string }>
   mcpRefreshOAuthToken: (serverId: string) => Promise<{ success: boolean; error?: string }>

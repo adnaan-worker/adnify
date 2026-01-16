@@ -2,8 +2,9 @@
  * 工作模式类型定义
  */
 
-/** 工作模式 */
-export type WorkMode = 'chat' | 'agent' | 'plan'
+// 从 shared 导入共享类型
+export type { WorkMode } from '@shared/types/workMode'
+import type { WorkMode } from '@shared/types/workMode'
 
 /** 模式配置 */
 export interface ModeConfig {

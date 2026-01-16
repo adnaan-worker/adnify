@@ -15,7 +15,8 @@ import { runLoop } from './loop'
 import { approvalService } from './tools'
 import { EventBus } from './EventBus'
 import type { WorkMode } from '@/renderer/modes/types'
-import type { MessageContent, TextContent } from '../types'
+import type { MessageContent, TextContent, ImageContent } from '../types'
+import type { CheckpointImage } from '../types'
 import type { LLMConfig } from './types'
 
 // 文件缓存
@@ -67,9 +68,12 @@ class AgentClass {
       const userMessageId = store.addUserMessage(userMessage, contextItems)
       store.clearContextItems()
 
-      // 创建检查点
+      // 提取图片信息用于检查点
+      const checkpointImages = this.extractCheckpointImages(userMessage)
+
+      // 创建检查点（包含图片和上下文引用）
       const messageText = typeof userMessage === 'string' ? userMessage.slice(0, 50) : 'User message'
-      await store.createMessageCheckpoint(userMessageId, messageText)
+      await store.createMessageCheckpoint(userMessageId, messageText, checkpointImages, contextItems)
 
       // 构建 LLM 消息
       const llmMessages = await buildLLMMessages(userMessage, contextContent, systemPrompt)
@@ -212,6 +216,20 @@ class AgentClass {
         .join('')
     }
     return ''
+  }
+
+  private extractCheckpointImages(message: MessageContent): CheckpointImage[] {
+    if (typeof message === 'string') return []
+    if (Array.isArray(message)) {
+      return message
+        .filter((p): p is ImageContent => p.type === 'image')
+        .map(p => ({
+          id: crypto.randomUUID(),
+          mimeType: p.source.media_type,
+          base64: p.source.data,
+        }))
+    }
+    return []
   }
 
   private showError(message: string): void {

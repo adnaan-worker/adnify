@@ -241,6 +241,13 @@ export interface AppSettingsSchema {
   providerConfigs?: Record<string, unknown>
   aiInstructions?: string
   onboardingCompleted?: boolean
+  webSearchConfig?: {
+    googleApiKey?: string
+    googleCx?: string
+  }
+  mcpConfig?: {
+    autoConnect?: boolean
+  }
 }
 
 export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSchema {
@@ -278,6 +285,21 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
 
   if (typeof config.aiInstructions === 'string') cleaned.aiInstructions = config.aiInstructions
   if (typeof config.onboardingCompleted === 'boolean') cleaned.onboardingCompleted = config.onboardingCompleted
+
+  // webSearchConfig
+  if (config.webSearchConfig && typeof config.webSearchConfig === 'object') {
+    const ws = config.webSearchConfig as Record<string, unknown>
+    cleaned.webSearchConfig = {}
+    if (typeof ws.googleApiKey === 'string') cleaned.webSearchConfig.googleApiKey = ws.googleApiKey
+    if (typeof ws.googleCx === 'string') cleaned.webSearchConfig.googleCx = ws.googleCx
+  }
+
+  // mcpConfig
+  if (config.mcpConfig && typeof config.mcpConfig === 'object') {
+    const mcp = config.mcpConfig as Record<string, unknown>
+    cleaned.mcpConfig = {}
+    if (typeof mcp.autoConnect === 'boolean') cleaned.mcpConfig.autoConnect = mcp.autoConnect
+  }
 
   return cleaned
 }

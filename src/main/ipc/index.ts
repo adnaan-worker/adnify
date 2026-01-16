@@ -10,7 +10,7 @@ import Store from 'electron-store'
 import { registerWindowHandlers } from './window'
 import { registerSettingsHandlers } from './settings'
 import { registerSearchHandlers } from './search'
-import { registerLLMHandlers, updateLLMServiceWindow, cleanupLLMService } from './llm'
+import { registerLLMHandlers, cleanupLLMService } from './llm'
 import { registerIndexingHandlers } from './indexing'
 import { registerLspHandlers } from './lsp'
 import { registerHttpHandlers } from './http'
@@ -46,9 +46,6 @@ export interface IPCContext {
  */
 export function registerAllHandlers(context: IPCContext) {
   const { getMainWindow, createWindow, mainStore, bootstrapStore, setMainStore } = context
-
-  // 初始化安全模块
-  securityManager.setMainWindow(getMainWindow())
 
   // 窗口控制
   registerWindowHandlers(createWindow)
@@ -111,5 +108,5 @@ export function cleanupAllHandlers() {
   logger.ipc.info('[IPC] All handlers cleaned up')
 }
 
-export { updateLLMServiceWindow, cleanupLLMService }
+export { cleanupLLMService }
 

@@ -445,9 +445,13 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
 
     async codebase_search(args, ctx) {
         if (!ctx.workspacePath) return { success: false, result: '', error: 'No workspace open' }
-        const results = await api.index.hybridSearch(ctx.workspacePath, args.query as string, (args.top_k as number) || 10)
-        if (!results?.length) return { success: false, result: 'No results found' }
-        return { success: true, result: results.map(r => `${r.relativePath}:${r.startLine}: ${r.content.trim()}`).join('\n') }
+        try {
+            const results = await api.index.hybridSearch(ctx.workspacePath, args.query as string, (args.top_k as number) || 10)
+            if (!results?.length) return { success: true, result: 'No results found' }
+            return { success: true, result: results.map(r => `${r.relativePath}:${r.startLine}: ${r.content.trim()}`).join('\n') }
+        } catch (e) {
+            return { success: false, result: '', error: e instanceof Error ? e.message : 'Search failed' }
+        }
     },
 
     async find_references(args, ctx) {
@@ -524,7 +528,9 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
     },
 
     async read_url(args) {
-        const result = await api.http.readUrl(args.url as string, (args.timeout as number) || 30)
+        // timeout 参数单位是秒，转换为毫秒，最小 30 秒，默认 60 秒
+        const timeoutSec = Math.max((args.timeout as number) || 60, 30)
+        const result = await api.http.readUrl(args.url as string, timeoutSec * 1000)
         if (!result.success || !result.content) return { success: false, result: '', error: result.error || 'Failed to read URL' }
         return { success: true, result: `Title: ${result.title}\n\n${result.content}` }
     },

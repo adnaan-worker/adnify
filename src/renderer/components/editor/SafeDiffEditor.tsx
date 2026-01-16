@@ -3,7 +3,7 @@
  * 解决 Monaco DiffEditor 在卸载时 TextModel 被提前销毁的问题
  */
 
-import { useRef, useCallback, useEffect } from 'react'
+import { useRef, useCallback, useEffect, useState } from 'react'
 import { DiffEditor } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 
@@ -15,46 +15,64 @@ interface SafeDiffEditorProps {
   onMount?: (editor: editor.IStandaloneDiffEditor, monaco: typeof import('monaco-editor')) => void
 }
 
-export function SafeDiffEditor({ original, modified, language, options, onMount }: SafeDiffEditorProps) {
+export function SafeDiffEditor({
+  original,
+  modified,
+  language,
+  options,
+  onMount
+}: SafeDiffEditorProps) {
   const diffEditorRef = useRef<editor.IStandaloneDiffEditor | null>(null)
+  const isMountedRef = useRef(true)
+  const [editorKey] = useState(() => Date.now())
+  const [shouldRender, setShouldRender] = useState(true)
 
-  // 在组件卸载时安全清理
   useEffect(() => {
+    isMountedRef.current = true
+    setShouldRender(true)
     return () => {
+      isMountedRef.current = false
+      // 在 React 卸载前，先清理 DiffEditor 的 model
       if (diffEditorRef.current) {
         try {
-          // 先获取 models
-          const originalModel = diffEditorRef.current.getOriginalEditor()?.getModel()
-          const modifiedModel = diffEditorRef.current.getModifiedEditor()?.getModel()
-          
-          // 设置空 model 避免 dispose 时的错误
+          // 先将 model 设为 null，避免 dispose 时的错误
           diffEditorRef.current.setModel(null)
-          
-          // 然后 dispose models
-          originalModel?.dispose()
-          modifiedModel?.dispose()
         } catch {
-          // 忽略清理时的错误
+          // 忽略错误
         }
         diffEditorRef.current = null
       }
+      setShouldRender(false)
     }
   }, [])
 
-  const handleMount = useCallback((editor: editor.IStandaloneDiffEditor, monacoInstance: typeof import('monaco-editor')) => {
-    diffEditorRef.current = editor
-    onMount?.(editor, monacoInstance)
-  }, [onMount])
+  const handleMount = useCallback(
+    (ed: editor.IStandaloneDiffEditor, monacoInstance: typeof import('monaco-editor')) => {
+      if (!isMountedRef.current) return
+      diffEditorRef.current = ed
+      onMount?.(ed, monacoInstance)
+    },
+    [onMount]
+  )
+
+  const safeOriginal = original ?? ''
+  const safeModified = modified ?? ''
+
+  if (!shouldRender) {
+    return null
+  }
 
   return (
     <DiffEditor
+      key={editorKey}
       height="100%"
       language={language}
-      original={original}
-      modified={modified}
+      original={safeOriginal}
+      modified={safeModified}
       theme="adnify-dynamic"
       options={options}
       onMount={handleMount}
+      loading={<div className="flex items-center justify-center h-full text-text-muted">Loading diff...</div>}
     />
   )
 }

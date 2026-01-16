@@ -6,6 +6,7 @@
 import { app, BrowserWindow, Menu, shell } from 'electron'
 import * as path from 'path'
 import { logger } from '@shared/utils/Logger'
+import { SECURITY_DEFAULTS } from '@shared/constants'
 import type Store from 'electron-store'
 
 // ==========================================
@@ -24,21 +25,6 @@ const WINDOW_CONFIG = {
   EMPTY_MIN_HEIGHT: 400,
   BG_COLOR: '#09090b',
 } as const
-
-const SECURITY_DEFAULTS = {
-  SHELL_COMMANDS: [
-    'npm', 'yarn', 'pnpm', 'bun', 'node', 'npx', 'deno', 'git',
-    'python', 'python3', 'pip', 'pip3', 'java', 'javac', 'mvn', 'gradle',
-    'go', 'rust', 'cargo', 'make', 'gcc', 'clang', 'cmake',
-    'pwd', 'ls', 'dir', 'cat', 'type', 'echo', 'mkdir', 'touch', 'rm', 'mv', 'cp', 'cd',
-  ],
-  GIT_SUBCOMMANDS: [
-    'status', 'log', 'diff', 'show', 'ls-files', 'rev-parse', 'rev-list', 'blame',
-    'add', 'commit', 'reset', 'restore', 'push', 'pull', 'fetch', 'remote',
-    'branch', 'checkout', 'switch', 'merge', 'rebase', 'cherry-pick',
-    'clone', 'init', 'stash', 'tag', 'config',
-  ],
-}
 
 // ==========================================
 // Store（延迟初始化）
@@ -156,7 +142,6 @@ function createWindow(isEmpty = false): BrowserWindow {
   // 窗口事件
   win.on('focus', () => {
     lastActiveWindow = win
-    ipcModule?.updateLLMServiceWindow(win)
   })
 
   win.on('close', async (e) => {
@@ -279,8 +264,6 @@ async function initializeModules(firstWin: BrowserWindow) {
     setWindowWorkspace: (id: number, roots: string[]) => windowWorkspaces.set(id, roots),
     getWindowWorkspace: (id: number) => windowWorkspaces.get(id) || null,
   })
-
-  securityManager.setMainWindow(firstWin)
 
   // 设置菜单
   Menu.setApplicationMenu(Menu.buildFromTemplate([

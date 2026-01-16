@@ -20,7 +20,93 @@ interface ReadUrlResult {
     statusCode?: number
 }
 
-async function fetchUrl(url: string, timeout = 30000): Promise<ReadUrlResult> {
+/**
+ * 使用 Jina Reader API 读取 URL 内容
+ * Jina Reader 专为 LLM 优化，支持 JS 渲染页面
+ * 免费无限制使用
+ */
+async function fetchWithJinaReader(url: string, timeout = 60000): Promise<ReadUrlResult> {
+    return new Promise((resolve) => {
+        const options = {
+            hostname: 'r.jina.ai',
+            port: 443,
+            path: `/${url}`,
+            method: 'GET',
+            headers: {
+                'Accept': 'text/plain',
+                'User-Agent': 'Adnify/1.0 (AI Code Editor)',
+            },
+            timeout,
+        }
+
+        const req = https.request(options, (res) => {
+            let data = ''
+            res.setEncoding('utf8')
+            
+            res.on('data', (chunk) => {
+                data += chunk
+                // 限制响应大小
+                if (data.length > 500000) {
+                    req.destroy()
+                    resolve({
+                        success: true,
+                        content: data.slice(0, 500000) + '\n\n...(truncated, content too large)',
+                        statusCode: res.statusCode,
+                        contentType: 'text/plain',
+                    })
+                }
+            })
+
+            res.on('end', () => {
+                if (res.statusCode && res.statusCode >= 400) {
+                    resolve({
+                        success: false,
+                        error: `Jina Reader returned status ${res.statusCode}`,
+                        statusCode: res.statusCode,
+                    })
+                    return
+                }
+
+                // 从 Jina 返回的 Markdown 中提取标题
+                let title = ''
+                const titleMatch = data.match(/^#\s+(.+)$/m)
+                if (titleMatch) {
+                    title = titleMatch[1].trim()
+                }
+
+                resolve({
+                    success: true,
+                    content: data,
+                    title,
+                    statusCode: res.statusCode,
+                    contentType: 'text/markdown',
+                })
+            })
+        })
+
+        req.on('error', (error) => {
+            resolve({
+                success: false,
+                error: `Jina Reader request failed: ${error.message}`,
+            })
+        })
+
+        req.on('timeout', () => {
+            req.destroy()
+            resolve({
+                success: false,
+                error: 'Jina Reader request timed out',
+            })
+        })
+
+        req.end()
+    })
+}
+
+/**
+ * 直接抓取 URL 内容（备用方案）
+ */
+async function fetchUrlDirect(url: string, timeout = 60000): Promise<ReadUrlResult> {
     return new Promise((resolve) => {
         try {
             const parsedUrl = new URL(url)
@@ -32,7 +118,7 @@ async function fetchUrl(url: string, timeout = 30000): Promise<ReadUrlResult> {
                 path: parsedUrl.pathname + parsedUrl.search,
                 method: 'GET',
                 headers: {
-                    'User-Agent': 'Adnify/1.0 (AI Code Editor)',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7',
                     'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8',
                 },
@@ -40,6 +126,15 @@ async function fetchUrl(url: string, timeout = 30000): Promise<ReadUrlResult> {
             }
 
             const req = protocol.request(options, (res) => {
+                // 处理重定向
+                if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    const redirectUrl = res.headers.location.startsWith('http') 
+                        ? res.headers.location 
+                        : `${parsedUrl.protocol}//${parsedUrl.host}${res.headers.location}`
+                    fetchUrlDirect(redirectUrl, timeout).then(resolve)
+                    return
+                }
+
                 let data = ''
                 const contentType = res.headers['content-type'] || ''
 
@@ -81,7 +176,7 @@ async function fetchUrl(url: string, timeout = 30000): Promise<ReadUrlResult> {
                         title = titleMatch[1].trim()
                     }
 
-                    // 简单的 HTML 到文本转换
+                    // HTML 到文本转换
                     let content = data
                     if (contentType.includes('html')) {
                         content = htmlToText(data)
@@ -122,6 +217,43 @@ async function fetchUrl(url: string, timeout = 30000): Promise<ReadUrlResult> {
     })
 }
 
+/**
+ * 读取 URL 内容
+ * 优先使用 Jina Reader，失败时回退到直接抓取
+ */
+async function fetchUrl(url: string, timeout = 60000): Promise<ReadUrlResult> {
+    // 对于非 HTTP(S) URL，直接返回错误
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        return {
+            success: false,
+            error: 'Only HTTP and HTTPS URLs are supported',
+        }
+    }
+
+    // 对于 JSON/API 端点，直接抓取更合适
+    const isApiEndpoint = url.includes('/api/') || 
+                          url.endsWith('.json') || 
+                          url.includes('raw.githubusercontent.com')
+    
+    if (isApiEndpoint) {
+        logger.ipc.debug('[HTTP] API endpoint detected, using direct fetch')
+        return fetchUrlDirect(url, timeout)
+    }
+
+    // 优先使用 Jina Reader
+    logger.ipc.debug('[HTTP] Trying Jina Reader for:', url)
+    const jinaResult = await fetchWithJinaReader(url, timeout)
+    
+    if (jinaResult.success) {
+        logger.ipc.debug('[HTTP] Jina Reader succeeded')
+        return jinaResult
+    }
+
+    // Jina 失败，回退到直接抓取
+    logger.ipc.warn('[HTTP] Jina Reader failed, falling back to direct fetch:', jinaResult.error)
+    return fetchUrlDirect(url, timeout)
+}
+
 // 简单的 HTML 到文本转换
 function htmlToText(html: string): string {
     return html
@@ -153,8 +285,7 @@ function htmlToText(html: string): string {
 }
 
 // ===== 网络搜索 =====
-// 注意：真正的网络搜索需要 API key (如 SerpAPI, Google Custom Search, Bing Search)
-// 这里提供一个框架，实际实现需要用户配置 API
+// 优先级：Google PSE → DuckDuckGo
 
 interface SearchResult {
     title: string
@@ -168,40 +299,39 @@ interface WebSearchResult {
     error?: string
 }
 
-// 搜索 API key 缓存 (可选增强)
-let cachedSearchApiKey: string | null = null
-let cachedSearchApiType: 'serper' | 'tavily' | null = null
+// 搜索 API 配置缓存
+let cachedGoogleApiKey: string | null = null
+let cachedGoogleCx: string | null = null
 
-// 设置搜索 API key (从设置界面调用)
-export function setSearchApiKey(type: 'serper' | 'tavily', key: string) {
-    cachedSearchApiType = type
-    cachedSearchApiKey = key
-    logger.ipc.info(`[HTTP] Search API configured: ${type}`)
+// 设置 Google PSE API 配置
+export function setGoogleSearchConfig(apiKey: string, cx: string) {
+    cachedGoogleApiKey = apiKey
+    cachedGoogleCx = cx
+    logger.ipc.info('[HTTP] Google PSE configured')
 }
 
 async function webSearch(query: string, maxResults = 5): Promise<WebSearchResult> {
-    // 优先使用配置的 API (如果有)
-    const apiKey = cachedSearchApiKey || process.env.SERPER_API_KEY || process.env.TAVILY_API_KEY || ''
-    const apiType = cachedSearchApiType ||
-        (process.env.SERPER_API_KEY ? 'serper' : process.env.TAVILY_API_KEY ? 'tavily' : null)
+    // 优先使用 Google PSE（如果配置了）
+    const googleApiKey = cachedGoogleApiKey || process.env.GOOGLE_API_KEY || ''
+    const googleCx = cachedGoogleCx || process.env.GOOGLE_CX || ''
 
-    if (apiKey && apiType) {
+    if (googleApiKey && googleCx) {
         try {
-            if (apiType === 'serper') {
-                return await searchWithSerper(query, apiKey, maxResults)
-            } else if (apiType === 'tavily') {
-                return await searchWithTavily(query, apiKey, maxResults)
+            const result = await searchWithGoogle(query, googleApiKey, googleCx, maxResults)
+            if (result.success && result.results && result.results.length > 0) {
+                return result
             }
+            logger.ipc.warn('[HTTP] Google PSE returned no results, falling back to DuckDuckGo')
         } catch (error) {
-            logger.ipc.error(`[HTTP] ${apiType} search failed, falling back to local:`, error)
+            logger.ipc.error('[HTTP] Google PSE failed, falling back to DuckDuckGo:', error)
         }
     }
 
-    // 本地抓取方案 - 使用 Electron BrowserWindow
+    // 回退到 DuckDuckGo
     try {
-        return await searchWithLocalBrowser(query, maxResults)
+        return await searchWithDuckDuckGo(query, maxResults)
     } catch (error) {
-        logger.ipc.error('[HTTP] Local browser search failed:', error)
+        logger.ipc.error('[HTTP] DuckDuckGo search failed:', error)
         return {
             success: false,
             error: `搜索失败: ${error}`,
@@ -209,84 +339,19 @@ async function webSearch(query: string, maxResults = 5): Promise<WebSearchResult
     }
 }
 
-// 本地浏览器抓取 (使用 Electron BrowserWindow)
-async function searchWithLocalBrowser(query: string, maxResults: number): Promise<WebSearchResult> {
-    const { BrowserWindow } = require('electron')
-
-    // 创建隐藏的浏览器窗口
-    const win = new BrowserWindow({
-        width: 1280,
-        height: 800,
-        show: false,
-        webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true,
-        },
-    })
-
-    try {
-        // 使用 Bing 搜索 (比 Google 更容易抓取)
-        const encodedQuery = encodeURIComponent(query)
-        const searchUrl = `https://www.bing.com/search?q=${encodedQuery}&count=${maxResults * 2}`
-
-        await win.loadURL(searchUrl)
-
-        // 等待页面加载完成
-        await new Promise(resolve => setTimeout(resolve, 2000))
-
-        // 执行 JavaScript 提取搜索结果
-        const results = await win.webContents.executeJavaScript(`
-            (function() {
-                const results = [];
-                // Bing 搜索结果选择器
-                const items = document.querySelectorAll('#b_results .b_algo');
-                
-                items.forEach(item => {
-                    const titleEl = item.querySelector('h2 a');
-                    const snippetEl = item.querySelector('.b_caption p');
-                    
-                    if (titleEl) {
-                        results.push({
-                            title: titleEl.textContent || '',
-                            url: titleEl.href || '',
-                            snippet: snippetEl ? snippetEl.textContent : '',
-                        });
-                    }
-                });
-                
-                return results;
-            })()
-        `)
-
-        win.close()
-
-        return {
-            success: true,
-            results: results.slice(0, maxResults),
-        }
-    } catch (error) {
-        win.close()
-        throw error
-    }
-}
-
-// Serper.dev API (Google Search - 可选)
-async function searchWithSerper(query: string, apiKey: string, maxResults: number): Promise<WebSearchResult> {
+// Google Programmable Search Engine API
+async function searchWithGoogle(query: string, apiKey: string, cx: string, maxResults: number): Promise<WebSearchResult> {
     return new Promise((resolve) => {
-        const postData = JSON.stringify({
-            q: query,
-            num: maxResults,
-        })
+        const encodedQuery = encodeURIComponent(query)
+        const url = `/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodedQuery}&num=${Math.min(maxResults, 10)}`
 
         const options = {
-            hostname: 'google.serper.dev',
+            hostname: 'www.googleapis.com',
             port: 443,
-            path: '/search',
-            method: 'POST',
+            path: url,
+            method: 'GET',
             headers: {
-                'X-API-KEY': apiKey,
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(postData),
+                'Accept': 'application/json',
             },
         }
 
@@ -296,10 +361,19 @@ async function searchWithSerper(query: string, apiKey: string, maxResults: numbe
             res.on('end', () => {
                 try {
                     const json = JSON.parse(data)
-                    const results: SearchResult[] = []
+                    
+                    // 检查 API 错误
+                    if (json.error) {
+                        resolve({ 
+                            success: false, 
+                            error: `Google API error: ${json.error.message || json.error.code}` 
+                        })
+                        return
+                    }
 
-                    if (json.organic) {
-                        for (const item of json.organic.slice(0, maxResults)) {
+                    const results: SearchResult[] = []
+                    if (json.items) {
+                        for (const item of json.items.slice(0, maxResults)) {
                             results.push({
                                 title: item.title || '',
                                 url: item.link || '',
@@ -310,73 +384,144 @@ async function searchWithSerper(query: string, apiKey: string, maxResults: numbe
 
                     resolve({ success: true, results })
                 } catch {
-                    resolve({ success: false, error: 'Failed to parse Serper response' })
+                    resolve({ success: false, error: 'Failed to parse Google response' })
                 }
             })
         })
 
         req.on('error', (error) => {
-            resolve({ success: false, error: `Serper request failed: ${error.message}` })
+            resolve({ success: false, error: `Google request failed: ${error.message}` })
         })
 
-        req.write(postData)
+        req.setTimeout(10000, () => {
+            req.destroy()
+            resolve({ success: false, error: 'Google request timed out' })
+        })
+
         req.end()
     })
 }
 
-// Tavily API (专为 AI 设计的搜索 - 可选)
-async function searchWithTavily(query: string, apiKey: string, maxResults: number): Promise<WebSearchResult> {
+// DuckDuckGo HTML 抓取
+async function searchWithDuckDuckGo(query: string, maxResults: number): Promise<WebSearchResult> {
     return new Promise((resolve) => {
-        const postData = JSON.stringify({
-            api_key: apiKey,
-            query: query,
-            max_results: maxResults,
-            include_answer: false,
-        })
+        const encodedQuery = encodeURIComponent(query)
+        // 使用 DuckDuckGo 的 HTML 版本，更容易抓取
+        const url = `/html/?q=${encodedQuery}`
 
         const options = {
-            hostname: 'api.tavily.com',
+            hostname: 'html.duckduckgo.com',
             port: 443,
-            path: '/search',
-            method: 'POST',
+            path: url,
+            method: 'GET',
             headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(postData),
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
             },
         }
 
         const req = https.request(options, (res) => {
             let data = ''
+            res.setEncoding('utf8')
             res.on('data', (chunk) => data += chunk)
             res.on('end', () => {
                 try {
-                    const json = JSON.parse(data)
-                    const results: SearchResult[] = []
-
-                    if (json.results) {
-                        for (const item of json.results.slice(0, maxResults)) {
-                            results.push({
-                                title: item.title || '',
-                                url: item.url || '',
-                                snippet: item.content || '',
-                            })
-                        }
-                    }
-
+                    const results = parseDuckDuckGoHtml(data, maxResults)
                     resolve({ success: true, results })
-                } catch {
-                    resolve({ success: false, error: 'Failed to parse Tavily response' })
+                } catch (error) {
+                    resolve({ success: false, error: `Failed to parse DuckDuckGo response: ${error}` })
                 }
             })
         })
 
         req.on('error', (error) => {
-            resolve({ success: false, error: `Tavily request failed: ${error.message}` })
+            resolve({ success: false, error: `DuckDuckGo request failed: ${error.message}` })
         })
 
-        req.write(postData)
+        req.setTimeout(15000, () => {
+            req.destroy()
+            resolve({ success: false, error: 'DuckDuckGo request timed out' })
+        })
+
         req.end()
     })
+}
+
+// 解析 DuckDuckGo HTML 响应
+function parseDuckDuckGoHtml(html: string, maxResults: number): SearchResult[] {
+    const results: SearchResult[] = []
+    
+    // DuckDuckGo HTML 版本的结果在 class="result" 的 div 中
+    // 标题在 class="result__a" 的 a 标签中
+    // 摘要在 class="result__snippet" 的 a 标签中
+    
+    // 匹配结果块
+    const resultRegex = /<div[^>]*class="[^"]*result[^"]*"[^>]*>[\s\S]*?<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>[\s\S]*?<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([^<]*)<\/a>/gi
+    
+    let match
+    while ((match = resultRegex.exec(html)) !== null && results.length < maxResults) {
+        let url = match[1]
+        const title = decodeHtmlEntities(match[2].trim())
+        const snippet = decodeHtmlEntities(match[3].trim())
+        
+        // DuckDuckGo 的链接是重定向链接，需要提取真实 URL
+        if (url.includes('uddg=')) {
+            const uddgMatch = url.match(/uddg=([^&]+)/)
+            if (uddgMatch) {
+                url = decodeURIComponent(uddgMatch[1])
+            }
+        }
+        
+        if (title && url) {
+            results.push({ title, url, snippet })
+        }
+    }
+    
+    // 如果上面的正则没匹配到，尝试更宽松的匹配
+    if (results.length === 0) {
+        const linkRegex = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]*)"[^>]*>([^<]+)<\/a>/gi
+        const snippetRegex = /<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([^<]+)<\/a>/gi
+        
+        const links: { url: string; title: string }[] = []
+        const snippets: string[] = []
+        
+        while ((match = linkRegex.exec(html)) !== null) {
+            let url = match[1]
+            if (url.includes('uddg=')) {
+                const uddgMatch = url.match(/uddg=([^&]+)/)
+                if (uddgMatch) url = decodeURIComponent(uddgMatch[1])
+            }
+            links.push({ url, title: decodeHtmlEntities(match[2].trim()) })
+        }
+        
+        while ((match = snippetRegex.exec(html)) !== null) {
+            snippets.push(decodeHtmlEntities(match[1].trim()))
+        }
+        
+        for (let i = 0; i < Math.min(links.length, maxResults); i++) {
+            results.push({
+                title: links[i].title,
+                url: links[i].url,
+                snippet: snippets[i] || '',
+            })
+        }
+    }
+    
+    return results
+}
+
+// 解码 HTML 实体
+function decodeHtmlEntities(text: string): string {
+    return text
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&#x27;/g, "'")
+        .replace(/&#x2F;/g, '/')
 }
 
 // ===== 注册 IPC Handlers =====
@@ -394,9 +539,9 @@ export function registerHttpHandlers() {
         return webSearch(query, maxResults)
     })
 
-    // 配置搜索 API (可选)
-    ipcMain.handle('http:setSearchApi', async (_event, type: 'serper' | 'tavily', key: string) => {
-        setSearchApiKey(type, key)
+    // 配置 Google PSE
+    ipcMain.handle('http:setGoogleSearch', async (_event, apiKey: string, cx: string) => {
+        setGoogleSearchConfig(apiKey, cx)
         return { success: true }
     })
 

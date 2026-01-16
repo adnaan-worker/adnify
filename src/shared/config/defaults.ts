@@ -205,5 +205,12 @@ export const SECURITY_SETTINGS_DEFAULTS = {
     'make', 'gcc', 'clang', 'cmake',
     'pwd', 'ls', 'dir', 'cat', 'type', 'echo', 'mkdir', 'touch', 'rm', 'mv', 'cp', 'cd',
   ],
+  allowedGitSubcommands: [
+    'status', 'log', 'diff', 'show', 'ls-files', 'rev-parse', 'rev-list', 'blame',
+    'add', 'commit', 'reset', 'restore',
+    'push', 'pull', 'fetch', 'remote',
+    'branch', 'checkout', 'switch', 'merge', 'rebase', 'cherry-pick',
+    'clone', 'init', 'stash', 'tag', 'config',
+  ],
   showSecurityWarnings: true,
 } as const

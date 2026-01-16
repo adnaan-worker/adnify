@@ -143,11 +143,18 @@ export default function TerminalPanel() {
         loadShells()
     }, [])
 
+    // 工作区切换时更新 selectedRoot 并清理旧终端
     useEffect(() => {
-        if (workspace?.roots?.[0] && !selectedRoot) {
-            setSelectedRoot(workspace.roots[0])
+        const newRoot = workspace?.roots?.[0]
+        if (newRoot && newRoot !== selectedRoot) {
+            // 工作区变化，更新 selectedRoot
+            setSelectedRoot(newRoot)
+            
+            // 清理旧工作区的终端（它们的 cwd 已经不在新工作区内了）
+            const oldTerminals = managerState.terminals.filter(t => !workspace?.roots?.includes(t.cwd))
+            oldTerminals.forEach(t => terminalManager.closeTerminal(t.id))
         }
-    }, [workspace?.roots, selectedRoot])
+    }, [workspace?.roots?.[0]])
 
     useEffect(() => {
         const loadScripts = async () => {
@@ -165,12 +172,13 @@ export default function TerminalPanel() {
         loadScripts()
     }, [selectedRoot])
 
-    // 自动创建第一个终端
+    // 当终端面板可见但没有终端时，自动创建一个
     useEffect(() => {
-        if (terminalVisible && managerState.terminals.length === 0 && availableShells.length > 0) {
+        const hasValidWorkspace = selectedRoot || (workspace?.roots && workspace.roots.length > 0)
+        if (terminalVisible && managerState.terminals.length === 0 && availableShells.length > 0 && hasValidWorkspace) {
             createTerminal()
         }
-    }, [terminalVisible, managerState.terminals.length, availableShells.length])
+    }, [terminalVisible, managerState.terminals.length, availableShells.length, selectedRoot, workspace?.roots])
 
     // ===== 窗口大小调整 =====
     
@@ -238,6 +246,8 @@ export default function TerminalPanel() {
     
     const createTerminal = async (shellPath?: string, shellName?: string) => {
         const cwd = selectedRoot || workspace?.roots?.[0] || ''
+        if (!cwd) return
+        
         await terminalManager.createTerminal({
             name: shellName || availableShells[0]?.label || 'Terminal',
             cwd,
@@ -252,6 +262,13 @@ export default function TerminalPanel() {
         if (managerState.terminals.length <= 2) {
             setTerminalLayout('tabs')
         }
+    }
+
+    const closePanel = () => {
+        // 关闭面板时清理所有终端，避免下次打开时出现空白终端
+        managerState.terminals.forEach(t => terminalManager.closeTerminal(t.id))
+        mountedTerminals.current.clear()
+        setTerminalVisible(false)
     }
 
     const handleFixWithAI = () => {
@@ -365,7 +382,7 @@ export default function TerminalPanel() {
                         <Button variant="ghost" size="icon" onClick={() => setTerminalLayout(isSplitView ? 'tabs' : 'split')} className={`h-7 w-7 rounded-lg ${isSplitView ? 'text-accent' : ''}`} title="Toggle Split View"><LayoutTemplate className="w-3.5 h-3.5" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => activeId && terminalManager.getXterm(activeId)?.clear()} className="h-7 w-7 rounded-lg" title="Clear"><Trash2 className="w-3.5 h-3.5" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => setIsCollapsed(!isCollapsed)} className="h-7 w-7 rounded-lg">{isCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}</Button>
-                        <Button variant="ghost" size="icon" onClick={() => setTerminalVisible(false)} className="h-7 w-7 rounded-lg" title="Close"><X className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" onClick={closePanel} className="h-7 w-7 rounded-lg" title="Close"><X className="w-3.5 h-3.5" /></Button>
                     </div>
                 </div>
 

@@ -32,6 +32,42 @@ import {
   getDefaultPromptTemplate,
 } from './promptTemplates'
 
+import { api } from '@/renderer/services/electronAPI'
+import { logger } from '@utils/Logger'
+
+// 项目摘要缓存
+let projectSummaryCache: { path: string; summary: string; timestamp: number } | null = null
+const SUMMARY_CACHE_TTL = 5 * 60 * 1000 // 5 分钟
+
+/**
+ * 加载项目摘要（带缓存）
+ */
+async function loadProjectSummary(workspacePath: string): Promise<string | null> {
+  try {
+    // 检查缓存
+    if (
+      projectSummaryCache &&
+      projectSummaryCache.path === workspacePath &&
+      Date.now() - projectSummaryCache.timestamp < SUMMARY_CACHE_TTL
+    ) {
+      logger.agent.info('[PromptBuilder] Using cached project summary')
+      return projectSummaryCache.summary
+    }
+
+    const summary = await api.index.getProjectSummaryText(workspacePath)
+    if (summary) {
+      projectSummaryCache = { path: workspacePath, summary, timestamp: Date.now() }
+      logger.agent.info('[PromptBuilder] Loaded project summary:', summary.slice(0, 200) + '...')
+      return summary
+    }
+    logger.agent.info('[PromptBuilder] No project summary available')
+    return null
+  } catch (e) {
+    logger.agent.info('[PromptBuilder] Failed to load project summary:', e)
+    return null
+  }
+}
+
 // ============================================
 // 常量导出
 // ============================================
@@ -59,6 +95,7 @@ export interface PromptContext {
   customInstructions: string | null
   plan: Plan | null
   templateId?: string
+  projectSummary?: string | null
 }
 
 // ============================================
@@ -118,6 +155,15 @@ function buildCustomInstructions(instructions: string | null): string | null {
   if (!instructions?.trim()) return null
   return `## Custom Instructions
 ${instructions.trim()}`
+}
+
+function buildProjectSummary(summary: string | null): string | null {
+  if (!summary?.trim()) return null
+  logger.agent.info('[PromptBuilder] Injecting project summary into system prompt, length:', summary.length)
+  return `## Project Overview
+${summary.trim()}
+
+Note: This is an auto-generated project summary. Use it to understand the codebase structure before exploring files.`
 }
 
 function buildPlanSection(plan: Plan | null): string | null {
@@ -204,6 +250,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     WORKFLOW_GUIDELINES,
     OUTPUT_FORMAT,
     buildEnvironment(ctx),
+    buildProjectSummary(ctx.projectSummary || null),
     buildProjectRules(ctx.projectRules),
     buildMemory(ctx.memories),
     buildCustomInstructions(ctx.customInstructions),
@@ -224,6 +271,7 @@ export function buildChatPrompt(ctx: PromptContext): string {
     CODE_CONVENTIONS,
     OUTPUT_FORMAT,
     buildEnvironment(ctx),
+    buildProjectSummary(ctx.projectSummary || null),
     buildProjectRules(ctx.projectRules),
     buildMemory(ctx.memories),
     buildCustomInstructions(ctx.customInstructions),
@@ -241,7 +289,7 @@ export function buildChatPrompt(ctx: PromptContext): string {
  * 
  * 这是提示词系统的主入口，负责：
  * 1. 加载模板
- * 2. 获取动态内容（规则、记忆）
+ * 2. 获取动态内容（规则、记忆、项目摘要）
  * 3. 构建完整提示词
  */
 export async function buildAgentSystemPrompt(
@@ -265,10 +313,11 @@ export async function buildAgentSystemPrompt(
     throw new Error(`Template not found: ${promptTemplateId}`)
   }
 
-  // 并行加载动态内容
-  const [projectRules, memories] = await Promise.all([
+  // 并行加载动态内容（包括项目摘要）
+  const [projectRules, memories, projectSummary] = await Promise.all([
     rulesService.getRules(),
     memoryService.getMemories(),
+    workspacePath ? loadProjectSummary(workspacePath) : Promise.resolve(null),
   ])
 
   // 获取 Plan（仅 plan 模式）
@@ -288,6 +337,7 @@ export async function buildAgentSystemPrompt(
     customInstructions: customInstructions || null,
     plan,
     templateId: template.id,
+    projectSummary,
   }
 
   // 根据模式选择构建器

@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react'
 import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode, Check } from 'lucide-react'
 import { useStore } from '@store'
 import { PROVIDERS } from '@/shared/config/providers'
-import { getEditorConfig, saveEditorConfig, settingsService } from '@renderer/settings'
+import { getEditorConfig, saveEditorConfig } from '@renderer/settings'
 import KeybindingPanel from '@components/panels/KeybindingPanel'
 import { Button, Modal, Select } from '@components/ui'
 import { SettingsTab, EditorSettingsState, LANGUAGES } from './types'
@@ -26,10 +26,9 @@ import {
 
 export default function SettingsModal() {
     const {
-        llmConfig, setLLMConfig, setShowSettings, language, setLanguage,
-        autoApprove, setAutoApprove, providerConfigs, setProviderConfig,
-        promptTemplateId, setPromptTemplateId, agentConfig, setAgentConfig,
-        aiInstructions, setAiInstructions
+        llmConfig, language, autoApprove, providerConfigs, promptTemplateId,
+        agentConfig, aiInstructions, webSearchConfig, mcpConfig,
+        set, setProvider, setShowSettings, save
     } = useStore()
 
     const [activeTab, setActiveTab] = useState<SettingsTab>('provider')
@@ -41,11 +40,12 @@ export default function SettingsModal() {
     const [localAgentConfig, setLocalAgentConfig] = useState(agentConfig)
     const [localProviderConfigs, setLocalProviderConfigs] = useState(providerConfigs)
     const [localAiInstructions, setLocalAiInstructions] = useState(aiInstructions)
+    const [localWebSearchConfig, setLocalWebSearchConfig] = useState(webSearchConfig)
+    const [localMcpConfig, setLocalMcpConfig] = useState(mcpConfig)
     const [saved, setSaved] = useState(false)
 
     const editorConfig = getEditorConfig()
     const [editorSettings, setEditorSettings] = useState<EditorSettingsState>({
-        // 编辑器外观
         fontSize: editorConfig.fontSize,
         tabSize: editorConfig.tabSize,
         wordWrap: editorConfig.wordWrap,
@@ -56,18 +56,14 @@ export default function SettingsModal() {
         autoSave: editorConfig.autoSave,
         autoSaveDelay: editorConfig.autoSaveDelay,
         theme: 'adnify-dark',
-        // AI 补全
         completionEnabled: editorConfig.ai.completionEnabled,
         completionDebounceMs: editorConfig.performance.completionDebounceMs,
         completionMaxTokens: editorConfig.ai.completionMaxTokens,
         completionTriggerChars: editorConfig.ai.completionTriggerChars,
-        // 终端
         terminalScrollback: editorConfig.terminal.scrollback,
         terminalMaxOutputLines: editorConfig.terminal.maxOutputLines,
-        // LSP
         lspTimeoutMs: editorConfig.lsp.timeoutMs,
         lspCompletionTimeoutMs: editorConfig.lsp.completionTimeoutMs,
-        // 性能
         largeFileWarningThresholdMB: editorConfig.performance.largeFileWarningThresholdMB,
         largeFileLineCount: editorConfig.performance.largeFileLineCount,
         commandTimeoutMs: editorConfig.performance.commandTimeoutMs,
@@ -80,24 +76,17 @@ export default function SettingsModal() {
         flushIntervalMs: editorConfig.performance.flushIntervalMs,
     })
 
-    // Sync store state to local state
     useEffect(() => { setLocalConfig(llmConfig) }, [llmConfig])
     useEffect(() => { setLocalProviderConfigs(providerConfigs) }, [providerConfigs])
     useEffect(() => { setLocalLanguage(language) }, [language])
     useEffect(() => { setLocalAutoApprove(autoApprove) }, [autoApprove])
     useEffect(() => { setLocalAgentConfig(agentConfig) }, [agentConfig])
     useEffect(() => { setLocalAiInstructions(aiInstructions) }, [aiInstructions])
+    useEffect(() => { setLocalWebSearchConfig(webSearchConfig) }, [webSearchConfig])
+    useEffect(() => { setLocalMcpConfig(mcpConfig) }, [mcpConfig])
 
     const handleSave = async () => {
-        // 更新 Store 状态
-        setLLMConfig(localConfig)
-        setLanguage(localLanguage)
-        setAutoApprove(localAutoApprove)
-        setPromptTemplateId(localPromptTemplateId)
-        setAgentConfig(localAgentConfig)
-        setAiInstructions(localAiInstructions)
-
-        // 合并当前 provider 的配置到 localProviderConfigs
+        // 合并当前 provider 的配置
         const currentProviderLocalConfig = localProviderConfigs[localConfig.provider] || {}
         const finalProviderConfigs = {
             ...localProviderConfigs,
@@ -112,35 +101,22 @@ export default function SettingsModal() {
             }
         }
 
-        // 批量更新所有 provider configs 到 store
+        // 更新 Store 状态
+        set('llmConfig', localConfig)
+        set('language', localLanguage)
+        set('autoApprove', localAutoApprove)
+        set('promptTemplateId', localPromptTemplateId)
+        set('agentConfig', localAgentConfig)
+        set('aiInstructions', localAiInstructions)
+        set('webSearchConfig', localWebSearchConfig)
+        set('mcpConfig', localMcpConfig)
+
+        // 批量更新所有 provider configs
         for (const [providerId, config] of Object.entries(finalProviderConfigs)) {
-            setProviderConfig(providerId, config)
+            setProvider(providerId, config)
         }
 
-        // 使用 settingsService 统一保存
-        const currentEditorConfig = getEditorConfig()
-        const currentSecuritySettings = settingsService.getCached()?.securitySettings || {
-            enablePermissionConfirm: true,
-            enableAuditLog: true,
-            strictWorkspaceMode: true,
-            allowedShellCommands: [],
-            showSecurityWarnings: true,
-        }
-        
-        await settingsService.saveAll({
-            llmConfig: localConfig as any,
-            language: localLanguage,
-            autoApprove: localAutoApprove,
-            promptTemplateId: localPromptTemplateId,
-            agentConfig: localAgentConfig,
-            providerConfigs: finalProviderConfigs as any,
-            aiInstructions: localAiInstructions,
-            onboardingCompleted: true,
-            editorConfig: currentEditorConfig,
-            securitySettings: currentSecuritySettings,
-        })
-
-        // 编辑器配置独立保存到 editorConfig（localStorage + 文件）
+        // 编辑器配置独立保存
         const newEditorConfig = {
             ...getEditorConfig(),
             fontSize: editorSettings.fontSize,
@@ -185,6 +161,17 @@ export default function SettingsModal() {
         }
         saveEditorConfig(newEditorConfig)
 
+        // 保存到文件
+        await save()
+
+        // 应用网络搜索配置到主进程
+        if (localWebSearchConfig.googleApiKey && localWebSearchConfig.googleCx) {
+            window.electronAPI?.httpSetGoogleSearch?.(localWebSearchConfig.googleApiKey, localWebSearchConfig.googleCx)
+        }
+
+        // 同步 MCP 自动连接设置到主进程
+        window.electronAPI?.mcpSetAutoConnect?.(localMcpConfig.autoConnect ?? true)
+
         setSaved(true)
         setTimeout(() => setSaved(false), 2000)
     }
@@ -213,7 +200,7 @@ export default function SettingsModal() {
     return (
         <Modal isOpen={true} onClose={() => setShowSettings(false)} title="" size="5xl" noPadding className="overflow-hidden bg-background border border-border/50 shadow-2xl">
             <div className="flex h-[75vh] max-h-[800px]">
-                {/* Modern Sidebar */}
+                {/* Sidebar */}
                 <div className="w-64 bg-surface/5 backdrop-blur-xl border-r border-border flex flex-col pt-6 pb-4">
                     <div className="px-6 mb-6">
                         <h2 className="text-lg font-semibold text-text-primary tracking-tight flex items-center gap-2">
@@ -231,13 +218,11 @@ export default function SettingsModal() {
                                     activeTab === tab.id
                                     ? 'bg-accent/10 text-accent'
                                     : 'text-text-secondary hover:bg-surface/50 hover:text-text-primary'
-                                    }`}
+                                }`}
                             >
-                                {/* Active Vertical Indicator */}
                                 {activeTab === tab.id && (
                                     <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-accent rounded-r-full shadow-[0_0_8px_rgba(var(--accent),0.6)]" />
                                 )}
-
                                 <span className={`transition-colors duration-200 ${activeTab === tab.id ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'}`}>
                                     {tab.icon}
                                 </span>
@@ -246,7 +231,6 @@ export default function SettingsModal() {
                         ))}
                     </nav>
 
-                    {/* Language & Footer */}
                     <div className="mt-auto px-4 pt-4 border-t border-border/50 space-y-3">
                         <div className="flex items-center gap-2 px-1 text-text-muted">
                             <Globe className="w-3.5 h-3.5" />
@@ -254,7 +238,7 @@ export default function SettingsModal() {
                         </div>
                         <Select
                             value={localLanguage}
-                            onChange={(value) => setLocalLanguage(value as any)}
+                            onChange={(value) => setLocalLanguage(value as 'en' | 'zh')}
                             options={LANGUAGES.map(l => ({ value: l.id, label: l.name }))}
                             className="w-full text-xs bg-surface border-border/50 hover:border-accent/50 transition-colors"
                         />
@@ -264,7 +248,6 @@ export default function SettingsModal() {
                 {/* Main Content */}
                 <div className="flex-1 flex flex-col min-w-0 bg-background relative">
                     <div className="flex-1 overflow-y-auto px-8 py-8 custom-scrollbar scroll-smooth pb-24">
-                        {/* Tab Title */}
                         <div className="mb-8 pb-4 border-b border-border/50">
                             <h3 className="text-2xl font-bold text-text-primary">
                                 {tabs.find(t => t.id === activeTab)?.label}
@@ -302,12 +285,14 @@ export default function SettingsModal() {
                                     setPromptTemplateId={setLocalPromptTemplateId}
                                     agentConfig={localAgentConfig}
                                     setAgentConfig={setLocalAgentConfig}
+                                    webSearchConfig={localWebSearchConfig}
+                                    setWebSearchConfig={setLocalWebSearchConfig}
                                     language={language}
                                 />
                             )}
                             {activeTab === 'rules' && <RulesMemorySettings language={language} />}
                             {activeTab === 'keybindings' && <KeybindingPanel />}
-                            {activeTab === 'mcp' && <McpSettings language={language} />}
+                            {activeTab === 'mcp' && <McpSettings language={language} mcpConfig={localMcpConfig} setMcpConfig={setLocalMcpConfig} />}
                             {activeTab === 'lsp' && <LspSettings language={language} />}
                             {activeTab === 'indexing' && <IndexSettings language={language} />}
                             {activeTab === 'security' && <SecuritySettings language={language} />}
@@ -315,7 +300,6 @@ export default function SettingsModal() {
                         </div>
                     </div>
 
-                    {/* Floating Footer */}
                     <div className="absolute bottom-0 left-0 right-0 px-8 py-4 border-t border-border/50 bg-background/80 backdrop-blur-xl flex items-center justify-end gap-3 z-10">
                         <Button variant="ghost" onClick={() => setShowSettings(false)} className="hover:bg-surface text-text-secondary">
                             {language === 'zh' ? '取消' : 'Cancel'}

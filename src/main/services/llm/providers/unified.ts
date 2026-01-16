@@ -13,12 +13,26 @@ import { ChatParams, LLMToolCall, LLMErrorClass, LLMErrorCode, LLMConfig } from 
 import { LLM_DEFAULTS } from '@shared/config/defaults'
 import { getBuiltinProvider, type LLMAdapterConfig, type ApiProtocol, type VisionConfig } from '@shared/config/providers'
 import { logger } from '@shared/utils/Logger'
+import { Agent as HttpAgent } from 'http'
+import { Agent as HttpsAgent } from 'https'
 
 // SDK imports
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 import { GoogleGenAI, Type as SchemaType } from '@google/genai'
 import type { Content, Part, FunctionDeclaration, Tool as GeminiTool } from '@google/genai'
+
+// 全局连接池（复用 TCP 连接）
+const httpAgent = new HttpAgent({ keepAlive: true, maxSockets: 10, keepAliveMsecs: 30000 })
+const httpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 10, keepAliveMsecs: 30000 })
+
+// 超时配置
+const TIMEOUT_CONFIG = {
+  connect: 10000,      // 连接超时 10s
+  firstByte: 30000,    // 首字节超时 30s（流式）
+  total: 120000,       // 总超时 120s（非流式）
+  streamTotal: 300000, // 流式总超时 5min
+}
 
 /**
  * 统一 Provider
@@ -100,17 +114,20 @@ export class UnifiedProvider extends BaseProvider {
   // OpenAI 协议处理
   // ============================================
 
-  private getOpenAIClient(): OpenAI {
+  private getOpenAIClient(stream: boolean = true): OpenAI {
     if (!this.openaiClient) {
+      // 根据流式/非流式选择不同超时
+      const timeout = stream ? TIMEOUT_CONFIG.streamTotal : (this.config.timeout || TIMEOUT_CONFIG.total)
+      
       const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
         apiKey: this.config.apiKey || 'ollama',
         baseURL: this.config.baseUrl,
-        timeout: this.config.timeout || LLM_DEFAULTS.timeout,
-        maxRetries: 0,
+        timeout,
+        maxRetries: 2, // 自动重试 429/5xx 错误
       }
 
       // 应用高级配置
-      if (this.config.advanced?.request?.headers) {
+      if (this.config.advanced?.request?.headers && clientOptions) {
         clientOptions.defaultHeaders = this.config.advanced.request.headers
       }
 
@@ -125,7 +142,7 @@ export class UnifiedProvider extends BaseProvider {
     try {
       this.log('info', 'Chat (OpenAI)', { model, messageCount: messages.length, stream })
 
-      const client = this.getOpenAIClient()
+      const client = this.getOpenAIClient(stream)
 
       // 转换消息和工具
       const converted = MessageAdapter.convert(messages, systemPrompt, 'openai', this.adapterConfig, this.visionConfig)
@@ -315,7 +332,7 @@ export class UnifiedProvider extends BaseProvider {
   // Anthropic 协议处理
   // ============================================
 
-  private getAnthropicClient(): Anthropic {
+  private getAnthropicClient(stream: boolean = true): Anthropic {
     if (!this.anthropicClient) {
       const providerDef = getBuiltinProvider(this.config.provider)
       let baseUrl = this.config.baseUrl?.replace(/\/v1\/?$/, '') || undefined
@@ -332,9 +349,12 @@ export class UnifiedProvider extends BaseProvider {
         ...this.config.advanced?.request?.headers,
       }
 
+      // 根据流式/非流式选择不同超时
+      const timeout = stream ? TIMEOUT_CONFIG.streamTotal : (this.config.timeout || TIMEOUT_CONFIG.total)
+
       this.anthropicClient = new Anthropic({
         apiKey: this.config.apiKey,
-        timeout: this.config.timeout || LLM_DEFAULTS.timeout,
+        timeout,
         ...(baseUrl ? { baseURL: baseUrl } : {}),
         defaultHeaders,
       })
@@ -348,7 +368,7 @@ export class UnifiedProvider extends BaseProvider {
     try {
       this.log('info', 'Chat (Anthropic)', { model, messageCount: messages.length, stream })
 
-      const client = this.getAnthropicClient()
+      const client = this.getAnthropicClient(stream)
 
       // 转换消息和工具
       const converted = MessageAdapter.convert(messages, systemPrompt, 'anthropic', undefined, this.visionConfig)
@@ -881,39 +901,87 @@ export class UnifiedProvider extends BaseProvider {
         stream,
       })
 
-      // 发送请求
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), this.config.timeout || LLM_DEFAULTS.timeout)
-      if (signal) signal.addEventListener('abort', () => controller.abort())
+      // 根据流式/非流式选择不同超时
+      const timeout = stream ? TIMEOUT_CONFIG.streamTotal : (this.config.timeout || TIMEOUT_CONFIG.total)
+      
+      // 选择合适的 agent（连接池复用）
+      const isHttps = url.startsWith('https')
+      const agent = isHttps ? httpsAgent : httpAgent
 
-      try {
-        const response = await fetch(url, {
-          method: request.method,
-          headers,
-          body: JSON.stringify(body),
-          signal: controller.signal,
-        })
+      // 发送请求（带重试）
+      const maxRetries = 2
+      let lastError: Error | null = null
 
-        clearTimeout(timeoutId)
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), timeout)
+        if (signal) signal.addEventListener('abort', () => controller.abort())
 
-        if (!response.ok) {
-          const errorText = await response.text()
-          throw new LLMErrorClass(
-            `HTTP ${response.status}: ${errorText}`,
-            this.mapHttpErrorCode(response.status),
-            response.status,
-            response.status === 429 || response.status >= 500
-          )
+        try {
+          // 使用 undici 的 dispatcher 或 node-fetch 的 agent
+          const fetchOptions: RequestInit & { dispatcher?: unknown } = {
+            method: request.method,
+            headers,
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          }
+          
+          // Node.js 环境下使用 agent
+          if (typeof process !== 'undefined' && process.versions?.node) {
+            (fetchOptions as Record<string, unknown>).agent = agent
+          }
+
+          const response = await fetch(url, fetchOptions)
+
+          clearTimeout(timeoutId)
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            const isRetryable = response.status === 429 || response.status >= 500
+            
+            // 如果可重试且还有重试次数，等待后重试
+            if (isRetryable && attempt < maxRetries) {
+              const delay = Math.min(1000 * Math.pow(2, attempt), 4000) // 指数退避: 1s, 2s, 4s
+              this.log('warn', `Request failed (${response.status}), retrying in ${delay}ms...`, { attempt: attempt + 1 })
+              await new Promise(resolve => setTimeout(resolve, delay))
+              continue
+            }
+            
+            throw new LLMErrorClass(
+              `HTTP ${response.status}: ${errorText}`,
+              this.mapHttpErrorCode(response.status),
+              response.status,
+              isRetryable
+            )
+          }
+
+          if (stream) {
+            await this.handleCustomStream(response, onStream, onToolCall, onComplete)
+          } else {
+            await this.handleCustomNonStream(response, onStream, onToolCall, onComplete)
+          }
+          return // 成功，退出
+        } catch (err) {
+          clearTimeout(timeoutId)
+          lastError = err as Error
+          
+          // 检查是否是网络错误且可重试
+          const isNetworkError = (err as { code?: string }).code === 'ECONNREFUSED' || 
+                                 (err as { code?: string }).code === 'ETIMEDOUT' ||
+                                 (err as { name?: string }).name === 'TimeoutError'
+          
+          if (isNetworkError && attempt < maxRetries) {
+            const delay = Math.min(1000 * Math.pow(2, attempt), 4000)
+            this.log('warn', `Network error, retrying in ${delay}ms...`, { attempt: attempt + 1 })
+            await new Promise(resolve => setTimeout(resolve, delay))
+            continue
+          }
+          
+          throw err
         }
-
-        if (stream) {
-          await this.handleCustomStream(response, onStream, onToolCall, onComplete)
-        } else {
-          await this.handleCustomNonStream(response, onStream, onToolCall, onComplete)
-        }
-      } finally {
-        clearTimeout(timeoutId)
       }
+      
+      if (lastError) throw lastError
     } catch (error) {
       onError(this.parseError(error))
     }

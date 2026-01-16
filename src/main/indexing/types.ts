@@ -2,71 +2,39 @@
  * 代码库索引类型定义
  */
 
-// Embedding 提供商类型（包含自定义）
-export type EmbeddingProvider = 'jina' | 'voyage' | 'openai' | 'cohere' | 'huggingface' | 'ollama' | 'custom'
+// ==================== 索引模式 ====================
 
-// Embedding 配置
-export interface EmbeddingConfig {
-  provider: EmbeddingProvider
-  apiKey?: string
-  model?: string
-  baseUrl?: string  // 自定义端点
-  dimensions?: number  // 向量维度（自定义服务需要指定）
-}
+/** 索引模式 */
+export type IndexMode = 'structural' | 'semantic'
 
-// 默认模型配置
-export const DEFAULT_EMBEDDING_MODELS: Record<EmbeddingProvider, string> = {
-  jina: 'jina-embeddings-v2-base-code',
-  voyage: 'voyage-code-2',
-  openai: 'text-embedding-3-small',
-  cohere: 'embed-english-v3.0',
-  huggingface: 'sentence-transformers/all-MiniLM-L6-v2',
-  ollama: 'nomic-embed-text',
-  custom: '',  // 自定义服务需要用户指定
-}
+// ==================== 通用类型 ====================
 
-// Embedding API 端点
-export const EMBEDDING_ENDPOINTS: Record<EmbeddingProvider, string> = {
-  jina: 'https://api.jina.ai/v1/embeddings',
-  voyage: 'https://api.voyageai.com/v1/embeddings',
-  openai: 'https://api.openai.com/v1/embeddings',
-  cohere: 'https://api.cohere.ai/v1/embed',
-  huggingface: 'https://api-inference.huggingface.co/pipeline/feature-extraction',
-  ollama: 'http://localhost:11434/api/embeddings',
-  custom: '',  // 自定义服务需要用户指定
-}
+/** 符号类型 */
+export type SymbolKind = 'function' | 'class' | 'interface' | 'type' | 'variable' | 'method' | 'module'
 
-// 向量维度
-export const EMBEDDING_DIMENSIONS: Record<string, number> = {
-  'jina-embeddings-v2-base-code': 768,
-  'voyage-code-2': 1536,
-  'text-embedding-3-small': 1536,
-  'text-embedding-3-large': 3072,
-  'embed-english-v3.0': 1024,
-  'all-MiniLM-L6-v2': 384,
-  'nomic-embed-text': 768,
-}
+/** 代码块类型 */
+export type ChunkType = 'file' | 'function' | 'class' | 'block'
 
-// 代码块
+/** 代码块 */
 export interface CodeChunk {
   id: string
   filePath: string
   relativePath: string
-  fileHash: string     // 文件内容哈希（用于增量更新）
+  fileHash: string
   content: string
   startLine: number
   endLine: number
-  type: 'file' | 'function' | 'class' | 'block'
+  type: ChunkType
   language: string
-  symbols?: string[]  // 函数名、类名等
+  symbols?: string[]
 }
 
-// 索引后的代码块（带向量）
+/** 带向量的代码块 */
 export interface IndexedChunk extends CodeChunk {
   vector: number[]
 }
 
-// 搜索结果
+/** 搜索结果 */
 export interface SearchResult {
   filePath: string
   relativePath: string
@@ -78,8 +46,20 @@ export interface SearchResult {
   language: string
 }
 
-// 索引状态
+/** 符号信息 */
+export interface SymbolInfo {
+  name: string
+  kind: SymbolKind
+  filePath: string
+  relativePath: string
+  startLine: number
+  endLine: number
+  signature?: string
+}
+
+/** 索引状态 */
 export interface IndexStatus {
+  mode: IndexMode
   isIndexing: boolean
   totalFiles: number
   indexedFiles: number
@@ -88,25 +68,83 @@ export interface IndexStatus {
   error?: string
 }
 
-// 索引配置
-export interface IndexConfig {
-  embedding: EmbeddingConfig
-  chunkSize: number        // 每个块的最大行数
-  chunkOverlap: number     // 块之间的重叠行数
-  maxFileSize: number      // 最大文件大小（字节）
-  ignoredDirs: string[]    // 忽略的目录
-  includedExts: string[]   // 包含的文件扩展名
+// ==================== 项目摘要 ====================
+
+/** 目录摘要 */
+export interface DirectorySummary {
+  path: string
+  description?: string
+  fileCount: number
+  mainFiles: string[]
 }
 
-// 默认索引配置
+/** 文件摘要 */
+export interface FileSummary {
+  relativePath: string
+  language: string
+  symbols: SymbolInfo[]
+}
+
+/** 项目摘要 */
+export interface ProjectSummary {
+  name: string
+  structure: DirectorySummary[]
+  keyFiles: FileSummary[]
+  totalFiles: number
+  totalSymbols: number
+  languages: Record<string, number>
+  generatedAt: number
+}
+
+// ==================== Embedding 配置 ====================
+
+export type EmbeddingProvider = 'jina' | 'voyage' | 'openai' | 'cohere' | 'huggingface' | 'ollama' | 'custom'
+
+export interface EmbeddingConfig {
+  provider: EmbeddingProvider
+  apiKey?: string
+  model?: string
+  baseUrl?: string
+}
+
+export const DEFAULT_EMBEDDING_MODELS: Record<EmbeddingProvider, string> = {
+  jina: 'jina-embeddings-v2-base-code',
+  voyage: 'voyage-code-2',
+  openai: 'text-embedding-3-small',
+  cohere: 'embed-english-v3.0',
+  huggingface: 'sentence-transformers/all-MiniLM-L6-v2',
+  ollama: 'nomic-embed-text',
+  custom: '',
+}
+
+export const EMBEDDING_ENDPOINTS: Record<EmbeddingProvider, string> = {
+  jina: 'https://api.jina.ai/v1/embeddings',
+  voyage: 'https://api.voyageai.com/v1/embeddings',
+  openai: 'https://api.openai.com/v1/embeddings',
+  cohere: 'https://api.cohere.ai/v1/embed',
+  huggingface: 'https://api-inference.huggingface.co/pipeline/feature-extraction',
+  ollama: 'http://localhost:11434/api/embeddings',
+  custom: '',
+}
+
+// ==================== 索引配置 ====================
+
+export interface IndexConfig {
+  mode: IndexMode
+  embedding: EmbeddingConfig
+  chunkSize: number
+  chunkOverlap: number
+  maxFileSize: number
+  ignoredDirs: string[]
+  includedExts: string[]
+}
+
 export const DEFAULT_INDEX_CONFIG: IndexConfig = {
-  embedding: {
-    provider: 'jina',
-    // model 不指定，让 EmbeddingService 根据 provider 自动选择默认值
-  },
+  mode: 'structural',  // 默认使用结构化索引
+  embedding: { provider: 'jina' },
   chunkSize: 80,
   chunkOverlap: 10,
-  maxFileSize: 1024 * 1024,  // 1MB
+  maxFileSize: 1024 * 1024,
   ignoredDirs: ['node_modules', '.git', 'dist', 'build', '.adnify', 'coverage', '__pycache__', '.venv', 'venv'],
   includedExts: ['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.java', '.cpp', '.c', '.h', '.hpp', '.cs', '.rb', '.php', '.swift', '.kt', '.scala', '.vue', '.svelte'],
 }

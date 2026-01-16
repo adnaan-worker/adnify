@@ -10,11 +10,10 @@ import { toast } from '@components/common/ToastProvider'
 import { Button, Switch } from '@components/ui'
 import { Language } from '@renderer/i18n'
 import { useStore } from '@store'
-import { downloadSettings, importSettingsFromJSON, settingsService } from '@renderer/settings'
+import { downloadSettings, importSettings, settingsService } from '@renderer/settings'
 import { Agent } from '@/renderer/agent'
 import { memoryService } from '@/renderer/agent/services/memoryService'
-import type { RuntimeSettings } from '@shared/config/types'
-import type { ProviderModelConfig } from '@renderer/store/slices/settingsSlice'
+import type { ProviderModelConfig } from '@shared/config/settings'
 
 interface SystemSettingsProps {
     language: Language
@@ -36,9 +35,21 @@ export function SystemSettings({ language }: SystemSettingsProps) {
     const store = useStore()
 
     // 构建当前设置对象
-    const getCurrentSettings = (): RuntimeSettings => {
-        const cached = settingsService.getCached()
-        return cached || settingsService.getDefaultSettings()
+    const getCurrentSettings = () => {
+        return settingsService.getCache() || {
+            llmConfig: store.llmConfig,
+            language: store.language,
+            autoApprove: store.autoApprove,
+            promptTemplateId: store.promptTemplateId,
+            providerConfigs: store.providerConfigs,
+            agentConfig: store.agentConfig,
+            editorConfig: store.editorConfig,
+            securitySettings: store.securitySettings,
+            webSearchConfig: store.webSearchConfig,
+            mcpConfig: store.mcpConfig,
+            aiInstructions: store.aiInstructions,
+            onboardingCompleted: store.onboardingCompleted,
+        }
     }
 
     const handleExport = () => {
@@ -61,7 +72,7 @@ export function SystemSettings({ language }: SystemSettingsProps) {
 
         try {
             const text = await file.text()
-            const result = importSettingsFromJSON(text)
+            const result = importSettings(text)
             
             if (!result.success || !result.settings) {
                 toast.error(result.error || (language === 'zh' ? '导入失败' : 'Import failed'))
@@ -71,23 +82,22 @@ export function SystemSettings({ language }: SystemSettingsProps) {
             const settings = result.settings
 
             // 应用导入的设置
-            if (settings.language) store.setLanguage(settings.language as 'en' | 'zh')
-            if (settings.autoApprove) store.setAutoApprove(settings.autoApprove)
-            if (settings.promptTemplateId) store.setPromptTemplateId(settings.promptTemplateId)
-            if (settings.agentConfig) store.setAgentConfig(settings.agentConfig)
-            if (settings.aiInstructions !== undefined) store.setAiInstructions(settings.aiInstructions)
+            if (settings.language) store.set('language', settings.language as 'en' | 'zh')
+            if (settings.autoApprove) store.set('autoApprove', settings.autoApprove)
+            if (settings.promptTemplateId) store.set('promptTemplateId', settings.promptTemplateId)
+            if (settings.agentConfig) store.set('agentConfig', settings.agentConfig)
+            if (settings.aiInstructions !== undefined) store.set('aiInstructions', settings.aiInstructions)
             
             // 应用 provider 配置
             if (settings.providerConfigs) {
                 for (const [id, config] of Object.entries(settings.providerConfigs)) {
-                    store.setProviderConfig(id, config as ProviderModelConfig)
+                    store.setProvider(id, config as ProviderModelConfig)
                 }
             }
 
             // 应用 LLM 配置
             if (settings.llmConfig) {
-                store.setLLMConfig({
-                    ...store.llmConfig,
+                store.update('llmConfig', {
                     provider: settings.llmConfig.provider || store.llmConfig.provider,
                     model: settings.llmConfig.model || store.llmConfig.model,
                 })

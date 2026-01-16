@@ -6,7 +6,8 @@
 import { api } from '@/renderer/services/electronAPI'
 import type { StateCreator } from 'zustand'
 import { logger } from '@utils/Logger'
-import type { FileSnapshot, PendingChange, MessageCheckpoint } from '../../types'
+import type { FileSnapshot, PendingChange, MessageCheckpoint, CheckpointImage } from '../../types'
+import type { ContextItem } from '../../types'
 import type { ThreadSlice } from './threadSlice'
 
 // ===== 类型定义 =====
@@ -27,9 +28,9 @@ export interface CheckpointActions {
     getPendingChanges: () => PendingChange[]
 
     // 消息检查点操作
-    createMessageCheckpoint: (messageId: string, description: string) => Promise<string>
+    createMessageCheckpoint: (messageId: string, description: string, images?: CheckpointImage[], contextItems?: ContextItem[]) => Promise<string>
     addSnapshotToCurrentCheckpoint: (filePath: string, content: string | null) => void
-    restoreToCheckpoint: (checkpointId: string) => Promise<{ success: boolean; restoredFiles: string[]; errors: string[] }>
+    restoreToCheckpoint: (checkpointId: string) => Promise<{ success: boolean; restoredFiles: string[]; errors: string[]; images?: CheckpointImage[]; contextItems?: ContextItem[] }>
     getCheckpointForMessage: (messageId: string) => MessageCheckpoint | null
     clearMessageCheckpoints: () => void
     getMessageCheckpoints: () => MessageCheckpoint[]
@@ -157,7 +158,7 @@ export const createCheckpointSlice: StateCreator<
     },
 
     // 创建消息检查点
-    createMessageCheckpoint: async (messageId, description) => {
+    createMessageCheckpoint: async (messageId, description, images, contextItems) => {
         const threadId = get().currentThreadId
         if (!threadId) return ''
 
@@ -173,9 +174,11 @@ export const createCheckpointSlice: StateCreator<
             timestamp: Date.now(),
             fileSnapshots,
             description,
+            images,
+            contextItems,
         }
 
-        logger.agent.info('[Checkpoint] Created checkpoint:', checkpoint.id, 'for message:', messageId, 'with files:', Object.keys(fileSnapshots))
+        logger.agent.info('[Checkpoint] Created checkpoint:', checkpoint.id, 'for message:', messageId, 'with files:', Object.keys(fileSnapshots), 'images:', images?.length ?? 0, 'contextItems:', contextItems?.length ?? 0)
 
         set(state => ({
             messageCheckpoints: [...state.messageCheckpoints, checkpoint],
@@ -299,7 +302,14 @@ export const createCheckpointSlice: StateCreator<
             pendingChanges: [],
         }))
 
-        return { success: errors.length === 0, restoredFiles, errors }
+        // 返回检查点中保存的图片和上下文，用于恢复到输入框
+        return { 
+            success: errors.length === 0, 
+            restoredFiles, 
+            errors,
+            images: checkpoint.images,
+            contextItems: checkpoint.contextItems,
+        }
     },
 
     // 获取消息对应的检查点

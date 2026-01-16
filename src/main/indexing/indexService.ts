@@ -1,65 +1,495 @@
 /**
- * 代码库索引主服务
- * 整合 Embedding、分块、向量存储
+ * 代码库索引服务
+ * 支持两种模式：
+ * - structural: 结构化索引（默认），基于 Tree-sitter + BM25，零配置
+ * - semantic: 语义索引，基于 Embedding + 向量搜索，需要 API
  */
 
-import { logger, normalizePath } from '@shared/utils'
+import * as fs from 'fs'
 import * as path from 'path'
 import { BrowserWindow } from 'electron'
 import { Worker } from 'worker_threads'
+import { logger, normalizePath } from '@shared/utils'
+import { TreeSitterChunker } from './treeSitterChunker'
+import { ChunkerService } from './chunker'
 import { EmbeddingService } from './embedder'
 import { VectorStoreService } from './vectorStore'
+import { BM25Index, SymbolIndex } from './search'
+import { ProjectSummaryGenerator } from './summary'
 import {
-  IndexConfig,
-  IndexStatus,
-  SearchResult,
-  EmbeddingConfig,
+  IndexConfig, IndexStatus, IndexMode, SearchResult,
+  EmbeddingConfig, ProjectSummary, SymbolInfo, CodeChunk,
   DEFAULT_INDEX_CONFIG,
 } from './types'
 
-/**
- * Worker 响应消息类型（与 worker 中定义保持一致）
- */
-interface WorkerProgressMessage { type: 'progress'; processed: number; total: number }
+// Worker 消息类型
 interface WorkerResultMessage { type: 'result'; chunks: any[]; processed: number; total: number }
-interface WorkerUpdateResultMessage { type: 'update_result'; filePath: string; chunks: any[]; deleted: boolean }
-interface WorkerBatchUpdateResultMessage { type: 'batch_update_result'; results: Array<{ filePath: string; chunks: any[]; deleted: boolean }> }
 interface WorkerCompleteMessage { type: 'complete'; totalChunks: number }
 interface WorkerErrorMessage { type: 'error'; error: string }
-
-type WorkerMessage = 
-  | WorkerProgressMessage 
-  | WorkerResultMessage 
-  | WorkerUpdateResultMessage 
-  | WorkerBatchUpdateResultMessage
-  | WorkerCompleteMessage 
-  | WorkerErrorMessage
+type WorkerMessage = { type: 'progress'; processed: number; total: number } | WorkerResultMessage | WorkerCompleteMessage | WorkerErrorMessage
 
 export class CodebaseIndexService {
   private workspacePath: string
   private config: IndexConfig
-  private embedder: EmbeddingService
-  private vectorStore: VectorStoreService
   private mainWindow: BrowserWindow | null = null
+
+  // 结构化索引组件
+  private chunker: TreeSitterChunker
+  private fallbackChunker: ChunkerService
+  private bm25Index: BM25Index
+  private symbolIndex: SymbolIndex
+  private summaryGenerator: ProjectSummaryGenerator
+  private projectSummary: ProjectSummary | null = null
+
+  // 语义索引组件（按需初始化）
+  private embedder: EmbeddingService | null = null
+  private vectorStore: VectorStoreService | null = null
   private worker: Worker | null = null
 
   private status: IndexStatus = {
+    mode: 'structural',
     isIndexing: false,
     totalFiles: 0,
     indexedFiles: 0,
     totalChunks: 0,
   }
-  
-  // 进度节流：避免频繁发送 IPC 消息
+
   private lastProgressEmit = 0
   private readonly PROGRESS_THROTTLE_MS = 100
 
   constructor(workspacePath: string, config?: Partial<IndexConfig>) {
     this.workspacePath = workspacePath
     this.config = { ...DEFAULT_INDEX_CONFIG, ...config }
-    this.embedder = new EmbeddingService(this.config.embedding)
-    this.vectorStore = new VectorStoreService(workspacePath)
-    this.initWorker()
+    this.status.mode = this.config.mode
+
+    // 初始化结构化索引组件
+    this.chunker = new TreeSitterChunker(this.config)
+    this.fallbackChunker = new ChunkerService(this.config)
+    this.bm25Index = new BM25Index()
+    this.symbolIndex = new SymbolIndex()
+    this.summaryGenerator = new ProjectSummaryGenerator(workspacePath)
+  }
+
+  // ==================== 公共 API ====================
+
+  setMainWindow(window: BrowserWindow): void {
+    this.mainWindow = window
+  }
+
+  private get structuralIndexPath(): string {
+    return path.join(this.workspacePath, '.adnify', 'structural-index.json')
+  }
+
+  async initialize(): Promise<void> {
+    await this.chunker.init()
+
+    // 加载缓存的项目摘要
+    this.projectSummary = await this.summaryGenerator.loadCache()
+
+    // 加载缓存的结构化索引
+    await this.loadStructuralIndex()
+
+    // 语义模式：初始化向量存储
+    if (this.config.mode === 'semantic') {
+      await this.initSemanticComponents()
+    }
+
+    logger.index.info(`[IndexService] Initialized (${this.config.mode} mode) for:`, this.workspacePath)
+  }
+
+  /** 加载结构化索引缓存 */
+  private async loadStructuralIndex(): Promise<void> {
+    try {
+      if (fs.existsSync(this.structuralIndexPath)) {
+        const content = await fs.promises.readFile(this.structuralIndexPath, 'utf-8')
+        const data = JSON.parse(content)
+        if (data.bm25) this.bm25Index.fromJSON(data.bm25)
+        if (data.symbols) this.symbolIndex.fromJSON(data.symbols)
+        this.status.totalChunks = this.bm25Index.size
+        this.status.indexedFiles = this.symbolIndex.fileCount
+        this.status.totalFiles = data.totalFiles || this.symbolIndex.fileCount
+        if (data.savedAt) this.status.lastIndexedAt = data.savedAt
+        logger.index.info(`[IndexService] Loaded structural index: ${this.bm25Index.size} chunks, ${this.symbolIndex.size} symbols`)
+      }
+    } catch (e) {
+      logger.index.warn('[IndexService] Failed to load structural index:', e)
+    }
+  }
+
+  /** 保存结构化索引缓存 */
+  private async saveStructuralIndex(): Promise<void> {
+    try {
+      const dir = path.dirname(this.structuralIndexPath)
+      if (!fs.existsSync(dir)) {
+        await fs.promises.mkdir(dir, { recursive: true })
+      }
+      const data = {
+        bm25: this.bm25Index.toJSON(),
+        symbols: this.symbolIndex.toJSON(),
+        totalFiles: this.status.totalFiles,
+        savedAt: Date.now(),
+      }
+      await fs.promises.writeFile(this.structuralIndexPath, JSON.stringify(data))
+      logger.index.info('[IndexService] Saved structural index')
+    } catch (e) {
+      logger.index.warn('[IndexService] Failed to save structural index:', e)
+    }
+  }
+
+  /** 清除结构化索引缓存 */
+  private async clearStructuralIndexCache(): Promise<void> {
+    try {
+      if (fs.existsSync(this.structuralIndexPath)) {
+        await fs.promises.unlink(this.structuralIndexPath)
+      }
+    } catch (e) {
+      logger.index.warn('[IndexService] Failed to clear structural index cache:', e)
+    }
+  }
+
+  getStatus(): IndexStatus {
+    return { ...this.status }
+  }
+
+  getMode(): IndexMode {
+    return this.config.mode
+  }
+
+  /** 切换索引模式 */
+  async setMode(mode: IndexMode): Promise<void> {
+    if (mode === this.config.mode) return
+
+    this.config.mode = mode
+    this.status.mode = mode
+
+    if (mode === 'semantic') {
+      await this.initSemanticComponents()
+    }
+
+    logger.index.info(`[IndexService] Switched to ${mode} mode`)
+  }
+
+  /** 检查是否有索引 */
+  async hasIndex(): Promise<boolean> {
+    // 检查内存中的索引
+    if (this.bm25Index.size > 0) return true
+    // 检查缓存的摘要
+    if (this.projectSummary) return true
+    // 语义模式检查向量存储
+    if (this.config.mode === 'semantic') {
+      return this.vectorStore?.hasIndex() ?? false
+    }
+    return false
+  }
+
+  /** 全量索引 */
+  async indexWorkspace(): Promise<void> {
+    if (this.status.isIndexing) {
+      logger.index.info('[IndexService] Already indexing, skipping...')
+      return
+    }
+
+    this.status = { ...this.status, isIndexing: true, totalFiles: 0, indexedFiles: 0, totalChunks: 0 }
+    this.emitProgress()
+
+    try {
+      if (this.config.mode === 'structural') {
+        await this.buildStructuralIndex()
+        await this.saveStructuralIndex()
+      } else {
+        await this.buildSemanticIndex()
+      }
+
+      this.status.isIndexing = false
+      this.status.lastIndexedAt = Date.now()
+      this.emitProgress(true)
+    } catch (e) {
+      logger.index.error('[IndexService] Indexing failed:', e)
+      this.status.error = e instanceof Error ? e.message : String(e)
+      this.status.isIndexing = false
+      this.emitProgress(true)
+    }
+  }
+
+  /** 搜索 */
+  async search(query: string, topK: number = 10): Promise<SearchResult[]> {
+    if (this.config.mode === 'structural') {
+      return this.bm25Index.search(query, topK)
+    }
+
+    if (!this.vectorStore?.isInitialized() || !this.embedder) {
+      throw new Error('Semantic index not initialized')
+    }
+
+    const queryVector = await this.embedder.embed(query)
+    return this.vectorStore.search(queryVector, topK)
+  }
+
+  /** 混合搜索 */
+  async hybridSearch(query: string, topK: number = 10): Promise<SearchResult[]> {
+    if (this.config.mode === 'structural') {
+      // 结构化模式：BM25 + 符号搜索融合
+      const bm25Results = this.bm25Index.search(query, topK * 2)
+      const symbolResults = this.symbolIndex.search(query, topK)
+
+      return this.fuseResults(bm25Results, symbolResults, topK)
+    }
+
+    // 语义模式：向量 + 关键词搜索融合
+    if (!this.vectorStore?.isInitialized() || !this.embedder) {
+      throw new Error('Semantic index not initialized')
+    }
+
+    const keywords = this.extractKeywords(query)
+    const [semanticResults, keywordResults] = await Promise.all([
+      this.search(query, topK * 2),
+      keywords.length > 0 ? this.vectorStore.keywordSearch(keywords, topK * 2) : Promise.resolve([])
+    ])
+
+    if (keywordResults.length === 0) return semanticResults.slice(0, topK)
+    return this.fuseResultsRRF(semanticResults, keywordResults, topK)
+  }
+
+  /** 符号搜索 */
+  searchSymbols(query: string, topK: number = 20): SymbolInfo[] {
+    return this.symbolIndex.search(query, topK)
+  }
+
+  /** 获取项目摘要 */
+  getProjectSummary(): ProjectSummary | null {
+    return this.projectSummary
+  }
+
+  /** 获取项目摘要文本 */
+  getProjectSummaryText(): string {
+    if (!this.projectSummary) return ''
+    return this.summaryGenerator.toText(this.projectSummary)
+  }
+
+  /** 获取文件符号 */
+  getFileSymbols(relativePath: string): SymbolInfo[] {
+    return this.symbolIndex.getFileSymbols(relativePath)
+  }
+
+  /** 清空索引 */
+  async clearIndex(): Promise<void> {
+    this.bm25Index.clear()
+    this.symbolIndex.clear()
+    this.projectSummary = null
+
+    if (this.vectorStore) {
+      await this.vectorStore.clear()
+    }
+
+    // 删除缓存文件
+    await this.summaryGenerator.clearCache()
+    await this.clearStructuralIndexCache()
+
+    this.status = { ...this.status, totalFiles: 0, indexedFiles: 0, totalChunks: 0 }
+    logger.index.info('[IndexService] Index cleared')
+  }
+
+  /** 批量更新文件（用于文件监听） */
+  async updateFiles(filePaths: string[]): Promise<void> {
+    if (filePaths.length === 0) return
+
+    // 结构化模式：重新索引变更的文件
+    if (this.config.mode === 'structural') {
+      for (const filePath of filePaths) {
+        try {
+          const ext = path.extname(filePath).toLowerCase()
+          if (!this.config.includedExts.includes(ext)) continue
+
+          const content = await fs.promises.readFile(filePath, 'utf-8')
+          if (content.length > this.config.maxFileSize) continue
+
+          const chunks = await this.chunkFile(filePath, content)
+          const relativePath = path.relative(this.workspacePath, filePath)
+
+          for (const chunk of chunks) {
+            this.bm25Index.addDocument({
+              id: chunk.id,
+              filePath: chunk.filePath,
+              relativePath: chunk.relativePath,
+              content: chunk.content,
+              startLine: chunk.startLine,
+              endLine: chunk.endLine,
+              type: chunk.type,
+              language: chunk.language,
+              symbols: chunk.symbols || [],
+            })
+
+            if (chunk.symbols) {
+              for (const name of chunk.symbols) {
+                this.symbolIndex.add({
+                  name,
+                  kind: chunk.type === 'function' ? 'function' : chunk.type === 'class' ? 'class' : 'function',
+                  filePath: chunk.filePath,
+                  relativePath,
+                  startLine: chunk.startLine,
+                  endLine: chunk.endLine,
+                })
+              }
+            }
+          }
+        } catch (e) {
+          logger.index.warn(`[IndexService] Failed to update ${filePath}:`, e)
+        }
+      }
+      this.bm25Index.build()
+      return
+    }
+
+    // 语义模式：通过 worker 处理
+    if (this.vectorStore?.isInitialized() && this.worker) {
+      this.worker.postMessage({
+        type: 'batch_update',
+        workspacePath: this.workspacePath,
+        files: filePaths,
+        config: this.config
+      })
+    }
+  }
+
+  /** 删除文件索引 */
+  async deleteFileIndex(filePath: string): Promise<void> {
+    // 结构化模式暂不支持单文件删除，需要重建
+    // 语义模式：从向量存储删除
+    if (this.config.mode === 'semantic' && this.vectorStore) {
+      await this.vectorStore.deleteFile(filePath)
+    }
+    logger.index.info(`[IndexService] Deleted index for: ${filePath}`)
+  }
+
+  /** 更新 Embedding 配置 */
+  updateEmbeddingConfig(config: Partial<EmbeddingConfig>): void {
+    this.config.embedding = { ...this.config.embedding, ...config }
+    if (this.embedder) {
+      this.embedder.updateConfig(this.config.embedding)
+    }
+  }
+
+  /** 测试 Embedding 连接 */
+  async testEmbeddingConnection(): Promise<{ success: boolean; error?: string; latency?: number }> {
+    if (!this.embedder) {
+      this.embedder = new EmbeddingService(this.config.embedding)
+    }
+    return this.embedder.testConnection()
+  }
+
+  destroy(): void {
+    this.worker?.terminate()
+    this.worker = null
+  }
+
+  // ==================== 结构化索引 ====================
+
+  private async buildStructuralIndex(): Promise<void> {
+    const files = await this.collectFiles()
+    this.status.totalFiles = files.length
+
+    this.bm25Index.clear()
+    this.symbolIndex.clear()
+
+    const languages: Record<string, number> = {}
+    const fileSymbols = new Map<string, SymbolInfo[]>()
+    let processed = 0
+
+    for (const filePath of files) {
+      try {
+        const content = await fs.promises.readFile(filePath, 'utf-8')
+        if (content.length > this.config.maxFileSize) continue
+
+        const chunks = await this.chunkFile(filePath, content)
+        const relativePath = path.relative(this.workspacePath, filePath)
+        const symbols: SymbolInfo[] = []
+
+        for (const chunk of chunks) {
+          // 添加到 BM25
+          this.bm25Index.addDocument({
+            id: chunk.id,
+            filePath: chunk.filePath,
+            relativePath: chunk.relativePath,
+            content: chunk.content,
+            startLine: chunk.startLine,
+            endLine: chunk.endLine,
+            type: chunk.type,
+            language: chunk.language,
+            symbols: chunk.symbols || [],
+          })
+
+          // 提取符号
+          if (chunk.symbols) {
+            for (const name of chunk.symbols) {
+              const symbol: SymbolInfo = {
+                name,
+                kind: chunk.type === 'function' ? 'function' : chunk.type === 'class' ? 'class' : 'function',
+                filePath: chunk.filePath,
+                relativePath: chunk.relativePath,
+                startLine: chunk.startLine,
+                endLine: chunk.endLine,
+                signature: chunk.content.split('\n')[0].slice(0, 100),
+              }
+              symbols.push(symbol)
+              this.symbolIndex.add(symbol)
+            }
+          }
+
+          // 语言统计
+          languages[chunk.language] = (languages[chunk.language] || 0) + 1
+        }
+
+        if (symbols.length > 0) {
+          fileSymbols.set(relativePath, symbols)
+        }
+
+        this.status.totalChunks += chunks.length
+      } catch (e) {
+        logger.index.warn(`[IndexService] Failed to index ${filePath}:`, e)
+      }
+
+      processed++
+      this.status.indexedFiles = processed
+      if (processed % 20 === 0) this.emitProgress()
+    }
+
+    // 构建 BM25 索引
+    this.bm25Index.build()
+
+    // 生成项目摘要
+    this.projectSummary = this.summaryGenerator.generate(fileSymbols, languages)
+
+    logger.index.info(`[IndexService] Structural index built: ${this.bm25Index.size} chunks, ${this.symbolIndex.size} symbols`)
+  }
+
+  // ==================== 语义索引 ====================
+
+  private async initSemanticComponents(): Promise<void> {
+    if (!this.embedder) {
+      this.embedder = new EmbeddingService(this.config.embedding)
+    }
+    if (!this.vectorStore) {
+      this.vectorStore = new VectorStoreService(this.workspacePath)
+      await this.vectorStore.initialize()
+    }
+  }
+
+  private async buildSemanticIndex(): Promise<void> {
+    await this.initSemanticComponents()
+
+    if (!this.worker) {
+      this.initWorker()
+    }
+
+    const existingHashesMap = await this.vectorStore!.getFileHashes()
+    const existingHashes: Record<string, string> = Object.fromEntries(existingHashesMap)
+
+    this.worker?.postMessage({
+      type: 'index',
+      workspacePath: this.workspacePath,
+      config: this.config,
+      existingHashes
+    })
   }
 
   private initWorker(): void {
@@ -77,38 +507,17 @@ export class CodebaseIndexService {
 
           case 'result':
             if (message.chunks?.length > 0) {
-              await this.vectorStore.addBatch(message.chunks)
+              await this.vectorStore!.addBatch(message.chunks)
               this.status.totalChunks += message.chunks.length
             }
             this.status.indexedFiles = message.processed
-            if (message.total) this.status.totalFiles = message.total
             this.emitProgress()
-            break
-
-          case 'update_result':
-            if (message.deleted) {
-              await this.vectorStore.deleteFile(message.filePath)
-            } else if (message.chunks?.length > 0) {
-              await this.vectorStore.upsertFile(message.filePath, message.chunks)
-            }
-            logger.index.info(`[IndexService] Updated index for: ${message.filePath}`)
-            break
-
-          case 'batch_update_result':
-            for (const result of message.results) {
-              if (result.deleted) {
-                await this.vectorStore.deleteFile(result.filePath)
-              } else if (result.chunks?.length > 0) {
-                await this.vectorStore.upsertFile(result.filePath, result.chunks)
-              }
-            }
-            logger.index.info(`[IndexService] Batch updated ${message.results.length} files`)
             break
 
           case 'complete':
             this.status.isIndexing = false
             this.status.lastIndexedAt = Date.now()
-            logger.index.info(`[IndexService] Indexing complete. Total chunks: ${this.status.totalChunks}`)
+            logger.index.info(`[IndexService] Semantic indexing complete: ${this.status.totalChunks} chunks`)
             this.emitProgress(true)
             break
 
@@ -127,401 +536,153 @@ export class CodebaseIndexService {
         this.status.isIndexing = false
         this.emitProgress()
       })
-
     } catch (e) {
       logger.index.error('[IndexService] Failed to initialize worker:', e)
     }
   }
 
-  /**
-   * 设置主窗口（用于发送进度事件）
-   */
-  setMainWindow(window: BrowserWindow): void {
-    this.mainWindow = window
-  }
+  // ==================== 工具方法 ====================
 
-  /**
-   * 初始化服务
-   */
-  async initialize(): Promise<void> {
-    await this.vectorStore.initialize()
-
-    // 从数据库读取实际的索引统计
-    const hasExistingIndex = await this.vectorStore.hasIndex()
-    if (hasExistingIndex) {
-      const stats = await this.vectorStore.getStats()
-      this.status.totalChunks = stats.chunkCount
-      this.status.totalFiles = stats.fileCount
+  private async chunkFile(filePath: string, content: string): Promise<CodeChunk[]> {
+    let chunks = await this.chunker.chunkFile(filePath, content, this.workspacePath)
+    if (chunks.length === 0) {
+      chunks = this.fallbackChunker.chunkFile(filePath, content, this.workspacePath)
     }
-
-    logger.index.info('[IndexService] Initialized for:', this.workspacePath,
-      hasExistingIndex ? `(${this.status.totalChunks} chunks)` : '(no index)')
+    return chunks
   }
 
-  /**
-   * 更新配置
-   */
-  updateConfig(config: Partial<IndexConfig>): void {
-    this.config = { ...this.config, ...config }
-    if (config.embedding) {
-      this.embedder.updateConfig(config.embedding)
-    }
-    // Worker will get new config on next message
-  }
+  private async collectFiles(): Promise<string[]> {
+    const files: string[] = []
 
-  /**
-   * 更新 Embedding 配置
-   * 当切换 provider 时，自动清除旧的 model，使用新 provider 的默认值
-   */
-  updateEmbeddingConfig(config: Partial<EmbeddingConfig>): void {
-    // 如果切换了 provider，清除旧的 model
-    if (config.provider && config.provider !== this.config.embedding.provider) {
-      this.config.embedding = {
-        ...this.config.embedding,
-        ...config,
-        model: undefined, // 让 EmbeddingService 使用新 provider 的默认 model
+    const walk = async (dir: string) => {
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true })
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          if (!this.config.ignoredDirs.includes(entry.name) && !entry.name.startsWith('.')) {
+            await walk(fullPath)
+          }
+        } else if (entry.isFile()) {
+          const ext = path.extname(entry.name).toLowerCase()
+          if (this.config.includedExts.includes(ext)) {
+            files.push(fullPath)
+          }
+        }
       }
-    } else {
-      this.config.embedding = { ...this.config.embedding, ...config }
     }
-    this.embedder.updateConfig(this.config.embedding)
+
+    await walk(this.workspacePath)
+    return files
   }
 
-  /**
-   * 获取当前状态
-   */
-  getStatus(): IndexStatus {
-    return { ...this.status }
-  }
-
-  /**
-   * 检查是否有索引
-   */
-  async hasIndex(): Promise<boolean> {
-    return this.vectorStore.hasIndex()
-  }
-
-  /**
-   * 全量索引工作区
-   */
-  async indexWorkspace(): Promise<void> {
-    if (this.status.isIndexing) {
-      logger.index.info('[IndexService] Already indexing, skipping...')
-      return
-    }
-
-    if (!this.worker) {
-      this.initWorker()
-    }
-
-    this.status = {
-      isIndexing: true,
-      totalFiles: 0,
-      indexedFiles: 0,
-      totalChunks: 0,
-    }
-    this.emitProgress()
-
-    try {
-      // 获取已有文件哈希用于增量更新
-      // Map 通过 postMessage 传递会变成空对象，需要转换为普通对象
-      const existingHashesMap = await this.vectorStore.getFileHashes()
-      const existingHashes: Record<string, string> = Object.fromEntries(existingHashesMap)
-
-      logger.index.info(`[IndexService] Starting indexing for ${this.workspacePath} (${existingHashesMap.size} existing files)...`)
-      this.worker?.postMessage({
-        type: 'index',
-        workspacePath: this.workspacePath,
-        config: this.config,
-        existingHashes
-      })
-
-    } catch (e) {
-      logger.index.error('[IndexService] Indexing failed:', e)
-      this.status.error = e instanceof Error ? e.message : String(e)
-      this.status.isIndexing = false
-      this.emitProgress()
-    }
-  }
-
-  /**
-   * 增量更新单个文件
-   */
-  async updateFile(filePath: string): Promise<void> {
-    if (!this.vectorStore.isInitialized()) {
-      return
-    }
-
-    if (!this.worker) {
-      this.initWorker()
-    }
-
-    // 简单检查后缀
-    const ext = path.extname(filePath).toLowerCase()
-    if (!this.config.includedExts.includes(ext)) {
-      return
-    }
-
-    this.worker?.postMessage({
-      type: 'update',
-      workspacePath: this.workspacePath,
-      file: filePath,
-      config: this.config
-    })
-  }
-
-  /**
-   * 批量增量更新文件
-   * 用于文件监听器批量触发的场景
-   */
-  async updateFiles(filePaths: string[]): Promise<void> {
-    if (!this.vectorStore.isInitialized() || filePaths.length === 0) {
-      return
-    }
-
-    if (!this.worker) {
-      this.initWorker()
-    }
-
-    // 过滤有效文件
-    const validFiles = filePaths.filter(filePath => {
-      const ext = path.extname(filePath).toLowerCase()
-      return this.config.includedExts.includes(ext)
-    })
-
-    if (validFiles.length === 0) return
-
-    logger.index.info(`[IndexService] Batch updating ${validFiles.length} files`)
-
-    this.worker?.postMessage({
-      type: 'batch_update',
-      workspacePath: this.workspacePath,
-      files: validFiles,
-      config: this.config
-    })
-  }
-
-  /**
-   * 删除文件索引
-   */
-  async deleteFileIndex(filePath: string): Promise<void> {
-    if (!this.vectorStore.isInitialized()) {
-      return
-    }
-
-    await this.vectorStore.deleteFile(filePath)
-    logger.index.info(`[IndexService] Deleted index for: ${filePath}`)
-  }
-
-  /**
-   * 语义搜索
-   */
-  async search(query: string, topK: number = 10): Promise<SearchResult[]> {
-    if (!this.vectorStore.isInitialized()) {
-      throw new Error('Index not initialized')
-    }
-
-    // 生成查询向量 (Keep in main process for low latency)
-    const queryVector = await this.embedder.embed(query)
-
-    // 向量搜索
-    return this.vectorStore.search(queryVector, topK)
-  }
-
-  /**
-   * 混合搜索（向量 + 关键词）
-   * 结合语义搜索和关键词搜索，使用 RRF (Reciprocal Rank Fusion) 融合结果
-   */
-  async hybridSearch(query: string, topK: number = 10): Promise<SearchResult[]> {
-    if (!this.vectorStore.isInitialized()) {
-      throw new Error('Index not initialized')
-    }
-
-    // 提取关键词（简单分词：按空格和常见分隔符拆分，过滤短词）
-    const keywords = this.extractKeywords(query)
-
-    // 并行执行向量搜索和关键词搜索
-    const [semanticResults, keywordResults] = await Promise.all([
-      this.search(query, topK * 2),
-      keywords.length > 0 
-        ? this.vectorStore.keywordSearch(keywords, topK * 2)
-        : Promise.resolve([])
-    ])
-
-    // 如果没有关键词结果，直接返回语义结果
-    if (keywordResults.length === 0) {
-      return semanticResults.slice(0, topK)
-    }
-
-    // 使用 RRF 融合两个结果集
-    return this.fuseResults(semanticResults, keywordResults, topK)
-  }
-
-  /**
-   * 从查询中提取关键词
-   * 代码搜索场景下，保留所有有意义的 token（函数名、变量名等）
-   */
   private extractKeywords(query: string): string[] {
-    return query
-      .split(/[\s,.:;!?()[\]{}'"<>]+/)
-      .map(t => t.trim())
-      .filter(t => t.length >= 2 && !/^\d+$/.test(t))
+    return query.split(/[\s,.:;!?()[\]{}'"<>]+/).map(t => t.trim()).filter(t => t.length >= 2 && !/^\d+$/.test(t))
   }
 
-  /**
-   * 使用 RRF (Reciprocal Rank Fusion) 融合搜索结果
-   * RRF score = Σ 1/(k + rank)，k=60 是常用值
-   */
-  private fuseResults(
-    semanticResults: SearchResult[],
-    keywordResults: SearchResult[],
-    topK: number
-  ): SearchResult[] {
-    const k = 60
+  /** 融合 BM25 和符号搜索结果 */
+  private fuseResults(bm25Results: SearchResult[], symbolResults: SymbolInfo[], topK: number): SearchResult[] {
     const scoreMap = new Map<string, { result: SearchResult; score: number }>()
 
-    // 计算语义搜索的 RRF 分数（权重 0.7）
-    semanticResults.forEach((result, rank) => {
+    // BM25 结果
+    bm25Results.forEach((result, rank) => {
       const key = `${result.filePath}:${result.startLine}`
-      const rrfScore = 0.7 / (k + rank + 1)
-      scoreMap.set(key, { result, score: rrfScore })
+      scoreMap.set(key, { result, score: result.score + (bm25Results.length - rank) / bm25Results.length })
     })
 
-    // 计算关键词搜索的 RRF 分数（权重 0.3）并合并
-    keywordResults.forEach((result, rank) => {
-      const key = `${result.filePath}:${result.startLine}`
-      const rrfScore = 0.3 / (k + rank + 1)
-      
+    // 符号匹配加分
+    for (const symbol of symbolResults) {
+      const key = `${symbol.filePath}:${symbol.startLine}`
       const existing = scoreMap.get(key)
       if (existing) {
-        existing.score += rrfScore
-      } else {
-        scoreMap.set(key, { result, score: rrfScore })
+        existing.score += 0.5
       }
-    })
+    }
 
-    // 按融合分数排序并返回 topK
     return Array.from(scoreMap.values())
       .sort((a, b) => b.score - a.score)
       .slice(0, topK)
       .map(({ result, score }) => ({ ...result, score }))
   }
 
-  /**
-   * 清空索引
-   */
-  async clearIndex(): Promise<void> {
-    await this.vectorStore.clear()
-    this.status = {
-      isIndexing: false,
-      totalFiles: 0,
-      indexedFiles: 0,
-      totalChunks: 0,
-    }
-    logger.index.info('[IndexService] Index cleared')
+  /** RRF 融合 */
+  private fuseResultsRRF(results1: SearchResult[], results2: SearchResult[], topK: number): SearchResult[] {
+    const k = 60
+    const scoreMap = new Map<string, { result: SearchResult; score: number }>()
+
+    results1.forEach((result, rank) => {
+      const key = `${result.filePath}:${result.startLine}`
+      scoreMap.set(key, { result, score: 0.7 / (k + rank + 1) })
+    })
+
+    results2.forEach((result, rank) => {
+      const key = `${result.filePath}:${result.startLine}`
+      const existing = scoreMap.get(key)
+      if (existing) {
+        existing.score += 0.3 / (k + rank + 1)
+      } else {
+        scoreMap.set(key, { result, score: 0.3 / (k + rank + 1) })
+      }
+    })
+
+    return Array.from(scoreMap.values())
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topK)
+      .map(({ result, score }) => ({ ...result, score }))
   }
 
-  /**
-   * 测试 Embedding 连接
-   */
-  async testEmbeddingConnection(): Promise<{ success: boolean; error?: string; latency?: number }> {
-    return this.embedder.testConnection()
-  }
-
-  /**
-   * 销毁服务
-   */
-  destroy(): void {
-    if (this.worker) {
-      this.worker.terminate()
-      this.worker = null
-    }
-  }
-
-  // ========== 私有方法 ==========
-
-  /**
-   * 发送进度事件到渲染进程（带节流）
-   */
   private emitProgress(force = false): void {
     const now = Date.now()
-    
-    // 节流：除非强制或间隔足够，否则跳过
-    if (!force && now - this.lastProgressEmit < this.PROGRESS_THROTTLE_MS) {
-      return
-    }
+    if (!force && now - this.lastProgressEmit < this.PROGRESS_THROTTLE_MS) return
     this.lastProgressEmit = now
-    
+
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       try {
         this.mainWindow.webContents.send('index:progress', this.status)
-      } catch (e) {
-        // 忽略窗口已销毁的错误
-      }
+      } catch {}
     }
   }
 }
 
-// 按工作区路径管理索引服务实例（支持多窗口）
-const indexServiceInstances = new Map<string, CodebaseIndexService>()
+// ==================== 实例管理 ====================
 
-/**
- * 获取或创建索引服务实例
- * 每个工作区有独立的实例，支持多窗口同时打开不同工作区
- */
+const instances = new Map<string, CodebaseIndexService>()
+
 export function getIndexService(workspacePath: string): CodebaseIndexService {
-  const normalizedPath = normalizePath(workspacePath)
-  
-  let instance = indexServiceInstances.get(normalizedPath)
+  const normalized = normalizePath(workspacePath)
+  let instance = instances.get(normalized)
   if (!instance) {
     instance = new CodebaseIndexService(workspacePath)
-    indexServiceInstances.set(normalizedPath, instance)
-    logger.index.info(`[IndexService] Created instance for: ${workspacePath}`)
+    instances.set(normalized, instance)
   }
-
   return instance
 }
 
-/**
- * 使用指定配置初始化索引服务
- * 如果实例已存在，会更新其配置
- */
 export function initIndexServiceWithConfig(workspacePath: string, config: Partial<IndexConfig>): CodebaseIndexService {
-  const normalizedPath = normalizePath(workspacePath)
-  
-  let instance = indexServiceInstances.get(normalizedPath)
+  const normalized = normalizePath(workspacePath)
+  let instance = instances.get(normalized)
   if (!instance) {
     instance = new CodebaseIndexService(workspacePath, config)
-    indexServiceInstances.set(normalizedPath, instance)
-    logger.index.info(`[IndexService] Created instance with config for: ${workspacePath}`)
-  } else if (config.embedding) {
-    // 如果实例已存在，更新 embedding 配置
-    instance.updateEmbeddingConfig(config.embedding)
-    logger.index.info(`[IndexService] Updated embedding config for: ${workspacePath}`)
+    instances.set(normalized, instance)
+  } else {
+    // 更新现有实例的配置
+    if (config.mode) instance.setMode(config.mode)
+    if (config.embedding) instance.updateEmbeddingConfig(config.embedding)
   }
-
   return instance
 }
 
-/**
- * 销毁指定工作区的索引服务实例
- */
 export function destroyIndexService(workspacePath?: string): void {
   if (workspacePath) {
-    const normalizedPath = normalizePath(workspacePath)
-    const instance = indexServiceInstances.get(normalizedPath)
+    const normalized = normalizePath(workspacePath)
+    const instance = instances.get(normalized)
     if (instance) {
       instance.destroy()
-      indexServiceInstances.delete(normalizedPath)
-      logger.index.info(`[IndexService] Instance destroyed for: ${workspacePath}`)
+      instances.delete(normalized)
     }
   } else {
-    // 销毁所有实例
-    for (const [path, instance] of indexServiceInstances) {
+    for (const instance of instances.values()) {
       instance.destroy()
-      logger.index.info(`[IndexService] Instance destroyed for: ${path}`)
     }
-    indexServiceInstances.clear()
-    logger.index.info('[IndexService] All instances destroyed')
+    instances.clear()
   }
 }

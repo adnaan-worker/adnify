@@ -9,7 +9,7 @@
 
 import { logger } from '@utils/Logger'
 import { getAgentConfig } from '../utils/AgentConfig'
-import type { ChatMessage, AssistantMessage, ToolResultMessage, UserMessage, ToolCall } from '../types'
+import type { ChatMessage, AssistantMessage, ToolResultMessage, UserMessage, ToolCall, MessageContent } from '../types'
 
 // ===== 类型 =====
 
@@ -117,6 +117,12 @@ function truncateToolCallArgs(tc: ToolCall, maxChars: number): { tc: ToolCall; t
  * 准备消息（发送前压缩）
  * 
  * 根据上一次的压缩等级决定本次的压缩策略
+ * 
+ * 重要说明：
+ * - messages 参数包含所有历史消息 + 刚添加的当前用户消息
+ * - 当前用户消息在数组的最后一条
+ * - 需要保留最后一条消息的图片（AI 需要分析）
+ * - 历史消息中的图片替换为占位符（AI 已经分析过，节省 token）
  */
 export function prepareMessages(
   messages: ChatMessage[],
@@ -130,6 +136,42 @@ export function prepareMessages(
   
   // 过滤 checkpoint 消息
   result = result.filter(m => m.role !== 'checkpoint')
+  
+  // 0. 替换历史消息中的图片为占位符（节省 token）
+  // 注意：messages 包含刚添加的当前用户消息，它在最后一条
+  // 需要保留最后一条用户消息的图片，只替换之前的历史消息
+  const lastIndex = result.length - 1
+  let hasModifications = false
+  const modifiedMessages: ChatMessage[] = []
+  
+  for (let idx = 0; idx < result.length; idx++) {
+    const msg = result[idx]
+    
+    // 跳过最后一条消息（当前正在发送的消息，保留图片）
+    if (idx === lastIndex) {
+      modifiedMessages.push(msg)
+      continue
+    }
+    
+    // 只处理用户消息
+    if (msg.role === 'user') {
+      const userMsg = msg as UserMessage
+      const newContent = replaceImagesWithPlaceholder(userMsg.content)
+      
+      // 只在内容真正改变时才创建新对象
+      if (newContent !== userMsg.content) {
+        modifiedMessages.push({ ...userMsg, content: newContent as MessageContent })
+        hasModifications = true
+      } else {
+        modifiedMessages.push(msg)
+      }
+    } else {
+      modifiedMessages.push(msg)
+    }
+  }
+  
+  // 只在有修改时才使用新数组
+  result = hasModifications ? modifiedMessages : result
   
   // 1. 限制消息数量
   const messageLimit = getMessageLimit(lastLevel, config)
@@ -272,9 +314,112 @@ export function updateStats(
 
 /**
  * 估算 token 数（用于预检查）
+ * 
+ * 参考业界标准：
+ * - 英文：~4 字符 = 1 token
+ * - 中文：~1.5-2 字符 = 1 token（中文字符占用更多 token）
+ * - 代码：~3-4 字符 = 1 token
+ * 
+ * 这是粗略估算，实际 tokenizer 会更复杂
  */
 export function estimateTokens(text: string): number {
-  return Math.ceil((text || '').length / 4)
+  if (!text) return 0
+  
+  // 统计中文字符数量
+  const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length
+  const totalChars = text.length
+  const nonChineseChars = totalChars - chineseChars
+  
+  // 中文按 1.5 字符/token，其他按 4 字符/token
+  return Math.ceil(chineseChars / 1.5 + nonChineseChars / 4)
+}
+
+/**
+ * 估算消息内容的 token 数（支持多种内容类型）
+ * 
+ * 支持的内容类型：
+ * 1. 纯文本字符串
+ * 2. 结构化内容数组（文本 + 图片 + 其他）
+ * 
+ * 图片 token 计算（基于 Anthropic 官方文档）：
+ * - 图片 token = (width × height) / 750
+ * - 最小 258 tokens，最大 1600 tokens
+ * - 由于我们没有图片尺寸信息，使用保守估计 1600 tokens
+ * 
+ * 参考：https://docs.anthropic.com/en/docs/build-with-claude/vision#image-costs
+ */
+function estimateContentTokens(content: string | Array<{ type: string; text?: string; source?: unknown }>): number {
+  if (typeof content === 'string') {
+    return estimateTokens(content)
+  }
+  
+  // 处理结构化内容（可能包含文本、图片等）
+  let total = 0
+  for (const part of content) {
+    switch (part.type) {
+      case 'text':
+        if (part.text) {
+          total += estimateTokens(part.text)
+        }
+        break
+      
+      case 'image':
+        // Anthropic 图片 token 计算：
+        // - 小图片（~200x200）：~258 tokens
+        // - 中等图片（~400x400）：~600 tokens  
+        // - 大图片（~1000x1000）：~1600 tokens
+        // 由于无法获取实际尺寸，使用保守估计（大图片）
+        total += 1600
+        break
+      
+      case 'tool_use':
+      case 'tool_result':
+        // 工具调用内容按 JSON 字符串估算
+        total += estimateTokens(JSON.stringify(part))
+        break
+      
+      default:
+        // 未知类型，按 JSON 字符串估算
+        total += estimateTokens(JSON.stringify(part))
+    }
+  }
+  
+  return total
+}
+
+/**
+ * 将历史消息中的图片替换为占位符（优化版）
+ * 
+ * 原因：AI 已经分析过图片，历史消息中保留完整 base64 浪费 token
+ * 主流工具（Cursor、Windsurf）都是这样处理的
+ * 
+ * 性能优化：
+ * 1. 只在需要时创建新对象（避免不必要的拷贝）
+ * 2. 使用浅拷贝而非深拷贝
+ * 3. 提前返回，避免不必要的遍历
+ */
+function replaceImagesWithPlaceholder(content: string | Array<{ type: string; text?: string; source?: unknown }>): typeof content {
+  if (typeof content === 'string') {
+    return content
+  }
+  
+  // 检查是否有图片需要替换
+  const hasImage = content.some(part => part.type === 'image')
+  if (!hasImage) {
+    return content // 没有图片，直接返回原内容（避免拷贝）
+  }
+  
+  // 只在有图片时才创建新数组
+  return content.map(part => {
+    if (part.type === 'image') {
+      // 替换为占位符文本
+      return {
+        type: 'text' as const,
+        text: '[Image: Previously analyzed]'
+      }
+    }
+    return part // 保持原对象引用（浅拷贝）
+  })
 }
 
 /**
@@ -286,10 +431,7 @@ export function estimateMessagesTokens(messages: ChatMessage[]): number {
   for (const msg of messages) {
     if (msg.role === 'user') {
       const userMsg = msg as UserMessage
-      const content = typeof userMsg.content === 'string' 
-        ? userMsg.content 
-        : JSON.stringify(userMsg.content || '')
-      total += estimateTokens(content)
+      total += estimateContentTokens(userMsg.content)
     } else if (msg.role === 'assistant') {
       const assistantMsg = msg as AssistantMessage
       total += estimateTokens(assistantMsg.content || '')

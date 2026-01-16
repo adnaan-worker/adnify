@@ -15,7 +15,7 @@ import { adnifyDir, WorkspaceStateData } from './adnifyDirService'
  * 保存工作区状态
  */
 export async function saveWorkspaceState(): Promise<void> {
-  const { openFiles, activeFilePath, expandedFolders, sidebarWidth, chatWidth, terminalVisible, terminalLayout } = useStore.getState()
+  const { openFiles, activeFilePath, expandedFolders, sidebarWidth, chatWidth, terminalLayout } = useStore.getState()
 
   if (!adnifyDir.isInitialized()) return
 
@@ -28,7 +28,7 @@ export async function saveWorkspaceState(): Promise<void> {
     layout: {
       sidebarWidth,
       chatWidth,
-      terminalVisible,
+      terminalVisible: false, // 不保存终端可见状态，每次启动都是关闭的
       terminalLayout
     }
   }

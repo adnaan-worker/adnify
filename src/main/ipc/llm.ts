@@ -93,9 +93,3 @@ export function cleanupLLMService(webContentsId: number) {
     llmServices.delete(webContentsId)
   }
 }
-
-// 保留旧接口以兼容，但实际不再需要
-export function updateLLMServiceWindow(_mainWindow: BrowserWindow) {
-  // 不再需要，每个窗口有独立服务
-  logger.ipc.info('[LLMService] updateLLMServiceWindow called but no longer needed')
-}

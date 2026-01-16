@@ -13,7 +13,7 @@
  * - 角色扩展：在模式基础上添加角色专属工具组
  */
 
-import type { WorkMode } from '@/renderer/modes/types'
+import type { WorkMode } from '@shared/types/workMode'
 
 // ============================================
 // 类型定义

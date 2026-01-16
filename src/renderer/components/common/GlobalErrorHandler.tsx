@@ -28,6 +28,16 @@ export function GlobalErrorHandler({ children }: GlobalErrorHandlerProps) {
       if (error?.message === 'Canceled' || error?.name === 'Canceled') {
         return
       }
+
+      // 忽略 Monaco Editor 的 inmemory model 错误（DiffEditor 卸载时的已知问题）
+      if (error?.message?.includes('inmemory://model')) {
+        return
+      }
+
+      // 忽略 Monaco DiffEditor 的 TextModel disposed 错误
+      if (error?.message?.includes('TextModel got disposed before DiffEditorWidget')) {
+        return
+      }
       
       const appError = AppError.fromError(error)
       
@@ -48,6 +58,16 @@ export function GlobalErrorHandler({ children }: GlobalErrorHandlerProps) {
     const handleError = (event: ErrorEvent) => {
       // 忽略 ResizeObserver 错误（常见的无害错误）
       if (event.message?.includes('ResizeObserver')) {
+        return
+      }
+
+      // 忽略 Monaco Editor 的 inmemory model 错误（DiffEditor 卸载时的已知问题）
+      if (event.message?.includes('inmemory://model')) {
+        return
+      }
+
+      // 忽略 Monaco DiffEditor 的 TextModel disposed 错误
+      if (event.message?.includes('TextModel got disposed before DiffEditorWidget')) {
         return
       }
 

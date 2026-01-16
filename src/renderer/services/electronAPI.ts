@@ -122,6 +122,10 @@ function createGroupedAPI() {
       hasIndex: (workspacePath: string) => raw.indexHasIndex(workspacePath),
       search: (workspacePath: string, query: string, topK?: number) => raw.indexSearch(workspacePath, query, topK),
       hybridSearch: (workspacePath: string, query: string, topK?: number) => raw.indexHybridSearch(workspacePath, query, topK),
+      searchSymbols: (workspacePath: string, query: string, topK?: number) => raw.indexSearchSymbols(workspacePath, query, topK),
+      getProjectSummary: (workspacePath: string) => raw.indexGetProjectSummary(workspacePath),
+      getProjectSummaryText: (workspacePath: string) => raw.indexGetProjectSummaryText(workspacePath),
+      setMode: (workspacePath: string, mode: 'structural' | 'semantic') => raw.indexSetMode(workspacePath, mode),
       updateFile: (workspacePath: string, filePath: string) => raw.indexUpdateFile(workspacePath, filePath),
       clear: (workspacePath: string) => raw.indexClear(workspacePath),
       updateEmbeddingConfig: (workspacePath: string, config: Parameters<typeof raw.indexUpdateEmbeddingConfig>[1]) => 
@@ -135,6 +139,7 @@ function createGroupedAPI() {
     http: {
       readUrl: (url: string, timeout?: number) => raw.httpReadUrl(url, timeout),
       webSearch: (query: string, maxResults?: number) => raw.httpWebSearch(query, maxResults),
+      setGoogleSearch: (apiKey: string, cx: string) => raw.httpSetGoogleSearch(apiKey, cx),
     },
 
     // 资源
@@ -162,6 +167,7 @@ function createGroupedAPI() {
       addServer: (config: Parameters<typeof raw.mcpAddServer>[0]) => raw.mcpAddServer(config),
       removeServer: (serverId: string) => raw.mcpRemoveServer(serverId),
       toggleServer: (serverId: string, disabled: boolean) => raw.mcpToggleServer(serverId, disabled),
+      setAutoConnect: (enabled: boolean) => raw.mcpSetAutoConnect(enabled),
       startOAuth: (serverId: string) => raw.mcpStartOAuth(serverId),
       finishOAuth: (serverId: string, authorizationCode: string) => raw.mcpFinishOAuth(serverId, authorizationCode),
       refreshOAuthToken: (serverId: string) => raw.mcpRefreshOAuthToken(serverId),

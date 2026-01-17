@@ -30,6 +30,7 @@ import { OptionCard } from './OptionCard'
 import { needsDiffPreview } from '@/shared/config/tools'
 import { useStore } from '@store'
 import { MessageBranchActions } from './BranchManager'
+import remarkGfm from 'remark-gfm'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -253,6 +254,7 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming }: { conten
     <div style={{ fontSize: `${fontSize}px` }} className="text-text-primary/90 leading-relaxed tracking-wide overflow-hidden">
       <ReactMarkdown
         className="prose prose-invert max-w-none"
+        remarkPlugins={[remarkGfm]}
         components={markdownComponents}
       >
         {cleanedContent}

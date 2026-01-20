@@ -331,11 +331,29 @@ export const selectMessageCheckpoints = (state: AgentStore) => state.messageChec
 
 // 分支相关 selectors
 const EMPTY_BRANCHES: Branch[] = []
+const MAINLINE_BRANCH_ID = '__mainline__'
+
+// 缓存：threadId -> 过滤后的分支数组
+const filteredBranchesCache = new Map<string, { branches: Branch[]; filtered: Branch[] }>()
 
 export const selectBranches = (state: AgentStore) => {
     const threadId = state.currentThreadId
     if (!threadId) return EMPTY_BRANCHES
-    return state.branches[threadId] || EMPTY_BRANCHES
+    
+    const allBranches = state.branches[threadId]
+    if (!allBranches || allBranches.length === 0) return EMPTY_BRANCHES
+    
+    // 检查缓存
+    const cached = filteredBranchesCache.get(threadId)
+    if (cached && cached.branches === allBranches) {
+        return cached.filtered
+    }
+    
+    // 过滤并缓存
+    const filtered = allBranches.filter(b => b.id !== MAINLINE_BRANCH_ID)
+    filteredBranchesCache.set(threadId, { branches: allBranches, filtered })
+    
+    return filtered
 }
 
 export const selectActiveBranch = (state: AgentStore) => {

@@ -354,6 +354,7 @@ export const createBranchSlice: StateCreator<
     // 找到要重新生成的用户消息
     let userMessageIndex = messageIndex
     if (message.role !== 'user') {
+      // 向前查找最近的用户消息
       userMessageIndex = messageIndex - 1
       while (userMessageIndex >= 0 && thread.messages[userMessageIndex].role !== 'user') {
         userMessageIndex--
@@ -364,43 +365,86 @@ export const createBranchSlice: StateCreator<
     const userMessage = thread.messages[userMessageIndex]
     const messageContent = (userMessage as { content: MessageContent }).content
 
-    // 如果是第一条消息，不创建分支
-    if (userMessageIndex === 0) return null
-
-    const forkMessageId = userMessage.id
+    // 检查是否有后续消息（AI回复）
     const messagesAfterUser = thread.messages.slice(userMessageIndex + 1)
-
-    // 只有当有 AI 回复时才创建分支
-    if (messagesAfterUser.length === 0) return null
+    if (messagesAfterUser.length === 0) {
+      // 没有AI回复，不需要创建分支，直接返回用户消息内容
+      return null
+    }
 
     const branchId = generateId()
-    const branchName = `Branch: ${new Date().toLocaleTimeString()}`
+    const branchName = `Branch ${new Date().toLocaleTimeString()}`
+
+    // 确定分支点
+    let forkMessageId: string
+    let forkMessageIndex: number
+    
+    if (userMessageIndex === 0) {
+      // 第一条用户消息，分支点就是它自己
+      forkMessageId = userMessage.id
+      forkMessageIndex = 0
+    } else {
+      // 不是第一条，分支点是前一条消息
+      forkMessageIndex = userMessageIndex - 1
+      forkMessageId = thread.messages[forkMessageIndex].id
+    }
+
+    // 保存当前主线消息到 __mainline__ 分支
+    const currentBranches = get().branches[threadId] || []
+    const messagesAfterFork = thread.messages.slice(forkMessageIndex + 1)
+    const mainlineBranch = getOrCreateMainlineBranch(
+      currentBranches,
+      forkMessageId,
+      messagesAfterFork
+    )
 
     const newBranch: Branch = {
       id: branchId,
       name: branchName,
       forkFromMessageId: forkMessageId,
       createdAt: Date.now(),
-      messages: messagesAfterUser.map(m => ({ ...m })),
-      isActive: false,
+      messages: [],  // 新分支开始时没有消息，等待重新生成
+      isActive: true,
     }
 
     set(state => {
       const currentThread = state.threads[threadId]
       if (!currentThread) return state
 
+      // 更新分支列表
+      let updatedBranches = [...(state.branches[threadId] || [])]
+      
+      // 更新或添加 mainline 分支
+      const mainlineIndex = updatedBranches.findIndex(b => b.id === MAINLINE_BRANCH_ID)
+      if (mainlineIndex !== -1) {
+        updatedBranches[mainlineIndex] = mainlineBranch
+      } else {
+        updatedBranches.push(mainlineBranch)
+      }
+      
+      // 添加新分支
+      updatedBranches.push(newBranch)
+
+      // 截断消息：删除用户消息及之后的所有消息
+      // sendMessage 会重新添加用户消息
+      const newMessages = currentThread.messages.slice(0, userMessageIndex)
+
       return {
         branches: {
           ...state.branches,
-          [threadId]: [...(state.branches[threadId] || []), newBranch],
+          [threadId]: updatedBranches,
         },
         threads: {
           ...state.threads,
           [threadId]: {
             ...currentThread,
-            messages: currentThread.messages.slice(0, userMessageIndex + 1),
+            messages: newMessages,
             lastModified: Date.now(),
           },
+        },
+        activeBranchId: {
+          ...state.activeBranchId,
+          [threadId]: branchId,
         },
       }
     })

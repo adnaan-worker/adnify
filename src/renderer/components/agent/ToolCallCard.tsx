@@ -460,13 +460,15 @@ const ToolCallCard = memo(function ToolCallCard({
                     <span
                         className={`text-sm font-medium whitespace-nowrap ${isStreaming || isRunning ? 'text-accent' : 'text-text-secondary'}`}
                     >
-                        {TOOL_LABELS[toolCall.name] || toolCall.name || '...'}
+                        {TOOL_LABELS[toolCall.name] || toolCall.name}
                     </span>
-                    {description && (
+                    {description ? (
                         <>
                             <span className="text-text-muted/30">|</span>
                             <span className="text-xs truncate font-mono text-text-muted">{description}</span>
                         </>
+                    ) : (isStreaming || isRunning) && (
+                        <span className="text-xs text-text-muted/50 italic animate-pulse">Processing...</span>
                     )}
                 </div>
 

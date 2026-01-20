@@ -12,4 +12,4 @@ export { OptionCard } from './OptionCard'
 export { PlanPreview } from './PlanPreview'
 
 // 新增组件
-export { default as BranchManager, BranchSelector, MessageBranchActions } from './BranchManager'
+export { BranchSelector, MessageBranchActions } from './BranchControls'

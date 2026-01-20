@@ -29,7 +29,7 @@ import ToolCallGroup from './ToolCallGroup'
 import { OptionCard } from './OptionCard'
 import { needsDiffPreview } from '@/shared/config/tools'
 import { useStore } from '@store'
-import { MessageBranchActions } from './BranchManager'
+import { MessageBranchActions } from './BranchControls'
 import remarkGfm from 'remark-gfm'
 import { Tooltip } from '../ui/Tooltip'
 

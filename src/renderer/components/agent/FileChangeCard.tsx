@@ -36,7 +36,7 @@ export default function FileChangeCard({
     const args = toolCall.arguments as Record<string, unknown>
     const meta = args._meta as Record<string, unknown> | undefined
     const filePath = (args.path || meta?.filePath) as string || ''
-    const fileName = filePath ? getFileName(filePath) : '...'
+    const fileName = filePath ? getFileName(filePath) : ''
     const isStreaming = args._streaming === true
     const isRunning = toolCall.status === 'running' || toolCall.status === 'pending'
     const isSuccess = toolCall.status === 'success'
@@ -200,13 +200,19 @@ export default function FileChangeCard({
 
                 {/* Title & Stats */}
                 <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
-                    <span className={`text-sm font-medium transition-colors truncate ${
-                        (isStreaming || isRunning) 
-                            ? 'text-shimmer' 
-                            : 'text-text-secondary group-hover:text-text-primary'
-                    }`}>
-                        {fileName}
-                    </span>
+                    {fileName ? (
+                        <span className={`text-sm font-medium transition-colors truncate ${
+                            (isStreaming || isRunning) 
+                                ? 'text-shimmer' 
+                                : 'text-text-secondary group-hover:text-text-primary'
+                        }`}>
+                            {fileName}
+                        </span>
+                    ) : (isStreaming || isRunning) ? (
+                        <div className="h-4 w-24 bg-surface/50 rounded animate-pulse" />
+                    ) : (
+                        <span className="text-sm font-medium text-text-muted">Unknown File</span>
+                    )}
 
                     {(isSuccess || newContent) && (
                         <motion.span 

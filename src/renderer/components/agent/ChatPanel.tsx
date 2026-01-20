@@ -7,8 +7,7 @@ import {
   History,
   Plus,
   Trash2,
-  Upload,
-  X
+  Upload
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Logo } from '@/renderer/components/common/Logo'
@@ -19,7 +18,6 @@ import { t } from '@/renderer/i18n'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
 import {
   ChatMessage as ChatMessageType,
-  ChatThread,
   isUserMessage,
   isAssistantMessage,
   getMessageText,
@@ -37,7 +35,8 @@ import { slashCommandService, SlashCommand } from '@/renderer/services/slashComm
 import SlashCommandPopup from './SlashCommandPopup'
 import { Button } from '../ui'
 import { useToast } from '@/renderer/components/common/ToastProvider'
-import BranchManager, { BranchSelector } from './BranchManager'
+import ConversationSidebar from './ConversationSidebar'
+import { BranchSelector } from './BranchControls'
 
 export default function ChatPanel() {
   const {
@@ -68,11 +67,7 @@ export default function ChatPanel() {
     pendingChanges,
     messageCheckpoints,
     contextItems,
-    allThreads: threads,
-    currentThreadId,
     createThread,
-    switchThread,
-    deleteThread,
     sendMessage,
     abort,
     clearMessages,
@@ -92,7 +87,11 @@ export default function ChatPanel() {
 
   const [input, setInput] = useState('')
   const [images, setImages] = useState<PendingImage[]>([])
-  const [showThreads, setShowThreads] = useState(false)
+  
+  // Unified Sidebar State
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarTab, setSidebarTab] = useState<'history' | 'branches'>('history')
+
   const [showFileMention, setShowFileMention] = useState(false)
   const [mentionQuery, setMentionQuery] = useState('')
   const [mentionPosition, setMentionPosition] = useState({ x: 0, y: 0 })
@@ -103,7 +102,6 @@ export default function ChatPanel() {
   // 斜杠命令状态
   const [showSlashCommand, setShowSlashCommand] = useState(false)
   const [slashCommandQuery, setSlashCommandQuery] = useState('')
-  const [showBranches, setShowBranches] = useState(false)
 
   // Handoff 状态
   const handoffRequired = useAgentStore(selectHandoffRequired)
@@ -854,14 +852,23 @@ export default function ChatPanel() {
         <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between h-10 px-3 bg-background/80 backdrop-blur-xl select-none transition-all duration-300">
           <div className="flex items-center gap-2">
             {/* 分支选择器 - 始终显示，点击展开分支管理 */}
-            <BranchSelector language={language} onClick={() => setShowBranches(!showBranches)} />
+            <BranchSelector 
+              language={language} 
+              onClick={() => {
+                setSidebarTab('branches')
+                setSidebarOpen(true)
+              }} 
+            />
           </div>
 
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setShowThreads(!showThreads)}
+              onClick={() => {
+                setSidebarTab('history')
+                setSidebarOpen(true)
+              }}
               title={language === 'zh' ? '历史记录' : 'Chat history'}
               className="hover:bg-white/5 text-text-muted hover:text-text-primary transition-colors"
             >
@@ -889,74 +896,11 @@ export default function ChatPanel() {
           </div>
         </div>
 
-        {/* Thread list overlay */}
-        <AnimatePresence>
-          {showThreads && (
-            <motion.div 
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className="absolute top-[50px] right-0 left-0 bottom-0 bg-background/95 backdrop-blur-md z-30 overflow-hidden p-4"
-            >
-              <div className="flex flex-col gap-2 max-w-2xl mx-auto">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-text-primary">Chat History</h3>
-                  <Button variant="ghost" size="icon" onClick={() => setShowThreads(false)} className="h-6 w-6">
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-                {threads.map((thread: ChatThread) => {
-                  if (!thread) return null
-                  const firstUserMsg = thread.messages.find((m: ChatMessageType) => m.role === 'user')
-                  const preview = firstUserMsg ? getMessageText(firstUserMsg.content).slice(0, 50) : 'New chat'
-                  return (
-                    <div
-                      key={thread.id}
-                      className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all duration-200 border group ${currentThreadId === thread.id
-                        ? 'bg-accent/10 border-accent/20 text-accent'
-                        : 'bg-surface/30 border-border hover:border-border hover:bg-surface/50 text-text-secondary'
-                        }`}
-                      onClick={() => { switchThread(thread.id); setShowThreads(false) }}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{preview || 'New chat'}</p>
-                        <p className="text-xs text-text-muted mt-0.5">
-                          {new Date(thread.lastModified).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => { e.stopPropagation(); deleteThread(thread.id) }}
-                        className="h-8 w-8 hover:bg-red-500/10 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all transform scale-90 group-hover:scale-100"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  )
-                })}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Branch Manager overlay */}
-        <AnimatePresence>
-          {showBranches && (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              transition={{ duration: 0.2 }}
-              className="absolute top-[50px] right-0 left-0 bottom-0 bg-background/95 backdrop-blur-md z-30 overflow-auto"
-            >
-              <div className="max-w-2xl mx-auto">
-                <BranchManager language={language} onClose={() => setShowBranches(false)} />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <ConversationSidebar 
+          isOpen={sidebarOpen} 
+          onClose={() => setSidebarOpen(false)} 
+          initialTab={sidebarTab}
+        />
 
         {/* Drag Overlay */}
         <AnimatePresence>

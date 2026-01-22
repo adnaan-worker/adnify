@@ -20,7 +20,7 @@ import { Agent as HttpsAgent } from 'https'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 import { GoogleGenAI, Type as SchemaType } from '@google/genai'
-import type { Content, Part, FunctionDeclaration, Tool as GeminiTool } from '@google/genai'
+import type { Content, Part, FunctionDeclaration, Tool as GeminiTool, Schema } from '@google/genai'
 
 // 全局连接池（复用 TCP 连接）
 const httpAgent = new HttpAgent({ keepAlive: true, maxSockets: 10, keepAliveMsecs: 30000 })
@@ -730,23 +730,71 @@ export class UnifiedProvider extends BaseProvider {
       description: tool.description,
       parameters: {
         type: SchemaType.OBJECT,
-        properties: Object.fromEntries(
-          Object.entries(tool.parameters.properties).map(([key, value]) => {
-            const prop: Record<string, unknown> = {
-              type: this.mapTypeToGeminiSchemaType(value.type),
-              description: value.description,
-            }
-            if (value.enum && value.enum.length > 0) {
-              prop.enum = value.enum
-            }
-            return [key, prop]
-          })
-        ),
+        properties: this.convertPropertiesToGemini(tool.parameters.properties),
         required: tool.parameters.required,
       },
     }))
 
     return [{ functionDeclarations }]
+  }
+
+  /**
+   * 递归转换属性为 Gemini 格式，处理嵌套的 array 和 object
+   */
+  private convertPropertiesToGemini(properties: Record<string, unknown>): Record<string, Schema> {
+    const converted: Record<string, Schema> = {}
+    
+    for (const [key, value] of Object.entries(properties)) {
+      const prop = value as Record<string, unknown>
+      const convertedProp: Schema = {
+        type: this.mapTypeToGeminiSchemaType(prop.type as string),
+        description: prop.description as string | undefined,
+      }
+      
+      // 处理 enum
+      if (prop.enum && Array.isArray(prop.enum) && prop.enum.length > 0) {
+        convertedProp.enum = prop.enum as string[]
+      }
+      
+      // 处理 array 类型 - 必须有 items
+      if (prop.type === 'array') {
+        if (prop.items) {
+          const items = prop.items as Record<string, unknown>
+          const convertedItems: Schema = {
+            type: this.mapTypeToGeminiSchemaType(items.type as string),
+          }
+          
+          if (items.description) {
+            convertedItems.description = items.description as string
+          }
+          
+          // 递归处理 items 中的 properties（如果是 object）
+          if (items.type === 'object' && items.properties) {
+            convertedItems.properties = this.convertPropertiesToGemini(items.properties as Record<string, unknown>)
+            if (items.required) {
+              convertedItems.required = items.required as string[]
+            }
+          }
+          
+          convertedProp.items = convertedItems
+        } else {
+          // 如果没有 items，添加默认的 string 类型
+          convertedProp.items = { type: SchemaType.STRING }
+        }
+      }
+      
+      // 处理 object 类型 - 递归处理 properties
+      if (prop.type === 'object' && prop.properties) {
+        convertedProp.properties = this.convertPropertiesToGemini(prop.properties as Record<string, unknown>)
+        if (prop.required) {
+          convertedProp.required = prop.required as string[]
+        }
+      }
+      
+      converted[key] = convertedProp
+    }
+    
+    return converted
   }
 
   private mapTypeToGeminiSchemaType(type: string): SchemaType {

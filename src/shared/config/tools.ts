@@ -694,6 +694,14 @@ TIPS:
                 type: 'array', 
                 description: 'Items to update. Each item: {id: "1", status: "completed"|"in_progress"|"failed"}',
                 required: true,
+                items: {
+                    type: 'object',
+                    description: 'Plan item update',
+                    properties: {
+                        id: { type: 'string', description: 'Item ID or index', required: true },
+                        status: { type: 'string', description: 'New status', enum: ['completed', 'in_progress', 'failed'], required: true },
+                    },
+                },
             },
             status: { type: 'string', description: 'Overall plan status (optional)', enum: ['active', 'completed', 'failed'] },
         },

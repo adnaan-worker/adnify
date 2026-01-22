@@ -1,5 +1,7 @@
 # Adnify
 
+**中文** | [English](README_EN.md)
+
 > **Connect AI to Your Code.**
 > 一个拥有极致视觉体验、深度集成 AI Agent 的下一代代码编辑器。
 

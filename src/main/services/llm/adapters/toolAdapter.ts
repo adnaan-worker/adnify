@@ -46,11 +46,51 @@ export class ToolAdapter {
         description: tool.description,
         parameters: {
           type: 'object',
-          properties: tool.parameters.properties,
+          properties: this.normalizeProperties(tool.parameters.properties),
           required: tool.parameters.required || [],
         },
       },
     }))
+  }
+
+  /**
+   * 规范化属性定义，确保 array 类型有 items 字段
+   */
+  private static normalizeProperties(properties: Record<string, unknown>): Record<string, unknown> {
+    const normalized: Record<string, unknown> = {}
+    
+    for (const [key, value] of Object.entries(properties)) {
+      const prop = value as Record<string, unknown>
+      const normalizedProp: Record<string, unknown> = { ...prop }
+      
+      // 处理 array 类型
+      if (prop.type === 'array') {
+        if (prop.items) {
+          const items = prop.items as Record<string, unknown>
+          // 递归处理 items 中的 properties
+          if (items.type === 'object' && items.properties) {
+            normalizedProp.items = {
+              ...items,
+              properties: this.normalizeProperties(items.properties as Record<string, unknown>),
+            }
+          } else {
+            normalizedProp.items = items
+          }
+        } else {
+          // 如果没有 items，添加默认的 string 类型
+          normalizedProp.items = { type: 'string' }
+        }
+      }
+      
+      // 处理 object 类型
+      if (prop.type === 'object' && prop.properties) {
+        normalizedProp.properties = this.normalizeProperties(prop.properties as Record<string, unknown>)
+      }
+      
+      normalized[key] = normalizedProp
+    }
+    
+    return normalized
   }
 
   /**
@@ -62,7 +102,7 @@ export class ToolAdapter {
       description: tool.description,
       input_schema: {
         type: 'object',
-        properties: tool.parameters.properties,
+        properties: this.normalizeProperties(tool.parameters.properties),
         required: tool.parameters.required || [],
       },
     }))
@@ -89,7 +129,7 @@ export class ToolAdapter {
         description: tool.description,
         [parameterField]: {
           type: 'object',
-          properties: tool.parameters.properties,
+          properties: this.normalizeProperties(tool.parameters.properties),
           required: tool.parameters.required || [],
         },
       }

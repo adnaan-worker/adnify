@@ -15,6 +15,11 @@ interface AboutDialogProps {
     onClose: () => void
 }
 
+const CONTRIBUTORS = [
+    { name: 'adnaan', avatar: 'https://github.com/adnaan-worker.png', url: 'https://github.com/adnaan-worker' },
+    { name: 'kerwin', avatar: 'https://github.com/kerwin2046.png', url: 'https://github.com/kerwin2046' },
+]
+
 export default function AboutDialog({ onClose }: AboutDialogProps) {
     const { language } = useStore()
     const [version, setVersion] = useState('1.0.0')
@@ -35,10 +40,10 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
         <Modal isOpen={true} onClose={onClose} noPadding size="2xl" className="overflow-hidden bg-transparent shadow-2xl">
             <div className="relative overflow-hidden bg-surface/80 backdrop-blur-3xl border border-border/50 flex flex-col h-[580px] w-full">
                 {/* Background Texture - Dot Pattern */}
-                <div className="absolute inset-0 pointer-events-none opacity-[0.05]" 
-                     style={{ backgroundImage: 'radial-gradient(currentColor 1px, transparent 1px)', backgroundSize: '24px 24px' }} 
+                <div className="absolute inset-0 pointer-events-none opacity-[0.05]"
+                    style={{ backgroundImage: 'radial-gradient(currentColor 1px, transparent 1px)', backgroundSize: '24px 24px' }}
                 />
-                
+
                 {/* Subtle Gradient Glows */}
                 <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-accent/10 rounded-full blur-[120px] pointer-events-none animate-pulse-slow" />
                 <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-purple-500/5 rounded-full blur-[150px] pointer-events-none" />
@@ -88,7 +93,7 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
                     </motion.div>
 
                     {/* Feature Pills */}
-                    <motion.div 
+                    <motion.div
                         initial={{ y: 10, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         transition={{ delay: 0.3, duration: 0.5 }}
@@ -98,6 +103,37 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
                         <FeaturePill icon={Cpu} label={language === 'zh' ? '深度理解' : 'Deep Context'} />
                         <FeaturePill icon={Zap} label={language === 'zh' ? '极速响应' : 'Blazing Fast'} />
                     </motion.div>
+
+                    {/* Contributors */}
+                    <motion.div
+                        initial={{ y: 10, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.4, duration: 0.5 }}
+                        className="mt-8 flex flex-col items-center gap-3"
+                    >
+                        <h3 className="text-[10px] font-bold text-text-muted uppercase tracking-wider opacity-60">
+                            {language === 'zh' ? '贡献者' : 'Contributors'}
+                        </h3>
+                        <div className="flex items-center -space-x-2 hover:space-x-1 transition-all duration-300">
+                            {CONTRIBUTORS.map((c) => (
+                                <a
+                                    key={c.name}
+                                    href={c.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="relative group/avatar"
+                                    title={c.name}
+                                >
+                                    <div className="absolute inset-0 bg-black/20 rounded-full group-hover/avatar:bg-transparent transition-colors" />
+                                    <img
+                                        src={c.avatar}
+                                        alt={c.name}
+                                        className="w-8 h-8 rounded-full border-2 border-surface shadow-sm group-hover/avatar:scale-110 group-hover/avatar:z-10 transition-all duration-300"
+                                    />
+                                </a>
+                            ))}
+                        </div>
+                    </motion.div>
                 </div>
 
                 {/* Footer */}
@@ -105,9 +141,11 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
                     <div className="flex items-center justify-between pt-6">
                         {/* Author Info */}
                         <div className="flex items-center gap-3 group cursor-pointer">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-accent to-purple-600 flex items-center justify-center text-xs font-bold text-white shadow-lg ring-2 ring-white/10 group-hover:scale-110 transition-transform duration-300">
-                                AD
-                            </div>
+                            <img
+                                src="https://github.com/adnaan-worker.png"
+                                alt="adnaan"
+                                className="w-10 h-10 rounded-full shadow-lg ring-2 ring-white/10 group-hover:scale-110 transition-transform duration-300"
+                            />
                             <div className="text-left">
                                 <p className="text-sm font-bold text-text-primary group-hover:text-accent transition-colors">adnaan</p>
                                 <p className="text-[10px] text-text-muted font-medium">Creator & Maintainer</p>
@@ -129,7 +167,7 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
                     </div>
                 </div>
             </div>
-        </Modal>
+        </Modal >
     )
 }
 

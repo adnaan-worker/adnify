@@ -550,7 +550,14 @@ export function ProviderSettings({
               {/* Top P */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs text-text-secondary">Top P</label>
+                  <div className="space-y-0.5">
+                    <label className="text-xs text-text-secondary">Top P</label>
+                    <p className="text-[10px] text-text-muted">
+                      {language === 'zh'
+                        ? '核采样：仅考虑累积概率达到 P 的 Token 集合'
+                        : 'Nucleus sampling: considers tokens with top_p probability mass'}
+                    </p>
+                  </div>
                   <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
                     {(localConfig.topP || 1).toFixed(2)}
                   </span>
@@ -572,7 +579,14 @@ export function ProviderSettings({
               {/* Top K */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs text-text-secondary">Top K</label>
+                  <div className="space-y-0.5">
+                    <label className="text-xs text-text-secondary">Top K</label>
+                    <p className="text-[10px] text-text-muted">
+                      {language === 'zh'
+                        ? '仅从概率最高的 K 个 Token 中采样'
+                        : 'Limits selection to the top K tokens'}
+                    </p>
+                  </div>
                   <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
                     {localConfig.topK ?? 'Default'}
                   </span>
@@ -617,7 +631,14 @@ export function ProviderSettings({
               {/* Frequency Penalty */}
               <div className="space-y-3 pt-3 border-t border-border/50">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs text-text-secondary">Frequency Penalty</label>
+                  <div className="space-y-0.5">
+                    <label className="text-xs text-text-secondary">Frequency Penalty</label>
+                    <p className="text-[10px] text-text-muted">
+                      {language === 'zh'
+                        ? '根据 Token 出现频率降低其重复概率'
+                        : 'Penalizes tokens based on their frequency in the text'}
+                    </p>
+                  </div>
                   <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
                     {(localConfig.frequencyPenalty || 0).toFixed(1)}
                   </span>
@@ -639,7 +660,14 @@ export function ProviderSettings({
               {/* Presence Penalty */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs text-text-secondary">Presence Penalty</label>
+                  <div className="space-y-0.5">
+                    <label className="text-xs text-text-secondary">Presence Penalty</label>
+                    <p className="text-[10px] text-text-muted">
+                      {language === 'zh'
+                        ? '根据 Token 是否出现过降低其重复概率'
+                        : 'Penalizes tokens based on their presence in the text'}
+                    </p>
+                  </div>
                   <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
                     {(localConfig.presencePenalty || 0).toFixed(1)}
                   </span>
@@ -661,7 +689,14 @@ export function ProviderSettings({
               {/* Seed */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs text-text-secondary">Seed</label>
+                  <div className="space-y-0.5">
+                    <label className="text-xs text-text-secondary">Seed</label>
+                    <p className="text-[10px] text-text-muted">
+                      {language === 'zh'
+                        ? '固定随机种子以获得可重现的结果'
+                        : 'Fixed seed for reproducible outputs'}
+                    </p>
+                  </div>
                   <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
                     {localConfig.seed ?? 'Random'}
                   </span>
@@ -681,7 +716,14 @@ export function ProviderSettings({
               {/* Stop Sequences */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs text-text-secondary">Stop Sequences</label>
+                  <div className="space-y-0.5">
+                    <label className="text-xs text-text-secondary">Stop Sequences</label>
+                    <p className="text-[10px] text-text-muted">
+                      {language === 'zh'
+                        ? '遇到这些字符时停止生成'
+                        : 'Stop generation when these sequences are encountered'}
+                    </p>
+                  </div>
                   <span className="text-[10px] text-text-muted bg-background/50 px-1.5 py-0.5 rounded">
                     Comma separated
                   </span>
@@ -704,7 +746,14 @@ export function ProviderSettings({
               {/* Logit Bias */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs text-text-secondary">Logit Bias (JSON)</label>
+                  <div className="space-y-0.5">
+                    <label className="text-xs text-text-secondary">Logit Bias (JSON)</label>
+                    <p className="text-[10px] text-text-muted">
+                      {language === 'zh'
+                        ? '调整特定 Token 出现的概率 (-100 到 100)'
+                        : 'Modify likelihood of specific tokens (-100 to 100)'}
+                    </p>
+                  </div>
                   <span className="text-[10px] text-text-muted bg-background/50 px-1.5 py-0.5 rounded">
                     Token ID: Bias
                   </span>

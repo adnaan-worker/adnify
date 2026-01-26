@@ -1,20 +1,20 @@
 /**
- * LLM IPC handlers
+ * LLM IPC handlers - 重构版
  * 
  * 支持功能：
  * - 流式对话
  * - 同步生成（后台任务）
  * - 结构化输出（代码分析、重构、修复、测试生成）
+ * - Embeddings（向量嵌入、语义搜索）
  * - 多窗口隔离
  */
 
 import { logger } from '@shared/utils/Logger'
 import { ipcMain, BrowserWindow } from 'electron'
-import { LLMService } from '../services/llm'
+import { LLMService, LLMError } from '../services/llm'
 
 // 按窗口 webContents.id 管理独立的 LLM 服务
 const llmServices = new Map<number, LLMService>()
-// 独立的压缩服务（不与主对话冲突）
 const compactionServices = new Map<number, LLMService>()
 
 /**
@@ -39,6 +39,24 @@ function getOrCreateCompactionService(webContentsId: number, window: BrowserWind
   return compactionServices.get(webContentsId)!
 }
 
+/**
+ * 统一错误处理
+ */
+function handleError(error: unknown, operation: string) {
+  if (error instanceof LLMError) {
+    logger.ipc.error(`[LLMService] ${operation} error:`, {
+      code: error.code,
+      message: error.message,
+      retryable: error.retryable,
+    })
+    throw error
+  }
+
+  const err = error as { message?: string }
+  logger.ipc.error(`[LLMService] ${operation} error:`, error)
+  throw new Error(err.message || `${operation} failed`)
+}
+
 export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) {
   // ============================================
   // 流式对话
@@ -49,7 +67,12 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
     if (!window) throw new Error('Window not found for LLM request')
 
     const service = getOrCreateService(event.sender.id, window)
-    await service.sendMessage(params)
+    
+    try {
+      await service.sendMessage(params)
+    } catch (error) {
+      handleError(error, 'Send message')
+    }
   })
 
   ipcMain.on('llm:abort', (event) => {
@@ -67,11 +90,17 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
     const service = getOrCreateCompactionService(event.sender.id, window)
     
     try {
-      return await service.sendMessageSync(params)
-    } catch (error: unknown) {
-      const err = error as { message?: string }
-      logger.ipc.error('[LLMService] Compaction error:', error)
-      return { error: err.message }
+      const response = await service.sendMessageSync(params)
+      return {
+        content: response.data,
+        usage: response.usage,
+        metadata: response.metadata,
+      }
+    } catch (error) {
+      if (error instanceof LLMError) {
+        return { error: error.message, code: error.code }
+      }
+      return { error: (error as Error).message }
     }
   })
 
@@ -86,11 +115,14 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
     const service = getOrCreateService(event.sender.id, window)
     
     try {
-      return await service.analyzeCode(params)
-    } catch (error: unknown) {
-      const err = error as { message?: string }
-      logger.ipc.error('[LLMService] Code analysis error:', error)
-      throw new Error(err.message || 'Code analysis failed')
+      const response = await service.analyzeCode(params)
+      return {
+        data: response.data,
+        usage: response.usage,
+        metadata: response.metadata,
+      }
+    } catch (error) {
+      handleError(error, 'Code analysis')
     }
   })
 
@@ -101,16 +133,18 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
     const service = getOrCreateService(event.sender.id, window)
     
     try {
-      return await service.analyzeCodeStream(params, (partial) => {
-        // 发送部分结果到渲染进程
+      const response = await service.analyzeCodeStream(params, (partial) => {
         if (!window.isDestroyed()) {
           window.webContents.send('llm:analyzeCodePartial', partial)
         }
       })
-    } catch (error: unknown) {
-      const err = error as { message?: string }
-      logger.ipc.error('[LLMService] Code analysis stream error:', error)
-      throw new Error(err.message || 'Code analysis failed')
+      return {
+        data: response.data,
+        usage: response.usage,
+        metadata: response.metadata,
+      }
+    } catch (error) {
+      handleError(error, 'Code analysis stream')
     }
   })
 
@@ -125,11 +159,14 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
     const service = getOrCreateService(event.sender.id, window)
     
     try {
-      return await service.suggestRefactoring(params)
-    } catch (error: unknown) {
-      const err = error as { message?: string }
-      logger.ipc.error('[LLMService] Refactoring suggestion error:', error)
-      throw new Error(err.message || 'Refactoring suggestion failed')
+      const response = await service.suggestRefactoring(params)
+      return {
+        data: response.data,
+        usage: response.usage,
+        metadata: response.metadata,
+      }
+    } catch (error) {
+      handleError(error, 'Refactoring suggestion')
     }
   })
 
@@ -144,11 +181,14 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
     const service = getOrCreateService(event.sender.id, window)
     
     try {
-      return await service.suggestFixes(params)
-    } catch (error: unknown) {
-      const err = error as { message?: string }
-      logger.ipc.error('[LLMService] Fix suggestion error:', error)
-      throw new Error(err.message || 'Fix suggestion failed')
+      const response = await service.suggestFixes(params)
+      return {
+        data: response.data,
+        usage: response.usage,
+        metadata: response.metadata,
+      }
+    } catch (error) {
+      handleError(error, 'Fix suggestion')
     }
   })
 
@@ -163,11 +203,71 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
     const service = getOrCreateService(event.sender.id, window)
     
     try {
-      return await service.generateTests(params)
-    } catch (error: unknown) {
-      const err = error as { message?: string }
-      logger.ipc.error('[LLMService] Test generation error:', error)
-      throw new Error(err.message || 'Test generation failed')
+      const response = await service.generateTests(params)
+      return {
+        data: response.data,
+        usage: response.usage,
+        metadata: response.metadata,
+      }
+    } catch (error) {
+      handleError(error, 'Test generation')
+    }
+  })
+
+  // ============================================
+  // Embeddings
+  // ============================================
+
+  ipcMain.handle('llm:embedText', async (event, params) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) throw new Error('Window not found')
+
+    const service = getOrCreateService(event.sender.id, window)
+    
+    try {
+      const response = await service.embedText(params.text, params.config)
+      return {
+        data: response.data,
+        usage: response.usage,
+      }
+    } catch (error) {
+      handleError(error, 'Text embedding')
+    }
+  })
+
+  ipcMain.handle('llm:embedMany', async (event, params) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) throw new Error('Window not found')
+
+    const service = getOrCreateService(event.sender.id, window)
+    
+    try {
+      const response = await service.embedMany(params.texts, params.config)
+      return {
+        data: response.data,
+        usage: response.usage,
+      }
+    } catch (error) {
+      handleError(error, 'Batch embedding')
+    }
+  })
+
+  ipcMain.handle('llm:findSimilar', async (event, params) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) throw new Error('Window not found')
+
+    const service = getOrCreateService(event.sender.id, window)
+    
+    try {
+      const result = await service.findSimilar(
+        params.query,
+        params.candidates,
+        params.config,
+        params.topK
+      )
+      return result
+    } catch (error) {
+      handleError(error, 'Similarity search')
     }
   })
 }

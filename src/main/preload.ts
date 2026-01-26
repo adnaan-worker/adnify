@@ -180,7 +180,7 @@ export interface ElectronAPI {
 
   // LLM
   sendMessage: (params: LLMSendMessageParams) => Promise<void>
-  compactContext: (params: LLMSendMessageParams) => Promise<{ content: string; error?: string }>
+  compactContext: (params: LLMSendMessageParams) => Promise<{ content?: string; usage?: any; metadata?: any; error?: string; code?: string }>
   abortMessage: () => void
   // Structured Output
   analyzeCode: (params: any) => Promise<any>
@@ -188,6 +188,10 @@ export interface ElectronAPI {
   suggestRefactoring: (params: any) => Promise<any>
   suggestFixes: (params: any) => Promise<any>
   generateTests: (params: any) => Promise<any>
+  // Embeddings
+  embedText: (params: { text: string; config: any }) => Promise<any>
+  embedMany: (params: { texts: string[]; config: any }) => Promise<any>
+  findSimilar: (params: { query: string; candidates: string[]; config: any; topK?: number }) => Promise<any>
   onLLMStream: (callback: (data: LLMStreamChunk) => void) => () => void
   onLLMToolCall: (callback: (toolCall: LLMToolCall) => void) => () => void
   onLLMError: (callback: (error: LLMError) => void) => () => void
@@ -425,6 +429,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   suggestRefactoring: (params: any) => ipcRenderer.invoke('llm:suggestRefactoring', params),
   suggestFixes: (params: any) => ipcRenderer.invoke('llm:suggestFixes', params),
   generateTests: (params: any) => ipcRenderer.invoke('llm:generateTests', params),
+  // Embeddings
+  embedText: (params: { text: string; config: any }) => ipcRenderer.invoke('llm:embedText', params),
+  embedMany: (params: { texts: string[]; config: any }) => ipcRenderer.invoke('llm:embedMany', params),
+  findSimilar: (params: { query: string; candidates: string[]; config: any; topK?: number }) => ipcRenderer.invoke('llm:findSimilar', params),
   onLLMStream: (callback: (data: LLMStreamChunk) => void) => {
     const handler = (_: IpcRendererEvent, data: LLMStreamChunk) => callback(data)
     ipcRenderer.on('llm:stream', handler)

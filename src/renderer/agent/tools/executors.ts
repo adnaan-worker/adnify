@@ -457,7 +457,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         try {
             const results = await api.index.hybridSearch(ctx.workspacePath, args.query as string, (args.top_k as number) || 10)
             if (!results?.length) return { success: true, result: 'No results found' }
-            return { success: true, result: results.map(r => `${r.relativePath}:${r.startLine}: ${r.content.trim()}`).join('\n') }
+            return { success: true, result: results.map((r: { relativePath: string; startLine: number; content: string }) => `${r.relativePath}:${r.startLine}: ${r.content.trim()}`).join('\n') }
         } catch (e) {
             return { success: false, result: '', error: e instanceof Error ? e.message : 'Search failed' }
         }
@@ -524,16 +524,16 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
 
         const format = (s: { name: string; kind: number; children?: unknown[] }, depth: number): string => {
             let out = `${'  '.repeat(depth)}${s.name} (${s.kind})\n`
-            if (s.children) out += (s.children as typeof s[]).map(c => format(c, depth + 1)).join('')
+            if (s.children) out += (s.children as typeof s[]).map((c: typeof s) => format(c, depth + 1)).join('')
             return out
         }
-        return { success: true, result: symbols.map((s) => format(s, 0)).join('') }
+        return { success: true, result: symbols.map((s: { name: string; kind: number; children?: unknown[] }) => format(s, 0)).join('') }
     },
 
     async web_search(args) {
         const result = await api.http.webSearch(args.query as string, args.max_results as number)
         if (!result.success || !result.results) return { success: false, result: '', error: result.error || 'Search failed' }
-        return { success: true, result: result.results.map((r) => `[${r.title}](${r.url})\n${r.snippet}`).join('\n\n') }
+        return { success: true, result: result.results.map((r: { title: string; url: string; snippet: string }) => `[${r.title}](${r.url})\n${r.snippet}`).join('\n\n') }
     },
 
     async read_url(args) {
@@ -818,12 +818,14 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             const language = getLanguageId(path)
             
             // 调用 AI 分析
-            const result = await api.llm.analyzeCode({
+            const response = await api.llm.analyzeCode({
                 config: llmConfig,
                 code,
                 language,
                 filePath: path,
             })
+            
+            const result = response.data
             
             // 格式化结果
             const issues = result.issues.map(issue => 
@@ -845,6 +847,8 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 '',
                 '## Summary:',
                 result.summary,
+                '',
+                response.usage ? `## Token Usage: ${response.usage.totalTokens} tokens (${response.usage.cachedInputTokens || 0} cached)` : '',
             ].join('\n')
             
             return {
@@ -879,35 +883,29 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             const language = getLanguageId(path)
             
             // 调用 AI 重构建议
-            const result = await api.llm.suggestRefactoring({
+            const response = await api.llm.suggestRefactoring({
                 config: llmConfig,
                 code,
                 language,
                 intent: args.intent as string,
             })
             
+            const result = response.data
+            
             // 格式化结果
-            const changes = result.changes.map((change, i) => 
-                `${i + 1}. [${change.type}] Lines ${change.startLine}-${change.endLine}\n` +
-                `   ${change.explanation}\n` +
-                `   Old: ${change.oldCode.substring(0, 50)}...\n` +
-                `   New: ${change.newCode.substring(0, 50)}...`
+            const refactorings = result.refactorings.map((ref, i) => 
+                `${i + 1}. [${ref.confidence}] ${ref.title}\n` +
+                `   ${ref.description}\n` +
+                `   ${ref.explanation}\n` +
+                `   Changes: ${ref.changes.length} modification(s)`
             ).join('\n\n')
             
             const output = [
-                '=== Refactoring Suggestion ===',
+                '=== Refactoring Suggestions ===',
                 '',
-                `## ${result.title}`,
-                result.description,
+                refactorings,
                 '',
-                '## Changes:',
-                changes,
-                '',
-                '## Benefits:',
-                result.benefits.map(b => `- ${b}`).join('\n'),
-                '',
-                '## Risks:',
-                result.risks.map(r => `- ${r}`).join('\n'),
+                response.usage ? `## Token Usage: ${response.usage.totalTokens} tokens (${response.usage.cachedInputTokens || 0} cached)` : '',
             ].join('\n')
             
             return {
@@ -916,7 +914,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 richContent: [{
                     type: 'json' as const,
                     text: JSON.stringify(result, null, 2),
-                    title: 'Refactoring Suggestion',
+                    title: 'Refactoring Suggestions',
                 }],
             }
         } catch (error: any) {
@@ -958,31 +956,29 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             }
             
             // 调用 AI 修复建议
-            const result = await api.llm.suggestFixes({
+            const response = await api.llm.suggestFixes({
                 config: llmConfig,
                 code,
                 language,
                 diagnostics,
             })
             
+            const result = response.data
+            
             // 格式化结果
-            const fixes = result.fixes.map((fix, i) => {
-                const solutions = fix.solutions.map((sol, j) => 
-                    `   ${j + 1}. [${sol.confidence}] ${sol.title}\n` +
-                    `      ${sol.description}\n` +
-                    `      Changes: ${sol.changes.length} modification(s)`
-                ).join('\n')
-                
-                return `${i + 1}. Line ${fix.diagnostic.line}: ${fix.diagnostic.message}\n${solutions}`
-            }).join('\n\n')
+            const fixes = result.fixes.map((fix, i) => 
+                `${i + 1}. [${fix.confidence}] ${fix.title}\n` +
+                `   Diagnostic #${fix.diagnosticIndex}: ${diagnostics[fix.diagnosticIndex]?.message || 'Unknown'}\n` +
+                `   ${fix.description}\n` +
+                `   Changes: ${fix.changes.length} modification(s)`
+            ).join('\n\n')
             
             const output = [
                 '=== AI Fix Suggestions ===',
                 '',
                 fixes,
                 '',
-                '## Summary:',
-                result.summary,
+                response.usage ? `## Token Usage: ${response.usage.totalTokens} tokens (${response.usage.cachedInputTokens || 0} cached)` : '',
             ].join('\n')
             
             return {
@@ -1017,12 +1013,14 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             const language = getLanguageId(path)
             
             // 调用 AI 测试生成
-            const result = await api.llm.generateTests({
+            const response = await api.llm.generateTests({
                 config: llmConfig,
                 code,
                 language,
                 framework: args.framework as string | undefined,
             })
+            
+            const result = response.data
             
             // 格式化结果
             const testCases = result.testCases.map((tc, i) => 
@@ -1034,16 +1032,13 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             const output = [
                 '=== Generated Tests ===',
                 '',
-                `Framework: ${result.framework}`,
-                '',
-                '## Imports:',
-                result.imports.join('\n'),
-                '',
                 result.setup ? `## Setup:\n\`\`\`${language}\n${result.setup}\n\`\`\`\n` : '',
                 '## Test Cases:',
                 testCases,
                 '',
                 result.teardown ? `## Teardown:\n\`\`\`${language}\n${result.teardown}\n\`\`\`` : '',
+                '',
+                response.usage ? `## Token Usage: ${response.usage.totalTokens} tokens (${response.usage.cachedInputTokens || 0} cached)` : '',
             ].filter(Boolean).join('\n')
             
             return {

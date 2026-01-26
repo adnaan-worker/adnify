@@ -1,38 +1,37 @@
 /**
  * LLM 服务 - 统一入口
- * 
- * 职责：
- * - 提供统一的 LLM 服务接口
- * - 协调各个子服务（流式、同步、结构化、Agent）
- * - 管理请求生命周期
+ * 完全重构，使用 AI SDK 6.0 新 API
  */
 
 import { BrowserWindow } from 'electron'
-import { StreamingService } from './StreamingService'
-import { SyncService } from './SyncService'
-import { StructuredService } from './StructuredService'
+import { StreamingService } from './services/StreamingService'
+import { SyncService } from './services/SyncService'
+import { StructuredService } from './services/StructuredService'
+import { EmbeddingService } from './services/EmbeddingService'
 import type { LLMConfig, LLMMessage, ToolDefinition } from '@shared/types'
-import type { CodeAnalysis, Refactoring, CodeFix, TestCase } from './StructuredService'
+import type {
+  LLMResponse,
+  CodeAnalysis,
+  Refactoring,
+  CodeFix,
+  TestCase,
+} from './types'
 
 export class LLMService {
   private streamingService: StreamingService
   private syncService: SyncService
   private structuredService: StructuredService
+  private embeddingService: EmbeddingService
   private currentAbortController: AbortController | null = null
 
   constructor(window: BrowserWindow) {
     this.streamingService = new StreamingService(window)
     this.syncService = new SyncService()
     this.structuredService = new StructuredService()
+    this.embeddingService = new EmbeddingService()
   }
 
-  // ============================================
   // 流式生成
-  // ============================================
-
-  /**
-   * 发送消息（流式响应）
-   */
   async sendMessage(params: {
     config: LLMConfig
     messages: LLMMessage[]
@@ -40,7 +39,6 @@ export class LLMService {
     systemPrompt?: string
   }) {
     this.currentAbortController = new AbortController()
-
     try {
       return await this.streamingService.generate({
         ...params,
@@ -51,63 +49,40 @@ export class LLMService {
     }
   }
 
-  /**
-   * 中止当前请求
-   */
   abort() {
-    if (this.currentAbortController) {
-      this.currentAbortController.abort()
-      this.currentAbortController = null
-    }
+    this.currentAbortController?.abort()
+    this.currentAbortController = null
   }
 
-  // ============================================
   // 同步生成
-  // ============================================
-
-  /**
-   * 同步发送消息（用于后台任务）
-   */
   async sendMessageSync(params: {
     config: LLMConfig
     messages: LLMMessage[]
     tools?: ToolDefinition[]
     systemPrompt?: string
-  }): Promise<{ content: string; error?: string }> {
+  }): Promise<LLMResponse<string>> {
     return await this.syncService.generate(params)
   }
 
-  // ============================================
   // 结构化输出
-  // ============================================
-
-  /**
-   * 代码分析
-   */
   async analyzeCode(params: {
     config: LLMConfig
     code: string
     language: string
     filePath: string
-  }): Promise<CodeAnalysis> {
+  }): Promise<LLMResponse<CodeAnalysis>> {
     return await this.structuredService.analyzeCode(params)
   }
 
-  /**
-   * 代码重构建议
-   */
   async suggestRefactoring(params: {
     config: LLMConfig
     code: string
     language: string
     intent: string
-  }): Promise<Refactoring> {
+  }): Promise<LLMResponse<Refactoring>> {
     return await this.structuredService.suggestRefactoring(params)
   }
 
-  /**
-   * 错误修复建议
-   */
   async suggestFixes(params: {
     config: LLMConfig
     code: string
@@ -118,25 +93,19 @@ export class LLMService {
       column: number
       severity: number
     }>
-  }): Promise<CodeFix> {
+  }): Promise<LLMResponse<CodeFix>> {
     return await this.structuredService.suggestFixes(params)
   }
 
-  /**
-   * 生成测试用例
-   */
   async generateTests(params: {
     config: LLMConfig
     code: string
     language: string
     framework?: string
-  }): Promise<TestCase> {
+  }): Promise<LLMResponse<TestCase>> {
     return await this.structuredService.generateTests(params)
   }
 
-  /**
-   * 流式代码分析
-   */
   async analyzeCodeStream(
     params: {
       config: LLMConfig
@@ -144,27 +113,34 @@ export class LLMService {
       language: string
       filePath: string
     },
-    onPartial: (partial: unknown) => void
-  ): Promise<CodeAnalysis> {
+    onPartial: (partial: Partial<CodeAnalysis>) => void
+  ): Promise<LLMResponse<CodeAnalysis>> {
     return await this.structuredService.analyzeCodeStream(params, onPartial)
   }
 
-  // ============================================
-  // 生命周期
-  // ============================================
+  // Embeddings
+  async embedText(text: string, config: LLMConfig): Promise<LLMResponse<number[]>> {
+    return await this.embeddingService.embedText(text, config)
+  }
 
-  /**
-   * 销毁服务
-   */
+  async embedMany(texts: string[], config: LLMConfig): Promise<LLMResponse<number[][]>> {
+    return await this.embeddingService.embedMany(texts, config)
+  }
+
+  async findSimilar(
+    query: string,
+    candidates: string[],
+    config: LLMConfig,
+    topK?: number
+  ) {
+    return await this.embeddingService.findMostSimilar(query, candidates, config, topK)
+  }
+
   destroy() {
     this.abort()
   }
 }
 
 // 导出类型
-export type {
-  CodeAnalysis,
-  Refactoring,
-  CodeFix,
-  TestCase,
-}
+export type { CodeAnalysis, Refactoring, CodeFix, TestCase, LLMResponse }
+export { LLMError } from './types'

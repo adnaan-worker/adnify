@@ -44,6 +44,97 @@ export type {
   LLMSendMessageParams,
 } from '@shared/types/llm'
 
+// LLM 响应类型
+export interface TokenUsage {
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  cachedInputTokens?: number
+  reasoningTokens?: number
+}
+
+export interface ResponseMetadata {
+  id: string
+  modelId: string
+  timestamp: Date
+  finishReason?: string
+}
+
+export interface LLMResponse<T> {
+  data: T
+  usage?: TokenUsage
+  metadata?: ResponseMetadata
+}
+
+// 结构化输出类型
+export interface CodeAnalysis {
+  issues: Array<{
+    severity: 'error' | 'warning' | 'info' | 'hint'
+    message: string
+    line: number
+    column: number
+    endLine?: number
+    endColumn?: number
+    code?: string
+    source?: string
+  }>
+  suggestions: Array<{
+    title: string
+    description: string
+    priority: 'high' | 'medium' | 'low'
+    changes?: Array<{
+      line: number
+      oldText: string
+      newText: string
+    }>
+  }>
+  summary: string
+}
+
+export interface Refactoring {
+  refactorings: Array<{
+    title: string
+    description: string
+    confidence: 'high' | 'medium' | 'low'
+    changes: Array<{
+      type: 'replace' | 'insert' | 'delete'
+      startLine: number
+      startColumn: number
+      endLine: number
+      endColumn: number
+      newText?: string
+    }>
+    explanation: string
+  }>
+}
+
+export interface CodeFix {
+  fixes: Array<{
+    diagnosticIndex: number
+    title: string
+    description: string
+    changes: Array<{
+      startLine: number
+      startColumn: number
+      endLine: number
+      endColumn: number
+      newText: string
+    }>
+    confidence: 'high' | 'medium' | 'low'
+  }>
+}
+
+export interface TestCase {
+  testCases: Array<{
+    name: string
+    description: string
+    code: string
+    type: 'unit' | 'integration' | 'edge-case'
+  }>
+  setup?: string
+  teardown?: string
+}
+
 // 从 @shared/types/mcp 重新导出
 export type {
   McpServerState,
@@ -248,7 +339,13 @@ export interface ElectronAPI {
   getRecentLogs: () => Promise<string>
   // LLM
   sendMessage: (params: LLMSendMessageParams) => Promise<void>
-  compactContext: (params: LLMSendMessageParams) => Promise<{ content: string; error?: string }>
+  compactContext: (params: LLMSendMessageParams) => Promise<{
+    content?: string
+    usage?: TokenUsage
+    metadata?: ResponseMetadata
+    error?: string
+    code?: string
+  }>
   abortMessage: () => void
   onLLMStream: (callback: (chunk: LLMStreamChunk) => void) => () => void
   onLLMToolCall: (callback: (toolCall: LLMToolCall) => void) => () => void
@@ -260,76 +357,19 @@ export interface ElectronAPI {
     code: string
     language: string
     filePath: string
-  }) => Promise<{
-    issues: Array<{
-      severity: 'error' | 'warning' | 'info' | 'hint'
-      message: string
-      line: number
-      column: number
-      endLine?: number
-      endColumn?: number
-      code?: string
-      source?: string
-    }>
-    suggestions: Array<{
-      title: string
-      description: string
-      priority: 'high' | 'medium' | 'low'
-      changes?: Array<{
-        line: number
-        oldText: string
-        newText: string
-      }>
-    }>
-    summary: string
-  }>
+  }) => Promise<LLMResponse<CodeAnalysis>>
   analyzeCodeStream: (params: {
     config: LLMConfig
     code: string
     language: string
     filePath: string
-  }) => Promise<{
-    issues: Array<{
-      severity: 'error' | 'warning' | 'info' | 'hint'
-      message: string
-      line: number
-      column: number
-      endLine?: number
-      endColumn?: number
-      code?: string
-      source?: string
-    }>
-    suggestions: Array<{
-      title: string
-      description: string
-      priority: 'high' | 'medium' | 'low'
-      changes?: Array<{
-        line: number
-        oldText: string
-        newText: string
-      }>
-    }>
-    summary: string
-  }>
+  }) => Promise<LLMResponse<CodeAnalysis>>
   suggestRefactoring: (params: {
     config: LLMConfig
     code: string
     language: string
     intent: string
-  }) => Promise<{
-    title: string
-    description: string
-    changes: Array<{
-      type: 'replace' | 'insert' | 'delete'
-      startLine: number
-      endLine: number
-      oldCode: string
-      newCode: string
-      explanation: string
-    }>
-    benefits: string[]
-    risks: string[]
-  }>
+  }) => Promise<LLMResponse<Refactoring>>
   suggestFixes: (params: {
     config: LLMConfig
     code: string
@@ -340,46 +380,28 @@ export interface ElectronAPI {
       column: number
       severity: number
     }>
-  }) => Promise<{
-    fixes: Array<{
-      diagnostic: {
-        message: string
-        line: number
-        column: number
-        severity: number
-      }
-      solutions: Array<{
-        title: string
-        description: string
-        changes: Array<{
-          type: 'replace' | 'insert' | 'delete'
-          startLine: number
-          endLine: number
-          oldCode: string
-          newCode: string
-        }>
-        confidence: 'high' | 'medium' | 'low'
-      }>
-    }>
-    summary: string
-  }>
+  }) => Promise<LLMResponse<CodeFix>>
   generateTests: (params: {
     config: LLMConfig
     code: string
     language: string
     framework?: string
-  }) => Promise<{
-    framework: string
-    testCases: Array<{
-      name: string
-      description: string
-      code: string
-      type: 'unit' | 'integration' | 'e2e'
-    }>
-    setup?: string
-    teardown?: string
-    imports: string[]
-  }>
+  }) => Promise<LLMResponse<TestCase>>
+  // LLM - Embeddings
+  embedText: (params: {
+    text: string
+    config: LLMConfig
+  }) => Promise<LLMResponse<number[]>>
+  embedMany: (params: {
+    texts: string[]
+    config: LLMConfig
+  }) => Promise<LLMResponse<number[][]>>
+  findSimilar: (params: {
+    query: string
+    candidates: string[]
+    config: LLMConfig
+    topK?: number
+  }) => Promise<Array<{ text: string; similarity: number; index: number }>>
 
   // Terminal
   createTerminal: (options: { id: string; cwd?: string; shell?: string }) => Promise<{ success: boolean; error?: string }>

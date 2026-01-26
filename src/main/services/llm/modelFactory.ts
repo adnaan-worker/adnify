@@ -118,7 +118,6 @@ function createCustomModel(
         }
 
         default: {
-            // 默认使用 OpenAI 兼容模式
             const fallback = createOpenAICompatible({
                 name: 'custom',
                 apiKey,

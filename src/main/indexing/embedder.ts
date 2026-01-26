@@ -2,6 +2,10 @@
  * Embedding 服务
  * 支持多个免费/付费 Embedding API 提供商
  * 包含速率限制和重试机制
+ * 
+ * Custom provider 支持：
+ * 1. 任何兼容 OpenAI API 的服务
+ * 2. 使用 LLM 配置的 Embeddings（通过 AI SDK 6.0）
  */
 
 import {
@@ -11,6 +15,7 @@ import {
   EMBEDDING_ENDPOINTS,
 } from './types'
 import { logger } from '@shared/utils/Logger'
+import type { LLMConfig } from '@shared/types'
 
 // 每个 provider 支持的模型前缀/关键词
 const PROVIDER_MODEL_PATTERNS: Record<string, RegExp> = {
@@ -24,13 +29,13 @@ const PROVIDER_MODEL_PATTERNS: Record<string, RegExp> = {
 
 // 每个 provider 的速率限制配置（保守值，适用于免费账户）
 const RATE_LIMITS: Record<EmbeddingProvider, { rpm: number; batchSize: number }> = {
-  jina: { rpm: 60, batchSize: 100 },      // Jina 比较宽松
-  voyage: { rpm: 3, batchSize: 8 },        // Voyage 免费账户 3 RPM
-  openai: { rpm: 60, batchSize: 100 },     // OpenAI 付费账户
-  cohere: { rpm: 100, batchSize: 96 },     // Cohere 免费 100/min
-  huggingface: { rpm: 30, batchSize: 1 },  // HuggingFace 逐个请求
-  ollama: { rpm: 1000, batchSize: 1 },     // 本地无限制
-  custom: { rpm: 60, batchSize: 50 },      // 自定义服务默认配置
+  jina: { rpm: 60, batchSize: 100 },
+  voyage: { rpm: 3, batchSize: 8 },
+  openai: { rpm: 60, batchSize: 100 },
+  cohere: { rpm: 100, batchSize: 96 },
+  huggingface: { rpm: 30, batchSize: 1 },
+  ollama: { rpm: 1000, batchSize: 1 },
+  custom: { rpm: 60, batchSize: 50 },
 }
 
 /**
@@ -62,8 +67,10 @@ export class EmbeddingService {
   private config: EmbeddingConfig
   private rateLimiter: RateLimiter
   private batchSize: number
+  private llmConfig: LLMConfig | null = null
+  private useLLMEmbeddings: boolean = false
 
-  constructor(config: EmbeddingConfig) {
+  constructor(config: EmbeddingConfig, llmConfig?: LLMConfig) {
     this.config = {
       ...config,
       model: this.resolveModel(config.provider, config.model),
@@ -71,6 +78,22 @@ export class EmbeddingService {
     const limits = RATE_LIMITS[config.provider]
     this.rateLimiter = new RateLimiter(limits.rpm)
     this.batchSize = limits.batchSize
+    
+    // 如果提供了 LLM 配置且 provider 是 custom，则使用 LLM Embeddings
+    if (llmConfig && config.provider === 'custom' && !config.baseUrl) {
+      this.llmConfig = llmConfig
+      this.useLLMEmbeddings = true
+    }
+  }
+
+  /**
+   * 设置 LLM 配置（用于 custom provider 使用 LLM Embeddings）
+   */
+  setLLMConfig(llmConfig: LLMConfig): void {
+    this.llmConfig = llmConfig
+    if (this.config.provider === 'custom' && !this.config.baseUrl) {
+      this.useLLMEmbeddings = true
+    }
   }
 
   /**
@@ -185,6 +208,11 @@ export class EmbeddingService {
    * 单次 embedding 请求（不带重试）
    */
   private async embedSingle(texts: string[]): Promise<number[][]> {
+    // Custom provider 且配置了 LLM，使用 LLM Embeddings
+    if (this.useLLMEmbeddings && this.llmConfig) {
+      return this.embedLLM(texts)
+    }
+    
     switch (this.config.provider) {
       case 'jina':
         return this.embedJina(texts)
@@ -207,6 +235,23 @@ export class EmbeddingService {
 
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms))
+  }
+
+  /**
+   * 使用 LLM 配置的 Embeddings（通过 AI SDK 6.0）
+   * 当 provider 为 'custom' 且没有 baseUrl 时使用
+   */
+  private async embedLLM(texts: string[]): Promise<number[][]> {
+    if (!this.llmConfig) {
+      throw new Error('LLM config not set. Call setLLMConfig() first.')
+    }
+
+    // 动态导入 LLM Embeddings 服务
+    const { EmbeddingService: LLMEmbeddingService } = await import('../services/llm/services/EmbeddingService')
+    const embeddingService = new LLMEmbeddingService()
+
+    const response = await embeddingService.embedMany(texts, this.llmConfig)
+    return response.data
   }
 
 

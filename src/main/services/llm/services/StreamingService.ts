@@ -151,6 +151,25 @@ export class StreamingService {
             }
             break
 
+          // 工具调用开始（立即显示工具卡片）
+          case 'tool-input-start':
+            this.sendEvent({
+              type: 'tool-call-start',
+              id: part.id,
+              name: part.toolName,
+            })
+            break
+
+          // 工具调用参数增量（流式更新参数）
+          case 'tool-input-delta':
+            this.sendEvent({
+              type: 'tool-call-delta',
+              id: part.id,
+              argumentsDelta: part.delta,
+            })
+            break
+
+          // 工具调用完成（最终参数）
           case 'tool-call':
             this.sendEvent({
               type: 'tool-call',
@@ -229,6 +248,23 @@ export class StreamingService {
           this.window.webContents.send('llm:stream', {
             type: 'reasoning',
             content: event.content,
+          })
+          break
+
+        case 'tool-call-start':
+          this.window.webContents.send('llm:stream', {
+            type: 'tool_call_start',
+            id: event.id,
+            name: event.name,
+          })
+          break
+
+        case 'tool-call-delta':
+          this.window.webContents.send('llm:stream', {
+            type: 'tool_call_delta',
+            id: event.id,
+            name: event.name,
+            argumentsDelta: event.argumentsDelta,
           })
           break
 

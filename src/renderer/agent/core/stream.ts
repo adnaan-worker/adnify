@@ -84,13 +84,9 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
   const cleanups: (() => void)[] = []
 
   const cleanup = () => {
-    if (isCleanedUp) {
-      logger.agent.warn('[StreamProcessor] Already cleaned up, skipping')
-      return
-    }
+    if (isCleanedUp) return
     isCleanedUp = true
-    const count = cleanups.length
-    logger.agent.info('[StreamProcessor] Cleaning up listeners, count:', count)
+    
     for (const fn of cleanups) {
       try {
         fn()
@@ -275,23 +271,29 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
   let resolveWait: ((result: LLMCallResult) => void) | null = null
   let isResolved = false
 
+  // 立即创建 Promise，避免竞态条件
+  // 这确保即使 done 事件在 wait() 被调用之前到达，也能正确 resolve
+  const waitPromise = new Promise<LLMCallResult>((resolve) => {
+    resolveWait = resolve
+  })
+
   const doResolve = (result: LLMCallResult) => {
-    if (isResolved) {
-      logger.agent.warn('[StreamProcessor] Already resolved, skipping')
-      return
-    }
+    if (isResolved) return
     isResolved = true
-    logger.agent.info('[StreamProcessor] Resolving with result:', { hasContent: !!result.content, hasUsage: !!result.usage, hasError: !!result.error })
-    cleanup()
+    
+    // 先 resolve Promise，再 cleanup
     if (resolveWait) {
       resolveWait(result)
     }
+    
+    // cleanup 放在最后
+    cleanup()
   }
 
   // 处理错误事件
   const handleError = (err: { message?: string; code?: string } | string) => {
     const errorMsg = typeof err === 'string' ? err : err.message || 'Unknown error'
-    logger.agent.error('[StreamProcessor] Error received:', errorMsg)
+    logger.agent.error('[StreamProcessor] Error:', errorMsg)
     error = errorMsg
     finalizeReasoning()
     EventBus.emit({ type: 'llm:error', error: errorMsg })
@@ -302,9 +304,6 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
   const handleDone = (result: { usage?: unknown }) => {
     if (result?.usage) {
       usage = result.usage as TokenUsage
-      logger.agent.info('[StreamProcessor] Received usage:', usage)
-    } else {
-      logger.agent.warn('[StreamProcessor] No usage in done event')
     }
     finalizeReasoning()
 
@@ -324,14 +323,9 @@ export function createStreamProcessor(assistantId: string | null): StreamProcess
 
   cleanups.push(unsubStream, unsubToolCall, unsubError, unsubDone)
   activeListenerCount += 4
-  logger.agent.info('[StreamProcessor] Created with', cleanups.length, 'listeners, total active:', activeListenerCount)
 
-  // 等待完成
-  const wait = (): Promise<LLMCallResult> => {
-    return new Promise((resolve) => {
-      resolveWait = resolve
-    })
-  }
+  // 等待完成 - 返回已创建的 Promise
+  const wait = (): Promise<LLMCallResult> => waitPromise
 
   EventBus.emit({ type: 'llm:start' })
 

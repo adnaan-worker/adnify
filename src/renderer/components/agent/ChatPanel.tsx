@@ -830,7 +830,7 @@ export default function ChatPanel() {
         hasCheckpoint={hasCheckpoint}
       />
     )
-  }, [handleEditMessage, handleRegenerate, handleRestore, approveCurrentTool, rejectCurrentTool, handleShowDiff, pendingToolCall, messageCheckpoints])
+  }, [handleEditMessage, handleRegenerate, handleRestore, approveCurrentTool, rejectCurrentTool, handleShowDiff, pendingToolCall?.id, messageCheckpoints])
 
   const getStreamingStatus = useCallback(() => {
     if (streamState.phase === 'streaming') return 'Thinking...'

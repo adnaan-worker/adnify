@@ -34,6 +34,15 @@ import type { LLMConfig, LLMCallResult, ExecutionContext } from './types'
 
 // ===== LLM 调用 =====
 
+/**
+ * 调用 LLM 并处理流式响应
+ * 
+ * @param config - LLM 配置
+ * @param messages - 消息历史
+ * @param chatMode - 工作模式
+ * @param assistantId - 助手消息 ID
+ * @returns LLM 调用结果
+ */
 async function callLLM(
   config: LLMConfig,
   messages: LLMMessage[],
@@ -63,25 +72,25 @@ async function callLLM(
       systemPrompt: ''
     })
 
+    // 等待流式响应完成
     const result = await processor.wait()
     performanceMonitor.end(`llm:${config.model}`, !result.error)
 
     // 更新 usage
     if (assistantId && result.usage) {
-      logger.agent.info('[Loop] Updating message usage:', result.usage)
       useAgentStore.getState().updateMessage(assistantId, {
         usage: result.usage
       } as Partial<import('../types').AssistantMessage>)
-    } else if (assistantId) {
-      logger.agent.warn('[Loop] No usage in result for assistant:', assistantId)
+    } else if (assistantId && !result.usage) {
+      logger.agent.warn('[Loop] No usage data in LLM result')
     }
 
-    // 清理成功完成
+    // 清理
     processor.cleanup()
     return result
   } catch (error) {
     // 确保在任何错误情况下都清理
-    logger.agent.error('[Loop] Error in callLLM, cleaning up:', error)
+    logger.agent.error('[Loop] Error in callLLM:', error)
     processor.cleanup()
     throw error
   }
@@ -332,7 +341,7 @@ export async function runLoop(
       break
     }
 
-    // 在 LLM 调用后立即检查压缩（参考 OpenCode 的 finish-step 逻辑）
+    // 在 LLM 调用后立即检查压缩
     if (result.usage) {
       const usage = {
         input: result.usage.promptTokens || 0,
@@ -354,11 +363,13 @@ export async function runLoop(
         EventBus.emit({ type: 'loop:end', reason: 'handoff_required' })
         break
       }
+    } else {
+      logger.agent.warn('[Loop] No usage data in LLM result')
     }
 
-    // 没有工具调用
+    // 没有工具调用 - Chat 模式或 LLM 决定结束
     if (!result.toolCalls || result.toolCalls.length === 0) {
-      // Plan 模式提醒
+      // Plan 模式特殊处理：提醒更新计划
       if (context.chatMode === 'plan' && store.plan) {
         const readOnlyTools = getReadOnlyTools()
         const hasWriteOps = llmMessages.some(m => m.role === 'assistant' && m.tool_calls?.some((tc: any) => !readOnlyTools.includes(tc.function.name)))
@@ -474,7 +485,9 @@ export async function runLoop(
     store.setStreamPhase('streaming')
   }
 
+  // 达到最大迭代次数
   if (iteration >= maxIterations) {
+    logger.agent.warn('[Loop] Reached maximum iterations')
     store.appendToAssistant(assistantId, '\n\n⚠️ Reached maximum tool call limit.')
     EventBus.emit({ type: 'loop:warning', message: 'Max iterations reached' })
     EventBus.emit({ type: 'loop:end', reason: 'max_iterations' })

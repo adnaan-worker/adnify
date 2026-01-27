@@ -47,13 +47,29 @@ function createBuiltinModel(
         throw new Error(`Unknown builtin provider: ${providerId}`)
     }
 
+    // 如果用户自定义了 baseUrl 且不是默认值，使用 OpenAI Compatible 模式
+    // 这样可以兼容各种 OpenAI-compatible 的 API（如 NVIDIA、智谱等）
+    const isCustomBaseUrl = baseUrl && baseUrl !== providerDef.baseUrl
+    
+    if (isCustomBaseUrl) {
+        console.log(`[ModelFactory] Using OpenAI Compatible mode for custom baseUrl: ${baseUrl}`)
+        const provider = createOpenAICompatible({
+            name: `${providerId}-custom`,
+            apiKey,
+            baseURL: baseUrl,
+        })
+        return provider(model)
+    }
+
     switch (providerId) {
         case 'openai': {
             const openai = createOpenAI({
                 apiKey,
                 baseURL: baseUrl || providerDef.baseUrl,
             })
-            return openai(model)
+            // ⚠️ 必须使用 .chat() 确保使用 Chat Completions API (/v1/chat/completions)
+            // 直接调用 openai(model) 会使用 Responses API (/v1/responses)
+            return openai.chat(model)
         }
 
         case 'anthropic': {
@@ -61,6 +77,7 @@ function createBuiltinModel(
                 apiKey,
                 baseURL: baseUrl || undefined,
             })
+            // Anthropic 直接调用就是 messages API，无需 .chat()
             return anthropic(model)
         }
 
@@ -69,6 +86,7 @@ function createBuiltinModel(
                 apiKey,
                 baseURL: baseUrl || undefined,
             })
+            // Google 直接调用就是 generateContent API，无需 .chat()
             return google(model)
         }
 

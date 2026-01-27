@@ -193,6 +193,7 @@ export function ProviderSettings({
   selectedProvider,
   providers,
   language,
+  setProvider,
 }: ProviderSettingsProps) {
   const [newModelName, setNewModelName] = useState('')
   const [isAddingCustom, setIsAddingCustom] = useState(false)
@@ -221,14 +222,21 @@ export function ProviderSettings({
     const currentConfig = localProviderConfigs[localConfig.provider] || {}
     const currentModels = currentConfig.customModels || []
     
-    setLocalProviderConfigs({
+    const updatedConfigs = {
       ...localProviderConfigs,
       [localConfig.provider]: {
         ...currentConfig,
         customModels: [...currentModels, newModelName.trim()]
       }
-    })
+    }
+    
+    setLocalProviderConfigs(updatedConfigs)
+    
+    // 立即同步到全局 store，使 ModelSelector 能看到更新
+    setProvider(localConfig.provider, updatedConfigs[localConfig.provider])
+    
     setNewModelName('')
+    toast.success(language === 'zh' ? `已添加模型: ${newModelName.trim()}` : `Added model: ${newModelName.trim()}`)
   }
 
   // 删除模型从本地配置
@@ -236,13 +244,20 @@ export function ProviderSettings({
     const currentConfig = localProviderConfigs[localConfig.provider]
     if (!currentConfig) return
     
-    setLocalProviderConfigs({
+    const updatedConfigs = {
       ...localProviderConfigs,
       [localConfig.provider]: {
         ...currentConfig,
         customModels: (currentConfig.customModels || []).filter(m => m !== model)
       }
-    })
+    }
+    
+    setLocalProviderConfigs(updatedConfigs)
+    
+    // 立即同步到全局 store，使 ModelSelector 能看到更新
+    setProvider(localConfig.provider, updatedConfigs[localConfig.provider])
+    
+    toast.success(language === 'zh' ? `已删除模型: ${model}` : `Removed model: ${model}`)
   }
 
   // 选择内置 Provider

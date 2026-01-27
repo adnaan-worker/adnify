@@ -274,6 +274,7 @@ export default function SettingsModal() {
                                     selectedProvider={selectedProvider}
                                     providers={providers}
                                     language={language}
+                                    setProvider={setProvider}
                                 />
                             )}
                             {activeTab === 'editor' && (

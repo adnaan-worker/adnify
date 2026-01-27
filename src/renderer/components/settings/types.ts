@@ -18,6 +18,7 @@ export interface ProviderSettingsProps {
     selectedProvider: { id: string; name: string; models: string[] } | undefined
     providers: { id: string; name: string; models: string[] }[]
     language: Language
+    setProvider: (id: string, config: ProviderModelConfig) => void
 }
 
 export interface EditorSettingsState {

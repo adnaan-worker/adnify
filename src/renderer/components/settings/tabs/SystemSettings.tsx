@@ -5,7 +5,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useState, useEffect, useRef } from 'react'
-import { HardDrive, AlertTriangle, Monitor, Download, Upload, FileText, ExternalLink } from 'lucide-react'
+import { HardDrive, AlertTriangle, Download, Upload, FileText, ExternalLink } from 'lucide-react'
 import { toast } from '@components/common/ToastProvider'
 import { Button, Switch } from '@components/ui'
 import { Language } from '@renderer/i18n'

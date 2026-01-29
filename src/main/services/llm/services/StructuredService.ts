@@ -423,19 +423,19 @@ Return structured analysis with issues, suggestions, and summary.`,
   /**
    * 通用结构化对象生成（使用 generateObject）
    */
-  async generateStructuredObject<T extends z.ZodType>(params: {
+  async generateStructuredObject<T>(params: {
     config: LLMConfig
-    schema: T | any // 支持 Zod schema 或 JSON Schema
+    schema: any // 支持 Zod schema 或 JSON Schema
     system: string
     prompt: string
-  }): Promise<LLMResponse<z.infer<T>>> {
+  }): Promise<LLMResponse<T>> {
     logger.system.info('[StructuredService] Generating structured object')
 
     try {
       const model = createModel(params.config)
 
       // 如果传入的是 JSON Schema，转换为 Zod schema
-      let zodSchema: z.ZodType
+      let zodSchema: z.ZodTypeAny
       if (params.schema._def) {
         // 已经是 Zod schema
         zodSchema = params.schema
@@ -453,7 +453,7 @@ Return structured analysis with issues, suggestions, and summary.`,
       })
 
       return {
-        data: result.object as z.infer<T>,
+        data: result.object as T,
         usage: result.usage ? convertUsage(result.usage) : undefined,
         metadata: {
           id: result.response.id,

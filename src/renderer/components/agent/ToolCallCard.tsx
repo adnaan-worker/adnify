@@ -15,7 +15,7 @@ import {
     AlertTriangle,
     FileCode,
 } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useStore } from '@store'
 import { t } from '@renderer/i18n'
 import { ToolCall } from '@renderer/agent/types'
@@ -438,7 +438,7 @@ const ToolCallCard = memo(function ToolCallCard({
     }, [isAwaitingApproval, isError, isStreaming, isRunning])
 
     return (
-        <div className={`group my-1 rounded-xl border transition-colors duration-200 overflow-hidden ${cardStyle}`}>
+        <div className={`group my-1 rounded-xl border overflow-hidden ${cardStyle} animate-slide-in-right ${isRunning ? 'animate-pulse-subtle' : ''}`}>
             {/* Header */}
             <div className="flex items-center gap-3 px-3 py-2 cursor-pointer select-none" onClick={() => setIsExpanded(!isExpanded)}>
                 {/* Status Icon */}
@@ -485,31 +485,25 @@ const ToolCallCard = memo(function ToolCallCard({
                 </motion.div>
             </div>
 
-            {/* Expanded Content */}
-            <AnimatePresence initial={false}>
-                {isExpanded && (
-                    <motion.div
-                        initial={{ height: 0 }}
-                        animate={{ height: 'auto' }}
-                        exit={{ height: 0 }}
-                        transition={{ duration: 0.15, ease: 'easeInOut' }}
-                        className="overflow-hidden"
-                    >
-                        <div className="px-3 pb-3">
-                            {renderPreview()}
-                            {toolCall.error && (
-                                <div className="mt-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-md">
-                                    <div className="flex items-center gap-2 text-red-400 text-xs font-medium mb-1">
-                                        <AlertTriangle className="w-3 h-3" />
-                                        Error
-                                    </div>
-                                    <p className="text-[11px] text-red-300 font-mono break-all">{toolCall.error}</p>
+            {/* Expanded Content (CSS Grid Transition) */}
+            <div
+                className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+            >
+                <div className="overflow-hidden">
+                    <div className="px-3 pb-3">
+                        {renderPreview()}
+                        {toolCall.error && (
+                            <div className="mt-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-md">
+                                <div className="flex items-center gap-2 text-red-400 text-xs font-medium mb-1">
+                                    <AlertTriangle className="w-3 h-3" />
+                                    Error
                                 </div>
-                            )}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                                <p className="text-[11px] text-red-300 font-mono break-all">{toolCall.error}</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
 
             {/* Approval Actions */}
             {isAwaitingApproval && (

@@ -88,7 +88,7 @@ export default function ToolCallGroup({
     )
 
     return (
-        <div className="my-2 space-y-2">
+        <div className="my-2 space-y-2 animate-slide-in-right">
             {/* 1. 已完成的工具折叠组 */}
             {completedCalls.length > 0 && (
                 <div className="rounded-xl border border-border bg-surface/20 overflow-hidden">

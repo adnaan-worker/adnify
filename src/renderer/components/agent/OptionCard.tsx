@@ -122,28 +122,32 @@ export function OptionCard({ content, onSelect, disabled }: OptionCardProps) {
                         </motion.button>
                     )
                 })}
-            </div>
+            </div >
 
             {/* 多选确认按钮 */}
-            {content.multiSelect && !submitted && selected.size > 0 && (
-                <motion.button
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    onClick={handleSubmit}
-                    className="flex items-center gap-2 px-4 py-2 bg-accent text-white text-xs font-medium rounded-lg hover:bg-accent-hover transition-colors"
-                >
-                    <span>确认选择 ({selected.size})</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                </motion.button>
-            )}
+            {
+                content.multiSelect && !submitted && selected.size > 0 && (
+                    <motion.button
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        onClick={handleSubmit}
+                        className="flex items-center gap-2 px-4 py-2 bg-accent text-white text-xs font-medium rounded-lg hover:bg-accent-hover transition-colors"
+                    >
+                        <span>确认选择 ({selected.size})</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                    </motion.button>
+                )
+            }
 
             {/* 已提交状态 */}
-            {submitted && (
-                <p className="text-[10px] text-text-muted flex items-center gap-1">
-                    <Check className="w-3 h-3 text-green-400" />
-                    已选择
-                </p>
-            )}
-        </div>
+            {
+                submitted && (
+                    <p className="text-[10px] text-text-muted flex items-center gap-1">
+                        <Check className="w-3 h-3 text-green-400" />
+                        已选择
+                    </p>
+                )
+            }
+        </div >
     )
 }

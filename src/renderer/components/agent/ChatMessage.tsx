@@ -32,6 +32,7 @@ import { useStore } from '@store'
 import { MessageBranchActions } from './BranchControls'
 import remarkGfm from 'remark-gfm'
 import { Tooltip } from '../ui/Tooltip'
+import { useFluidTypewriter } from '@renderer/hooks/useFluidTypewriter'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -49,7 +50,30 @@ interface ChatMessageProps {
 // 代码块组件 - 更加精致的玻璃质感
 const CodeBlock = React.memo(({ language, children, fontSize }: { language: string | undefined; children: React.ReactNode; fontSize: number }) => {
   const [copied, setCopied] = useState(false)
-  const codeText = String(children).replace(/\n$/, '')
+
+  // Handle children which might contain the cursor span
+  const { codeText, hasCursor } = React.useMemo(() => {
+    let text = ''
+    let hasCursor = false
+
+    React.Children.forEach(children, child => {
+      if (typeof child === 'string') {
+        text += child
+      } else if (typeof child === 'object' && child !== null && 'props' in child && (child as any).props?.className?.includes('fuzzy-cursor')) {
+        hasCursor = true
+      } else if (Array.isArray(child)) {
+        // Handle nested arrays if any
+        child.forEach(c => {
+          if (typeof c === 'string') text += c
+        })
+      }
+    })
+
+    // Fallback
+    if (!text && typeof children === 'string') text = children
+
+    return { codeText: text.replace(/\n$/, ''), hasCursor }
+  }, [children])
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(codeText)
@@ -72,17 +96,20 @@ const CodeBlock = React.memo(({ language, children, fontSize }: { language: stri
           </button>
         </Tooltip>
       </div>
-      <SyntaxHighlighter
-        style={vscDarkPlus}
-        language={language}
-        PreTag="div"
-        className="!bg-transparent !p-4 !m-0 custom-scrollbar leading-relaxed font-mono"
-        customStyle={{ background: 'transparent', margin: 0, fontSize: `${fontSize}px` }}
-        wrapLines
-        wrapLongLines
-      >
-        {codeText}
-      </SyntaxHighlighter>
+      <div className="relative">
+        <SyntaxHighlighter
+          style={vscDarkPlus}
+          language={language}
+          PreTag="div"
+          className="!bg-transparent !p-4 !m-0 custom-scrollbar leading-relaxed font-mono"
+          customStyle={{ background: 'transparent', margin: 0, fontSize: `${fontSize}px` }}
+          wrapLines
+          wrapLongLines
+        >
+          {codeText}
+        </SyntaxHighlighter>
+        {hasCursor && <span className="fuzzy-cursor absolute bottom-4 right-4" />}
+      </div>
     </div>
   )
 })
@@ -113,6 +140,12 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
   const lastElapsed = React.useRef<number>(0)
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const [shadowClass, setShadowClass] = useState('')
+
+  // Fluid effect for thinking content
+  const fluidContent = useFluidTypewriter(content, isStreaming, {
+    baseSpeed: 2,
+    accelerationFactor: 30
+  })
 
   useEffect(() => {
     setIsExpanded(isStreaming)
@@ -178,7 +211,7 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
                 style={{ fontSize: `${fontSize}px` }}
                 className="text-text-muted/60 leading-relaxed whitespace-pre-wrap font-sans thinking-content"
               >
-                {content}
+                {fluidContent}
               </div>
             ) : (
               <div className="flex items-center gap-2 text-text-muted/30 italic text-xs py-1">
@@ -194,11 +227,21 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
 })
 ThinkingBlock.displayName = 'ThinkingBlock'
 
+// Fluid Rendering Hook Removed (Extracted to hooks/useFluidTypewriter.ts)
+
 // Markdown 渲染组件
 const MarkdownContent = React.memo(({ content, fontSize, isStreaming }: { content: string; fontSize: number; isStreaming?: boolean }) => {
   const cleanedContent = React.useMemo(() => {
     return isStreaming ? cleanStreamingContent(content) : content
   }, [content, isStreaming])
+
+  const fluidContent = useFluidTypewriter(cleanedContent, !!isStreaming)
+
+  // Add cursor to the last text node if streaming
+  // Note: This is a simplified approach. Ideally we'd inject it into the AST.
+  // For now, we rely on the fact that ReactMarkdown renders children.
+  // We can't easily append to the markdown output directly without parsing.
+  // Instead, we render the cursor as a separate element if it's streaming.
 
   const markdownComponents = React.useMemo(() => ({
     code({ className, children, node, ...props }: any) {
@@ -208,29 +251,31 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming }: { conten
       const isInline = !isCodeBlock && !codeContent.includes('\n')
 
       return isInline ? (
-        <code className="bg-white/10 px-1.5 py-0.5 rounded-md text-accent-light font-mono text-[0.9em] border border-white/5 break-all" {...props}>
+        <code className="bg-white/10 px-1.5 py-0.5 rounded-md text-accent-light font-mono text-[0.9em] border border-white/5 break-all animate-fluid-text" {...props}>
           {children}
         </code>
       ) : (
-        <CodeBlock language={match?.[1]} fontSize={fontSize}>{children}</CodeBlock>
+        <div className="animate-fluid-block">
+          <CodeBlock language={match?.[1]} fontSize={fontSize}>{children}</CodeBlock>
+        </div>
       )
     },
-    pre: ({ children }: any) => <div className="overflow-x-auto max-w-full">{children}</div>,
-    p: ({ children }: any) => <p className="mb-3 last:mb-0 leading-7 break-words">{children}</p>,
-    ul: ({ children }: any) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
-    ol: ({ children }: any) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
-    li: ({ children }: any) => <li className="pl-1">{children}</li>,
+    pre: ({ children }: any) => <div className="overflow-x-auto max-w-full animate-fluid-block">{children}</div>,
+    p: ({ children }: any) => <p className="mb-3 last:mb-0 leading-7 break-words animate-fluid-block">{children}</p>,
+    ul: ({ children }: any) => <ul className="list-disc pl-5 mb-3 space-y-1 animate-fluid-block">{children}</ul>,
+    ol: ({ children }: any) => <ol className="list-decimal pl-5 mb-3 space-y-1 animate-fluid-block">{children}</ol>,
+    li: ({ children }: any) => <li className="pl-1 animate-fluid-block">{children}</li>,
     a: ({ href, children }: any) => (
-      <a href={href} target="_blank" className="text-accent hover:underline decoration-accent/50 underline-offset-2 font-medium">{children}</a>
+      <a href={href} target="_blank" className="text-accent hover:underline decoration-accent/50 underline-offset-2 font-medium animate-fluid-text">{children}</a>
     ),
     blockquote: ({ children }: any) => (
-      <blockquote className="border-l-4 border-accent/30 pl-4 my-4 text-text-muted italic bg-surface/20 py-2 rounded-r">{children}</blockquote>
+      <blockquote className="border-l-4 border-accent/30 pl-4 my-4 text-text-muted italic bg-surface/20 py-2 rounded-r animate-fluid-block">{children}</blockquote>
     ),
-    h1: ({ children }: any) => <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0 text-text-primary tracking-tight">{children}</h1>,
-    h2: ({ children }: any) => <h2 className="text-xl font-bold mb-3 mt-5 first:mt-0 text-text-primary tracking-tight">{children}</h2>,
-    h3: ({ children }: any) => <h3 className="text-lg font-semibold mb-2 mt-4 first:mt-0 text-text-primary">{children}</h3>,
+    h1: ({ children }: any) => <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0 text-text-primary tracking-tight animate-fluid-block">{children}</h1>,
+    h2: ({ children }: any) => <h2 className="text-xl font-bold mb-3 mt-5 first:mt-0 text-text-primary tracking-tight animate-fluid-block">{children}</h2>,
+    h3: ({ children }: any) => <h3 className="text-lg font-semibold mb-2 mt-4 first:mt-0 text-text-primary animate-fluid-block">{children}</h3>,
     table: ({ children }: any) => (
-      <div className="overflow-x-auto my-4">
+      <div className="overflow-x-auto my-4 animate-fluid-block">
         <table className="min-w-full border-collapse border border-border">{children}</table>
       </div>
     ),
@@ -244,13 +289,13 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming }: { conten
   if (!cleanedContent) return null
 
   return (
-    <div style={{ fontSize: `${fontSize}px` }} className="text-text-primary/90 leading-relaxed tracking-wide overflow-hidden">
+    <div style={{ fontSize: `${fontSize}px` }} className={`text-text-primary/90 leading-relaxed tracking-wide overflow-hidden ${isStreaming ? 'streaming-ink-effect' : ''}`}>
       <ReactMarkdown
         className="prose prose-invert max-w-none"
         remarkPlugins={[remarkGfm]}
         components={markdownComponents}
       >
-        {cleanedContent}
+        {fluidContent}
       </ReactMarkdown>
     </div>
   )
@@ -486,181 +531,181 @@ const ChatMessage = React.memo(({
 
   return (
     <div className={`
-      w-full group/msg animate-fade-in transition-colors duration-300
+      w-full group/msg transition-colors duration-300
       ${isUser ? 'py-1 bg-transparent' : 'py-2 bg-black/[0.02] border-y border-white/[0.01] hover:bg-black/[0.04]'}
     `}>
       <div className="w-full px-4 flex flex-col gap-1">
-        
+
         {/* User Layout */}
         {isUser && (
           <div className="w-full flex flex-col items-end gap-1.5">
-             {/* Header Row */}
-             <div className="flex items-center gap-2.5 px-1 select-none">
-                <span className="text-[11px] font-bold text-text-muted/60 uppercase tracking-tight">You</span>
-                <div className="w-7 h-7 rounded-full bg-surface/60 border border-white/10 flex items-center justify-center text-text-muted shadow-sm flex-shrink-0">
-                  <User className="w-3.5 h-3.5" />
+            {/* Header Row */}
+            <div className="flex items-center gap-2.5 px-1 select-none">
+              <span className="text-[11px] font-bold text-text-muted/60 uppercase tracking-tight">You</span>
+              <div className="w-7 h-7 rounded-full bg-surface/60 border border-white/10 flex items-center justify-center text-text-muted shadow-sm flex-shrink-0">
+                <User className="w-3.5 h-3.5" />
+              </div>
+            </div>
+
+            {/* Bubble / Editing */}
+            <div className="flex flex-col items-end max-w-[85%] sm:max-w-[75%] min-w-0 mr-8 sm:mr-12 w-full">
+              {isEditing ? (
+                <div className="w-full relative group/edit">
+                  <div className="absolute inset-0 -m-1 rounded-[20px] bg-accent/5 opacity-0 group-focus-within/edit:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                  <div className="relative bg-surface/80 backdrop-blur-xl border border-accent/30 rounded-[18px] shadow-lg overflow-hidden animate-scale-in origin-right transition-all duration-200 group-focus-within/edit:border-accent group-focus-within/edit:ring-1 group-focus-within/edit:ring-accent/50">
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          handleSaveEdit()
+                        }
+                        if (e.key === 'Escape') {
+                          setIsEditing(false)
+                        }
+                      }}
+                      className="w-full bg-transparent border-none outline-none px-4 py-3 text-text-primary resize-none focus:ring-0 focus:outline-none transition-all custom-scrollbar font-mono text-sm leading-relaxed placeholder:text-text-muted/30"
+                      rows={Math.max(2, Math.min(15, editContent.split('\n').length))}
+                      autoFocus
+                      style={{ fontSize: `${fontSize}px` }}
+                      placeholder="Type your message..."
+                    />
+                    <div className="flex items-center justify-between px-2 py-1.5 bg-black/5 border-t border-black/5">
+                      <span className="text-[10px] text-text-muted/50 ml-2 font-medium">
+                        Esc to cancel • Enter to save
+                      </span>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => setIsEditing(false)}
+                          className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-black/10 transition-colors"
+                          title={tt.cancel}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={handleSaveEdit}
+                          className="p-1.5 rounded-lg text-accent hover:text-white hover:bg-accent transition-all shadow-sm"
+                          title={tt.save}
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-             </div>
-
-             {/* Bubble / Editing */}
-             <div className="flex flex-col items-end max-w-[85%] sm:max-w-[75%] min-w-0 mr-8 sm:mr-12 w-full">
-                {isEditing ? (
-                  <div className="w-full relative group/edit">
-                    <div className="absolute inset-0 -m-1 rounded-[20px] bg-accent/5 opacity-0 group-focus-within/edit:opacity-100 transition-opacity duration-300 pointer-events-none" />
-                    <div className="relative bg-surface/80 backdrop-blur-xl border border-accent/30 rounded-[18px] shadow-lg overflow-hidden animate-scale-in origin-right transition-all duration-200 group-focus-within/edit:border-accent group-focus-within/edit:ring-1 group-focus-within/edit:ring-accent/50">
-                      <textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault()
-                            handleSaveEdit()
-                          }
-                          if (e.key === 'Escape') {
-                            setIsEditing(false)
-                          }
-                        }}
-                        className="w-full bg-transparent border-none outline-none px-4 py-3 text-text-primary resize-none focus:ring-0 focus:outline-none transition-all custom-scrollbar font-mono text-sm leading-relaxed placeholder:text-text-muted/30"
-                        rows={Math.max(2, Math.min(15, editContent.split('\n').length))}
-                        autoFocus
-                        style={{ fontSize: `${fontSize}px` }}
-                        placeholder="Type your message..."
-                      />
-                      <div className="flex items-center justify-between px-2 py-1.5 bg-black/5 border-t border-black/5">
-                        <span className="text-[10px] text-text-muted/50 ml-2 font-medium">
-                          Esc to cancel • Enter to save
-                        </span>
-                        <div className="flex gap-1">
-                          <button 
-                            onClick={() => setIsEditing(false)} 
-                            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-black/10 transition-colors"
-                            title={tt.cancel}
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                          <button 
-                            onClick={handleSaveEdit} 
-                            className="p-1.5 rounded-lg text-accent hover:text-white hover:bg-accent transition-all shadow-sm"
-                            title={tt.save}
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                          </button>
+              ) : (
+                <div className="relative bg-accent/15 text-text-primary border border-accent/20 px-4 py-2.5 rounded-[18px] rounded-tr-sm shadow-sm w-fit max-w-full">
+                  {/* Images */}
+                  {images.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2 justify-end">
+                      {images.map((img, i) => (
+                        <div key={i} className="rounded-lg overflow-hidden border border-white/10 shadow-md h-28 group/img relative cursor-zoom-in">
+                          <img
+                            src={`data:${img.source.media_type};base64,${img.source.data}`}
+                            alt="Upload"
+                            className="h-full w-auto object-cover"
+                          />
                         </div>
-                      </div>
+                      ))}
                     </div>
+                  )}
+                  <div className="text-[14px] leading-relaxed">
+                    <MarkdownContent content={textContent} fontSize={fontSize} />
                   </div>
-                ) : (
-                  <div className="relative bg-accent/15 text-text-primary border border-accent/20 px-4 py-2.5 rounded-[18px] rounded-tr-sm shadow-sm w-fit max-w-full">
-                    {/* Images */}
-                    {images.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mb-2 justify-end">
-                        {images.map((img, i) => (
-                          <div key={i} className="rounded-lg overflow-hidden border border-white/10 shadow-md h-28 group/img relative cursor-zoom-in">
-                            <img
-                              src={`data:${img.source.media_type};base64,${img.source.data}`}
-                              alt="Upload"
-                              className="h-full w-auto object-cover"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div className="text-[14px] leading-relaxed">
-                      <MarkdownContent content={textContent} fontSize={fontSize} />
-                    </div>
-                  </div>
-                )}
+                </div>
+              )}
 
-                {/* Actions */}
-                {!isEditing && (
-                  <div className="flex items-center gap-0.5 mt-1 mr-1 opacity-0 group-hover/msg:opacity-100 transition-opacity duration-200">
-                    <Tooltip content={tt.copy}>
-                      <button onClick={handleCopy} className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/5 transition-all">
-                        {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+              {/* Actions */}
+              {!isEditing && (
+                <div className="flex items-center gap-0.5 mt-1 mr-1 opacity-0 group-hover/msg:opacity-100 transition-opacity duration-200">
+                  <Tooltip content={tt.copy}>
+                    <button onClick={handleCopy} className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/5 transition-all">
+                      {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                  </Tooltip>
+                  {onEdit && (
+                    <Tooltip content={tt.edit}>
+                      <button onClick={handleStartEdit} className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/5 transition-all">
+                        <Edit2 className="w-3 h-3" />
                       </button>
                     </Tooltip>
-                    {onEdit && (
-                      <Tooltip content={tt.edit}>
-                        <button onClick={handleStartEdit} className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/5 transition-all">
-                          <Edit2 className="w-3 h-3" />
-                        </button>
-                      </Tooltip>
-                    )}
-                    {hasCheckpoint && onRestore && (
-                      <Tooltip content={tt.restore}>
-                        <button onClick={() => onRestore(message.id)} className="p-1 rounded-md text-text-muted hover:text-amber-400 hover:bg-white/5 transition-all">
-                          <RotateCcw className="w-3 h-3" />
-                        </button>
-                      </Tooltip>
-                    )}
-                  </div>
-                )}
-             </div>
+                  )}
+                  {hasCheckpoint && onRestore && (
+                    <Tooltip content={tt.restore}>
+                      <button onClick={() => onRestore(message.id)} className="p-1 rounded-md text-text-muted hover:text-amber-400 hover:bg-white/5 transition-all">
+                        <RotateCcw className="w-3 h-3" />
+                      </button>
+                    </Tooltip>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         {/* Assistant Layout */}
         {!isUser && (
           <div className="w-full min-w-0 flex flex-col gap-2">
-             <div className="flex items-center gap-3 px-1">
-                <div className="w-9 h-9 rounded-xl overflow-hidden border border-white/10 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.3)] bg-surface/50 backdrop-blur-md relative flex-shrink-0">
-                  <div className="absolute inset-0 bg-accent/5 pointer-events-none" />
-                  <img src={aiAvatar} alt="AI" className="w-full h-full object-cover" />
-                </div>
-                <div className="flex items-center gap-2 select-none">
-                  <span className="text-[13px] font-bold tracking-tight text-text-primary">Adnify</span>
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-accent/10 text-accent uppercase tracking-widest border border-accent/20">AI</span>
-                </div>
-                
-                {!message.isStreaming && (
-                   <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity">
-                      <Tooltip content={tt.copy}>
-                        <button onClick={handleCopy} className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/5 transition-all">
-                          {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        </button>
-                      </Tooltip>
-                      {onRegenerate && (
-                         <div className="flex items-center">
-                            <MessageBranchActions messageId={message.id} language={language} onRegenerate={onRegenerate} />
-                         </div>
-                      )}
-                   </div>
-                )}
-             </div>
+            <div className="flex items-center gap-3 px-1">
+              <div className="w-9 h-9 rounded-xl overflow-hidden border border-white/10 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.3)] bg-surface/50 backdrop-blur-md relative flex-shrink-0">
+                <div className="absolute inset-0 bg-accent/5 pointer-events-none" />
+                <img src={aiAvatar} alt="AI" className="w-full h-full object-cover" />
+              </div>
+              <div className="flex items-center gap-2 select-none">
+                <span className="text-[13px] font-bold tracking-tight text-text-primary">Adnify</span>
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-accent/10 text-accent uppercase tracking-widest border border-accent/20">AI</span>
+              </div>
 
-             <div className="w-full text-[15px] leading-relaxed text-text-primary/90 pl-1">
-                <div className="prose-custom w-full max-w-none">
-                  {message.parts && (
-                    <AssistantMessageContent
-                      parts={message.parts}
-                      pendingToolId={pendingToolId}
-                      onApproveTool={onApproveTool}
-                      onRejectTool={onRejectTool}
-                      onOpenDiff={onOpenDiff}
-                      fontSize={fontSize}
-                      isStreaming={message.isStreaming}
-                    />
+              {!message.isStreaming && (
+                <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+                  <Tooltip content={tt.copy}>
+                    <button onClick={handleCopy} className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/5 transition-all">
+                      {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </Tooltip>
+                  {onRegenerate && (
+                    <div className="flex items-center">
+                      <MessageBranchActions messageId={message.id} language={language} onRegenerate={onRegenerate} />
+                    </div>
                   )}
-                  {message.isStreaming && <StreamingIndicator />}
                 </div>
+              )}
+            </div>
 
-                {message.interactive && !message.isStreaming && (
-                  <div className="mt-2 w-full">
-                    <OptionCard
-                      content={message.interactive}
-                      onSelect={(selectedIds) => {
-                        const selectedLabels = message.interactive!.options
-                          .filter(opt => selectedIds.includes(opt.id))
-                          .map(opt => opt.label)
-                        const response = selectedLabels.join(', ')
-                        window.dispatchEvent(new CustomEvent('chat-update-interactive', { detail: { messageId: message.id, selectedIds } }))
-                        window.dispatchEvent(new CustomEvent('chat-send-message', { detail: { content: response, messageId: message.id } }))
-                      }}
-                      disabled={!!message.interactive.selectedIds?.length}
-                    />
-                  </div>
+            <div className="w-full text-[15px] leading-relaxed text-text-primary/90 pl-1">
+              <div className="prose-custom w-full max-w-none">
+                {message.parts && (
+                  <AssistantMessageContent
+                    parts={message.parts}
+                    pendingToolId={pendingToolId}
+                    onApproveTool={onApproveTool}
+                    onRejectTool={onRejectTool}
+                    onOpenDiff={onOpenDiff}
+                    fontSize={fontSize}
+                    isStreaming={message.isStreaming}
+                  />
                 )}
-             </div>
+                {message.isStreaming && <StreamingIndicator />}
+              </div>
+
+              {message.interactive && !message.isStreaming && (
+                <div className="mt-2 w-full">
+                  <OptionCard
+                    content={message.interactive}
+                    onSelect={(selectedIds) => {
+                      const selectedLabels = message.interactive!.options
+                        .filter(opt => selectedIds.includes(opt.id))
+                        .map(opt => opt.label)
+                      const response = selectedLabels.join(', ')
+                      window.dispatchEvent(new CustomEvent('chat-update-interactive', { detail: { messageId: message.id, selectedIds } }))
+                      window.dispatchEvent(new CustomEvent('chat-send-message', { detail: { content: response, messageId: message.id } }))
+                    }}
+                    disabled={!!message.interactive.selectedIds?.length}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -675,7 +720,7 @@ const THINKING_TEXTS_ZH = ['思考中', '分析中', '处理中', '生成中', '
 const StreamingIndicator = React.memo(function StreamingIndicator() {
   const { language } = useStore()
   const [textIndex, setTextIndex] = useState(() => Math.floor(Math.random() * THINKING_TEXTS.length))
-  
+
   useEffect(() => {
     const interval = setInterval(() => {
       setTextIndex(prev => {

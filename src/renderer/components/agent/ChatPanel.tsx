@@ -87,7 +87,7 @@ export default function ChatPanel() {
 
   const [input, setInput] = useState('')
   const [images, setImages] = useState<PendingImage[]>([])
-  
+
   // Unified Sidebar State
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarTab, setSidebarTab] = useState<'history' | 'branches'>('history')
@@ -108,16 +108,16 @@ export default function ChatPanel() {
 
   // 监听 Handoff 自动继续事件
   useEffect(() => {
-    const handleAutoResume = (event: CustomEvent<{ 
+    const handleAutoResume = (event: CustomEvent<{
       objective: string
       pendingSteps: string[]
       fileChanges: Array<{ action: string; path: string; summary: string }>
     }>) => {
       const { objective, pendingSteps, fileChanges } = event.detail
-      
+
       // 构建自动继续的消息，包含文件变更信息
       let resumeMessage = ''
-      
+
       // 添加文件变更信息（重要：让 AI 知道之前修改了哪些文件）
       if (fileChanges && fileChanges.length > 0) {
         const fileList = fileChanges.slice(-10).map(f => `- [${f.action}] ${f.path}`).join('\n')
@@ -125,7 +125,7 @@ export default function ChatPanel() {
           ? `**之前修改的文件**:\n${fileList}\n\n`
           : `**Previously modified files**:\n${fileList}\n\n`
       }
-      
+
       // 添加待完成步骤
       if (pendingSteps && pendingSteps.length > 0) {
         resumeMessage += language === 'zh'
@@ -136,15 +136,15 @@ export default function ChatPanel() {
           ? `请继续完成目标：${objective}`
           : `Please continue with the objective: ${objective}`
       } else {
-        resumeMessage += language === 'zh' 
-          ? '请继续完成之前的任务。' 
+        resumeMessage += language === 'zh'
+          ? '请继续完成之前的任务。'
           : 'Please continue with the previous task.'
       }
-      
+
       // 发送消息继续任务
       sendMessage(resumeMessage)
     }
-    
+
     window.addEventListener('handoff-auto-resume', handleAutoResume as EventListener)
     return () => window.removeEventListener('handoff-auto-resume', handleAutoResume as EventListener)
   }, [language, sendMessage])
@@ -157,7 +157,7 @@ export default function ChatPanel() {
         sendMessage(content)
       }
     }
-    
+
     const handleUpdateInteractive = (event: CustomEvent<{ messageId: string; selectedIds: string[] }>) => {
       const { messageId, selectedIds } = event.detail
       // 更新消息的 interactive.selectedIds
@@ -175,7 +175,7 @@ export default function ChatPanel() {
         }
       }
     }
-    
+
     window.addEventListener('chat-send-message', handleOptionSelect as EventListener)
     window.addEventListener('chat-update-interactive', handleUpdateInteractive as EventListener)
     return () => {
@@ -218,27 +218,33 @@ export default function ChatPanel() {
 
     let rafId: number
     let intervalId: NodeJS.Timeout
+    let lastScrollTime = 0
 
     const doScroll = () => {
+      const now = Date.now()
+      // 节流：至少间隔 200ms 才执行一次
+      if (now - lastScrollTime < 200) return
+      lastScrollTime = now
+
       isAutoScrollingRef.current = true
       rafId = requestAnimationFrame(() => {
         virtuosoRef.current?.scrollToIndex({
           index: filteredMessages.length - 1,
           align: 'end',
-          behavior: 'auto'
+          behavior: 'smooth'
         })
         // 延迟重置标志，给 Virtuoso 时间处理滚动
         setTimeout(() => {
           isAutoScrollingRef.current = false
-        }, 50)
+        }, 100)
       })
     }
 
     // 立即滚动一次
     doScroll()
-    
-    // 每 150ms 检查并滚动（降低频率避免抖动）
-    intervalId = setInterval(doScroll, 150)
+
+    // 每 300ms 检查并滚动（降低频率避免抖动）
+    intervalId = setInterval(doScroll, 300)
 
     return () => {
       cancelAnimationFrame(rafId)
@@ -251,7 +257,7 @@ export default function ChatPanel() {
   const handleAtBottomStateChange = useCallback((bottom: boolean) => {
     // 如果是自动滚动触发的，忽略状态变化
     if (isAutoScrollingRef.current) return
-    
+
     setAtBottom(bottom)
     // 不在底部时显示滚动按钮（流式输出时也显示，方便用户回到底部）
     setShowScrollButton(!bottom)
@@ -667,7 +673,7 @@ export default function ChatPanel() {
   const handleRegenerate = useCallback(async (messageId: string) => {
     // 使用分支功能重新生成
     const result = regenerateFromMessage(messageId)
-    
+
     if (result) {
       // 成功创建分支，发送消息重新生成
       toast.success(language === 'zh' ? '已创建新分支' : 'Branch created')
@@ -752,7 +758,7 @@ export default function ChatPanel() {
 
     // 找到对应的用户消息内容
     const userMessage = messages.find(m => m.id === messageId)
-    const userContent = userMessage && isUserMessage(userMessage) 
+    const userContent = userMessage && isUserMessage(userMessage)
       ? (typeof userMessage.content === 'string' ? userMessage.content : getMessageText(userMessage.content))
       : ''
 
@@ -769,12 +775,12 @@ export default function ChatPanel() {
     if (result.success) {
       toast.success(`Restored ${result.restoredFiles.length} file(s)`)
       setActiveDiff(null)
-      
+
       // 恢复用户消息文本到输入框
       if (userContent) {
         setInput(userContent)
       }
-      
+
       // 恢复图片到输入框
       if (result.images && result.images.length > 0) {
         const restoredImages: PendingImage[] = result.images.map(img => {
@@ -788,7 +794,7 @@ export default function ChatPanel() {
           const blob = new Blob([byteArray], { type: img.mimeType })
           const file = new File([blob], `restored-${img.id}.${img.mimeType.split('/')[1] || 'png'}`, { type: img.mimeType })
           const previewUrl = URL.createObjectURL(blob)
-          
+
           return {
             id: img.id,
             file,
@@ -798,7 +804,7 @@ export default function ChatPanel() {
         })
         setImages(restoredImages)
       }
-      
+
       // 恢复上下文引用
       if (result.contextItems && result.contextItems.length > 0) {
         for (const item of result.contextItems) {
@@ -852,12 +858,12 @@ export default function ChatPanel() {
         <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between h-10 px-3 bg-background/80 backdrop-blur-xl select-none transition-all duration-300">
           <div className="flex items-center gap-2">
             {/* 分支选择器 - 始终显示，点击展开分支管理 */}
-            <BranchSelector 
-              language={language} 
+            <BranchSelector
+              language={language}
               onClick={() => {
                 setSidebarTab('branches')
                 setSidebarOpen(true)
-              }} 
+              }}
             />
           </div>
 
@@ -896,22 +902,22 @@ export default function ChatPanel() {
           </div>
         </div>
 
-        <ConversationSidebar 
-          isOpen={sidebarOpen} 
-          onClose={() => setSidebarOpen(false)} 
+        <ConversationSidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
           initialTab={sidebarTab}
         />
 
         {/* Drag Overlay */}
         <AnimatePresence>
           {isDragging && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center pointer-events-none"
             >
-              <motion.div 
+              <motion.div
                 initial={{ scale: 0.9, y: 20 }}
                 animate={{ scale: 1, y: 0 }}
                 className="flex flex-col items-center gap-4 p-8 rounded-3xl border border-accent/30 bg-surface/90 shadow-2xl shadow-accent/20"
@@ -947,44 +953,44 @@ export default function ChatPanel() {
             <div className="flex flex-col h-full w-full bg-background/40 backdrop-blur-3xl relative overflow-hidden">
               {/* Background Ambience - More subtle & Animated */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                <motion.div 
-                  animate={{ 
+                <motion.div
+                  animate={{
                     scale: [1, 1.2, 1],
                     opacity: [0.3, 0.5, 0.3],
                     x: [0, 20, 0]
                   }}
                   transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px] mix-blend-screen" 
+                  className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px] mix-blend-screen"
                 />
-                <motion.div 
-                  animate={{ 
+                <motion.div
+                  animate={{
                     scale: [1, 1.1, 1],
                     opacity: [0.2, 0.4, 0.2],
                     x: [0, -30, 0]
                   }}
                   transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                  className="absolute bottom-[-10%] left-[-20%] w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[120px] mix-blend-screen" 
+                  className="absolute bottom-[-10%] left-[-20%] w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[120px] mix-blend-screen"
                 />
               </div>
-              
+
               <div className="flex-1 flex flex-col items-center justify-center p-8 select-none z-10">
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, scale: 0.8, y: 20 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
                   className="relative mb-8"
                 >
-                  <motion.div 
+                  <motion.div
                     animate={{ opacity: [0.5, 0.8, 0.5], scale: [1, 1.05, 1] }}
                     transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                    className="absolute inset-0 bg-accent/20 blur-3xl rounded-full" 
+                    className="absolute inset-0 bg-accent/20 blur-3xl rounded-full"
                   />
                   <div className="relative w-20 h-20 bg-surface/40 backdrop-blur-2xl rounded-2xl border border-border flex items-center justify-center shadow-2xl shadow-accent/10">
                     <Logo className="w-10 h-10 text-accent opacity-90" glow />
                   </div>
                 </motion.div>
                 <div className="text-center space-y-3">
-                  <motion.h1 
+                  <motion.h1
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1, duration: 0.5 }}
@@ -992,7 +998,7 @@ export default function ChatPanel() {
                   >
                     Adnify Agent
                   </motion.h1>
-                  <motion.p 
+                  <motion.p
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2, duration: 0.5 }}

@@ -35,7 +35,8 @@
   /* --- Adnify Dark Theme (Default) --- */
 
   /* Level 1: Main Background */
-  --background: 10 10 12;           /* Soft Deep Dark */
+  --background: 10 10 12;
+  /* Soft Deep Dark */
 
   /* Level 2: Sidebar / Panels / Terminal */
   --background-secondary: 18 18 21;
@@ -107,7 +108,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(120, 120, 120, 0.2); 
+  background-color: rgba(120, 120, 120, 0.2);
   border: 3px solid transparent;
   background-clip: content-box;
   border-radius: 99px;
@@ -127,13 +128,19 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
 
 /* --- Utilities --- */
-.drag-region { -webkit-app-region: drag; }
-.no-drag { -webkit-app-region: no-drag; }
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
 
 .monaco-editor {
   font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
@@ -141,26 +148,46 @@ body {
 
 /* Animations */
 @keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
 }
+
 .animate-shimmer {
   animation: shimmer 8s linear infinite;
   background-size: 200% 100%;
 }
 
 @keyframes scale-in {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
+
 .animate-scale-in {
   animation: scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
+
 .animate-fade-in {
   animation: fade-in 0.2s ease-out forwards;
 }
@@ -170,22 +197,21 @@ body {
   0% {
     background-position: 200% 0;
   }
+
   100% {
     background-position: -200% 0;
   }
 }
 
 .text-shimmer {
-  background: linear-gradient(
-    90deg,
-    rgb(var(--text-muted)) 0%,
-    rgb(var(--text-muted)) 30%,
-    rgb(var(--accent)) 45%,
-    rgb(var(--text-primary)) 50%,
-    rgb(var(--accent)) 55%,
-    rgb(var(--text-muted)) 70%,
-    rgb(var(--text-muted)) 100%
-  );
+  background: linear-gradient(90deg,
+      rgb(var(--text-muted)) 0%,
+      rgb(var(--text-muted)) 30%,
+      rgb(var(--accent)) 45%,
+      rgb(var(--text-primary)) 50%,
+      rgb(var(--accent)) 55%,
+      rgb(var(--text-muted)) 70%,
+      rgb(var(--text-muted)) 100%);
   background-size: 300% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -235,6 +261,7 @@ body {
     opacity: 0;
     transform: translateY(4px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -254,7 +281,76 @@ body {
   from {
     opacity: 0.7;
   }
+
   to {
     opacity: 1;
   }
+}
+
+/* --- Fluid Rendering Engine Animations --- */
+
+/* Text Node: Opacity 0 -> 1 & Blur 2px -> 0 */
+@keyframes fluid-text-reveal {
+  0% {
+    opacity: 0;
+    filter: blur(2px);
+  }
+
+  100% {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.animate-fluid-text {
+  animation: fluid-text-reveal 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+/* Block Node: TranslateY 5px -> 0 & Opacity */
+@keyframes fluid-block-slide {
+  0% {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fluid-block {
+  animation: fluid-block-slide 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+/* Ink Blur Fade-In Animation */
+@keyframes ink-fade-in {
+  0% {
+    opacity: 0;
+    filter: blur(4px);
+  }
+
+  50% {
+    opacity: 0.7;
+    filter: blur(2px);
+  }
+
+  100% {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.ink-fade-tail {
+  animation: ink-fade-in 0.4s ease-out forwards;
+}
+
+/* Apply ink effect to streaming content */
+.streaming-ink-effect {
+  /* Subtle text shadow for depth */
+  text-shadow: 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.streaming-ink-effect>*:last-child {
+  animation: ink-fade-in 0.3s ease-out;
 }

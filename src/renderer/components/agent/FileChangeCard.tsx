@@ -77,7 +77,7 @@ export default function FileChangeCard({
         if (meta?.oldContent !== undefined) {
             return meta.oldContent as string
         }
-        
+
         // 在流式传输或运行阶段，如果工具是局部编辑类（非全量覆盖），
         // 且还没有 meta 结果（即工具未完成），暂时忽略旧内容，
         // 避免将 patch 片段与完整旧文件对比导致显示大面积删除。
@@ -86,7 +86,7 @@ export default function FileChangeCard({
             const isPartialEdit = ['edit_file', 'replace_file_content'].includes(toolCall.name)
             if (isPartialEdit) return ''
         }
-        
+
         return ''
     }, [meta, isRunning, isStreaming, toolCall.name])
 
@@ -152,7 +152,7 @@ export default function FileChangeCard({
     }, [isAwaitingApproval, isError, isStreaming, isRunning])
 
     return (
-        <motion.div 
+        <motion.div
             layout
             initial={{ opacity: 0, y: 10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -201,11 +201,10 @@ export default function FileChangeCard({
                 {/* Title & Stats */}
                 <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
                     {fileName ? (
-                        <span className={`text-sm font-medium transition-colors truncate ${
-                            (isStreaming || isRunning) 
-                                ? 'text-shimmer' 
+                        <span className={`text-sm font-medium transition-colors truncate ${(isStreaming || isRunning)
+                                ? 'text-shimmer'
                                 : 'text-text-secondary group-hover:text-text-primary'
-                        }`}>
+                            }`}>
                             {fileName}
                         </span>
                     ) : (isStreaming || isRunning) ? (
@@ -215,7 +214,7 @@ export default function FileChangeCard({
                     )}
 
                     {(isSuccess || newContent) && (
-                        <motion.span 
+                        <motion.span
                             initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
                             className="text-[10px] font-mono opacity-60 flex items-center gap-1.5 px-1.5 py-0.5 bg-white/5 rounded border border-border"
@@ -247,7 +246,7 @@ export default function FileChangeCard({
                             <ExternalLink className="w-4 h-4" />
                         </button>
                     )}
-                    <motion.div 
+                    <motion.div
                         animate={{ rotate: isExpanded ? 180 : 0 }}
                         transition={{ duration: 0.2 }}
                         className="text-text-muted/50 group-hover:text-text-muted transition-colors"

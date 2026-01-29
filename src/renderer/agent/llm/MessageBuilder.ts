@@ -10,6 +10,7 @@ import { useAgentStore } from '../store/AgentStore'
 import { buildLLMApiMessages, validateLLMMessages } from './MessageConverter'
 import type { LLMMessage } from '@/shared/types'
 import { prepareMessages, estimateMessagesTokens, CompressionLevel, LEVEL_NAMES } from '../context/CompressionManager'
+import { countTokens } from '@shared/utils/tokenCounter'
 import { MessageContent, ChatMessage } from '../types'
 
 // 从 ContextBuilder 导入已有的函数
@@ -51,12 +52,12 @@ export async function buildLLMMessages(
   // 正确估算用户消息 token（支持图片）
   let userMessageTokens = 0
   if (typeof userContent === 'string') {
-    userMessageTokens = Math.ceil(userContent.length / 4)
+    userMessageTokens = countTokens(userContent)
   } else {
     // 处理结构化内容（可能包含文本和图片）
     for (const part of userContent) {
       if (part.type === 'text' && part.text) {
-        userMessageTokens += Math.ceil(part.text.length / 4)
+        userMessageTokens += countTokens(part.text)
       } else if (part.type === 'image') {
         // 图片固定估算为 1600 tokens（不按 base64 长度计算）
         userMessageTokens += 1600
@@ -85,7 +86,7 @@ export async function buildLLMMessages(
 
     // 估算 token（包括 system prompt + 当前用户消息）
     estimatedTokens = estimateMessagesTokens(preparedMessages)
-      + Math.ceil(enhancedSystemPrompt.length / 4)
+      + countTokens(enhancedSystemPrompt)
       + userMessageTokens
     const ratio = estimatedTokens / contextLimit
 

@@ -446,7 +446,7 @@ Return structured analysis with issues, suggestions, and summary.`,
 
       const result = await generateObject({
         model,
-        schema: zodSchema,
+        schema: zodSchema as any,
         system: params.system,
         prompt: params.prompt,
         temperature: params.config.temperature,

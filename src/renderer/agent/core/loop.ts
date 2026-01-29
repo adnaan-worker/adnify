@@ -27,7 +27,8 @@ import {
   generateSummary,
   generateHandoffDocument,
 } from '../context'
-import { updateStats, LEVEL_NAMES } from '../context/CompressionManager'
+import { updateStats, LEVEL_NAMES, estimateMessagesTokens } from '../context/CompressionManager'
+import type { ChatMessage } from '../types'
 import type { LLMMessage } from '@/shared/types'
 import type { WorkMode } from '@/renderer/modes/types'
 import type { LLMConfig, LLMCallResult, ExecutionContext } from './types'
@@ -356,10 +357,13 @@ export async function runLoop(
     }
 
     // 在 LLM 调用后立即检查压缩
-    if (result.usage) {
+    // 处理 usage 可能是数组或对象的情况
+    const usageData = Array.isArray(result.usage) ? result.usage[0] : result.usage
+    
+    if (usageData && usageData.totalTokens > 0) {
       const usage = {
-        input: result.usage.promptTokens || 0,
-        output: result.usage.completionTokens || 0,
+        input: usageData.promptTokens || 0,
+        output: usageData.completionTokens || 0,
       }
 
       const compressionResult = await checkAndHandleCompression(
@@ -378,7 +382,43 @@ export async function runLoop(
         break
       }
     } else {
-      logger.agent.warn('[Loop] No usage data in LLM result')
+      // 兜底：使用精确估算值更新统计
+      logger.agent.warn('[Loop] No valid usage data from LLM, using estimated tokens')
+      
+      const estimatedTokens = estimateMessagesTokens(llmMessages as ChatMessage[])
+      
+      // 假设 90% 是输入，10% 是输出（保守估计）
+      const usage = {
+        input: Math.floor(estimatedTokens * 0.9),
+        output: Math.floor(estimatedTokens * 0.1),
+      }
+      
+      // 更新消息的 usage（使用估算值）
+      if (assistantId) {
+        store.updateMessage(assistantId, {
+          usage: {
+            promptTokens: usage.input,
+            completionTokens: usage.output,
+            totalTokens: usage.input + usage.output,
+          }
+        } as Partial<import('../types').AssistantMessage>)
+      }
+      
+      const compressionResult = await checkAndHandleCompression(
+        usage,
+        contextLimit,
+        store,
+        context,
+        assistantId,
+        enableLLMSummary,
+        autoHandoff
+      )
+
+      // L4 需要中断循环
+      if (compressionResult.needsHandoff) {
+        EventBus.emit({ type: 'loop:end', reason: 'handoff_required' })
+        break
+      }
     }
 
     // 没有工具调用 - Chat 模式或 LLM 决定结束

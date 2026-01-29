@@ -264,7 +264,7 @@ export default function StatusBar() {
                     }`}>
                       <Layers className="w-3 h-3 group-hover:scale-110 transition-transform" />
                       <span className="text-[10px] font-bold font-mono">
-                        {compressionStats ? `${Math.round(compressionStats.ratio * 100)}%` : '0%'}
+                        {compressionStats ? `${(compressionStats.ratio * 100).toFixed(1)}%` : '0%'}
                       </span>
                     </div>
                   </motion.div>

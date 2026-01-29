@@ -10,6 +10,7 @@
 import { logger } from '@utils/Logger'
 import { getAgentConfig } from '../utils/AgentConfig'
 import { pruneMessages } from 'ai'
+import { countTokens, countContentTokens } from '@shared/utils/tokenCounter'
 import type { ChatMessage, AssistantMessage, ToolResultMessage, UserMessage, ToolCall, MessageContent } from '../types'
 
 // ===== 类型 =====
@@ -378,74 +379,31 @@ export function updateStats(
 }
 
 /**
- * 估算 token 数（用于预检查）
- * 
- * 参考业界标准：
- * - 英文：~4 字符 = 1 token
- * - 中文：~1.5-2 字符 = 1 token（中文字符占用更多 token）
- * - 代码：~3-4 字符 = 1 token
- * 
- * 这是粗略估算，实际 tokenizer 会更复杂
+ * 估算消息列表的 token 数
  */
-export function estimateTokens(text: string): number {
-  if (!text) return 0
+export function estimateMessagesTokens(messages: ChatMessage[]): number {
+  let total = 3 // 对话开始/结束的固定开销
   
-  // 统计中文字符数量
-  const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length
-  const totalChars = text.length
-  const nonChineseChars = totalChars - chineseChars
-  
-  // 中文按 1.5 字符/token，其他按 4 字符/token
-  return Math.ceil(chineseChars / 1.5 + nonChineseChars / 4)
-}
-
-/**
- * 估算消息内容的 token 数（支持多种内容类型）
- * 
- * 支持的内容类型：
- * 1. 纯文本字符串
- * 2. 结构化内容数组（文本 + 图片 + 其他）
- * 
- * 图片 token 计算（基于 Anthropic 官方文档）：
- * - 图片 token = (width × height) / 750
- * - 最小 258 tokens，最大 1600 tokens
- * - 由于我们没有图片尺寸信息，使用保守估计 1600 tokens
- * 
- * 参考：https://docs.anthropic.com/en/docs/build-with-claude/vision#image-costs
- */
-function estimateContentTokens(content: string | Array<{ type: string; text?: string; source?: unknown }>): number {
-  if (typeof content === 'string') {
-    return estimateTokens(content)
-  }
-  
-  // 处理结构化内容（可能包含文本、图片等）
-  let total = 0
-  for (const part of content) {
-    switch (part.type) {
-      case 'text':
-        if (part.text) {
-          total += estimateTokens(part.text)
-        }
-        break
-      
-      case 'image':
-        // Anthropic 图片 token 计算：
-        // - 小图片（~200x200）：~258 tokens
-        // - 中等图片（~400x400）：~600 tokens  
-        // - 大图片（~1000x1000）：~1600 tokens
-        // 由于无法获取实际尺寸，使用保守估计（大图片）
-        total += 1600
-        break
-      
-      case 'tool_use':
-      case 'tool_result':
-        // 工具调用内容按 JSON 字符串估算
-        total += estimateTokens(JSON.stringify(part))
-        break
-      
-      default:
-        // 未知类型，按 JSON 字符串估算
-        total += estimateTokens(JSON.stringify(part))
+  for (const msg of messages) {
+    total += 4 // 每条消息的固定开销
+    
+    if (msg.role === 'user') {
+      const userMsg = msg as UserMessage
+      total += countContentTokens(userMsg.content)
+    } else if (msg.role === 'assistant') {
+      const assistantMsg = msg as AssistantMessage
+      total += countTokens(assistantMsg.content || '')
+      for (const tc of assistantMsg.toolCalls || []) {
+        total += countTokens(tc.name)
+        total += countTokens(JSON.stringify(tc.arguments || {}))
+        total += 3 // 工具调用结构开销
+      }
+    } else if (msg.role === 'tool') {
+      const toolMsg = msg as ToolResultMessage
+      if (!toolMsg.compactedAt) {
+        const content = typeof toolMsg.content === 'string' ? toolMsg.content : ''
+        total += countTokens(content)
+      }
     }
   }
   
@@ -528,31 +486,4 @@ function extractImageDescription(messages: ChatMessage[], imageIndex: number): s
   }
   
   return undefined
-}
-
-/**
- * 估算消息列表的 token 数
- */
-export function estimateMessagesTokens(messages: ChatMessage[]): number {
-  let total = 0
-  
-  for (const msg of messages) {
-    if (msg.role === 'user') {
-      const userMsg = msg as UserMessage
-      total += estimateContentTokens(userMsg.content)
-    } else if (msg.role === 'assistant') {
-      const assistantMsg = msg as AssistantMessage
-      total += estimateTokens(assistantMsg.content || '')
-      for (const tc of assistantMsg.toolCalls || []) {
-        total += estimateTokens(JSON.stringify(tc.arguments || {}))
-      }
-    } else if (msg.role === 'tool') {
-      const toolMsg = msg as ToolResultMessage
-      if (!toolMsg.compactedAt) {
-        total += estimateTokens(typeof toolMsg.content === 'string' ? toolMsg.content : '')
-      }
-    }
-  }
-  
-  return total
 }

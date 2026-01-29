@@ -113,13 +113,6 @@ class WorkerService {
   }
 
   /**
-   * 估算 token 数量
-   */
-  async estimateTokens(text: string): Promise<number> {
-    return this.execute('tokenize', { text })
-  }
-
-  /**
    * 处理 Worker 响应
    */
   private handleWorkerResponse(worker: Worker, response: WorkerResponse): void {
@@ -199,10 +192,6 @@ class WorkerService {
           }
         }
         return result as T
-
-      case 'tokenize':
-        const { text } = payload as { text: string }
-        return Math.ceil(text.length / 4) as T
 
       default:
         throw new Error(`Unsupported fallback for type: ${type}`)

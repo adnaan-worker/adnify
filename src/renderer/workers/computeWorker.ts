@@ -7,7 +7,6 @@
 export type WorkerMessageType = 
   | 'diff'
   | 'search'
-  | 'tokenize'
   | 'format'
 
 export interface WorkerRequest {
@@ -207,22 +206,6 @@ function searchText(request: SearchRequest): SearchMatch[] {
   return results
 }
 
-// 简单的 token 计数（估算）
-interface TokenizeRequest {
-  text: string
-}
-
-function estimateTokens(request: TokenizeRequest): number {
-  const { text } = request
-  // 简单估算：约 4 个字符 = 1 个 token
-  // 这是一个粗略估计，实际 tokenizer 会更复杂
-  const words = text.split(/\s+/).filter(Boolean)
-  const chars = text.length
-  
-  // 混合估算
-  return Math.ceil((words.length + chars / 4) / 2)
-}
-
 // Worker 消息处理
 self.onmessage = (e: MessageEvent<WorkerRequest>) => {
   const { id, type, payload } = e.data
@@ -236,9 +219,6 @@ self.onmessage = (e: MessageEvent<WorkerRequest>) => {
         break
       case 'search':
         result = searchText(payload as SearchRequest)
-        break
-      case 'tokenize':
-        result = estimateTokens(payload as TokenizeRequest)
         break
       default:
         throw new Error(`Unknown message type: ${type}`)

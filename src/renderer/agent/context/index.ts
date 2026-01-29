@@ -7,7 +7,6 @@ export {
   prepareMessages,
   updateStats,
   calculateLevel,
-  estimateTokens,
   estimateMessagesTokens,
   LEVEL_NAMES,
   type CompressionLevel,

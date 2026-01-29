@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { prepareMessages, estimateMessagesTokens, estimateTokens } from '@renderer/agent/context/CompressionManager'
+import { prepareMessages, estimateMessagesTokens } from '@renderer/agent/context/CompressionManager'
 import type { UserMessage, AssistantMessage } from '@renderer/agent/types'
 
 describe('CompressionManager - Image Handling', () => {
@@ -45,7 +45,15 @@ describe('CompressionManager - Image Handling', () => {
     expect(Array.isArray(firstMsg.content)).toBe(true)
     if (Array.isArray(firstMsg.content)) {
       expect(firstMsg.content.some(p => p.type === 'image')).toBe(false)
-      expect(firstMsg.content.some(p => p.type === 'text' && p.text?.includes('Previously analyzed'))).toBe(true)
+      // 图片应该被替换为文本占位符（可能包含描述或通用占位符）
+      const hasPlaceholder = firstMsg.content.some(p => 
+        p.type === 'text' && (
+          p.text?.includes('Previously analyzed') || 
+          p.text?.includes('Image:') ||
+          p.text?.includes('I see')
+        )
+      )
+      expect(hasPlaceholder).toBe(true)
     }
     
     // 最后一条消息（当前消息）的图片应该保留
@@ -123,43 +131,5 @@ describe('CompressionManager - Image Handling', () => {
     if (Array.isArray(firstMsg.content)) {
       expect(firstMsg.content.some(p => p.type === 'image')).toBe(true)
     }
-  })
-})
-
-describe('CompressionManager - Token Estimation', () => {
-  it('should estimate English text tokens', () => {
-    const text = 'Hello world, this is a test message.'
-    const tokens = estimateTokens(text)
-    
-    // 英文约 4 字符 = 1 token
-    expect(tokens).toBeGreaterThan(0)
-    expect(tokens).toBeLessThan(text.length)
-    expect(tokens).toBeCloseTo(text.length / 4, 2)
-  })
-
-  it('should estimate Chinese text tokens with higher ratio', () => {
-    const chinese = '你好世界，这是一个测试消息。'
-    const tokens = estimateTokens(chinese)
-    
-    // 中文约 1.5 字符 = 1 token（比英文占用更多）
-    expect(tokens).toBeGreaterThan(chinese.length / 4)
-    // 允许一定误差范围
-    expect(tokens).toBeGreaterThanOrEqual(Math.floor(chinese.length / 1.5) - 1)
-    expect(tokens).toBeLessThanOrEqual(Math.ceil(chinese.length / 1.5) + 1)
-  })
-
-  it('should estimate mixed language text tokens', () => {
-    const mixed = 'Hello 你好 World 世界'
-    const tokens = estimateTokens(mixed)
-    
-    // 混合文本应该正确计算
-    expect(tokens).toBeGreaterThan(0)
-    expect(tokens).toBeLessThan(mixed.length)
-  })
-
-  it('should handle empty string', () => {
-    expect(estimateTokens('')).toBe(0)
-    expect(estimateTokens(null as any)).toBe(0)
-    expect(estimateTokens(undefined as any)).toBe(0)
   })
 })

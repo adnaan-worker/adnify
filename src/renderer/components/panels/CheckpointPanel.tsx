@@ -8,6 +8,8 @@
 import { useState, useCallback, memo } from 'react'
 import { History, RotateCcw, ChevronDown, ChevronUp, FileText, X, Loader2 } from 'lucide-react'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
+import { useStore } from '@/renderer/store'
+import { t } from '@/renderer/i18n'
 import { MessageCheckpoint } from '@/renderer/agent/types'
 import { getFileName } from '@shared/utils/pathUtils'
 
@@ -15,12 +17,14 @@ interface CheckpointItemProps {
   checkpoint: MessageCheckpoint
   isCurrent: boolean
   onRollback: () => void
+  language: any
 }
 
 const CheckpointItem = memo(function CheckpointItem({
   checkpoint,
   isCurrent,
   onRollback,
+  language,
 }: CheckpointItemProps) {
   const [expanded, setExpanded] = useState(false)
   const fileCount = Object.keys(checkpoint.fileSnapshots).length
@@ -63,10 +67,10 @@ const CheckpointItem = memo(function CheckpointItem({
             <div className="flex items-center gap-2 text-[10px] text-text-secondary">
               <span className="flex items-center gap-1">
                 <FileText className="w-3 h-3 opacity-70" />
-                {fileCount} files
+                {t('checkpoint.filesCount', language, { count: fileCount })}
               </span>
               {isCurrent && (
-                <span className="px-1.5 py-px rounded bg-accent/10 text-accent font-bold">Current</span>
+                <span className="px-1.5 py-px rounded bg-accent/10 text-accent font-bold">{t('checkpoint.current', language)}</span>
               )}
             </div>
           </div>
@@ -79,7 +83,7 @@ const CheckpointItem = memo(function CheckpointItem({
                   onRollback()
                 }}
                 className="p-1 rounded hover:bg-surface-active text-text-muted hover:text-amber-400 transition-colors"
-                title="Rollback"
+                title={t('checkpoint.rollback', language)}
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>
@@ -115,7 +119,7 @@ interface CheckpointPanelProps {
 }
 
 export default function CheckpointPanel({ onClose }: CheckpointPanelProps) {
-  // ... (store hooks remain the same)
+  const language = useStore(state => state.language)
   const messageCheckpoints = useAgentStore(state => state.messageCheckpoints)
   const restoreToCheckpoint = useAgentStore(state => state.restoreToCheckpoint)
   const addAssistantMessage = useAgentStore(state => state.addAssistantMessage)
@@ -142,22 +146,29 @@ export default function CheckpointPanel({ onClose }: CheckpointPanelProps) {
 
       if (result.success) {
         showMessage(
-          `✅ Rolled back to checkpoint: "${checkpoint.description}"\nRestored ${result.restoredFiles.length} file(s).`
+          t('checkpoint.rollbackSuccess', language, {
+            description: checkpoint.description,
+            count: result.restoredFiles.length
+          })
         )
       } else {
         showMessage(
-          `⚠️ Rollback completed with errors:\n${result.errors.join('\n')}`
+          t('checkpoint.rollbackError', language, {
+            errors: result.errors.join('\n')
+          })
         )
       }
     } catch (error: unknown) {
       const err = error as { message?: string }
       showMessage(
-        `❌ Rollback failed: ${err.message}`
+        t('checkpoint.rollbackFailed', language, {
+          message: err.message || ''
+        })
       )
     } finally {
       setIsRollingBack(false)
     }
-  }, [isRollingBack, restoreToCheckpoint, showMessage])
+  }, [isRollingBack, restoreToCheckpoint, showMessage, language])
 
   if (messageCheckpoints.length === 0) {
     return (
@@ -165,9 +176,9 @@ export default function CheckpointPanel({ onClose }: CheckpointPanelProps) {
         <div className="w-12 h-12 bg-surface/50 rounded-full flex items-center justify-center mb-3 border border-border shadow-sm">
           <History className="w-6 h-6 text-text-muted" />
         </div>
-        <p className="text-xs font-medium text-text-secondary">No checkpoints yet</p>
+        <p className="text-xs font-medium text-text-secondary">{t('checkpoint.noCheckpoints', language)}</p>
         <p className="text-[10px] text-text-muted mt-1 max-w-[200px]">
-          Checkpoints are created automatically when you send messages.
+          {t('checkpoint.noCheckpointsDesc', language)}
         </p>
       </div>
     )
@@ -182,7 +193,7 @@ export default function CheckpointPanel({ onClose }: CheckpointPanelProps) {
       <div className="h-10 px-3 flex items-center justify-between border-b border-border bg-background-secondary/95 backdrop-blur-md sticky top-0 z-10">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider opacity-80">
-            History
+            {t('checkpoint.title', language)}
           </span>
           <span className="px-1.5 py-0.5 rounded-full bg-surface-active text-[10px] font-mono text-text-muted">
             {messageCheckpoints.length}
@@ -206,6 +217,7 @@ export default function CheckpointPanel({ onClose }: CheckpointPanelProps) {
             checkpoint={checkpoint}
             isCurrent={checkpoint.id === currentCheckpointId}
             onRollback={() => handleRollback(checkpoint)}
+            language={language}
           />
         ))}
       </div>
@@ -215,7 +227,7 @@ export default function CheckpointPanel({ onClose }: CheckpointPanelProps) {
         <div className="px-3 py-2 border-t border-border bg-surface/50 backdrop-blur-sm">
           <div className="flex items-center gap-2 text-xs text-text-secondary animate-pulse">
             <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />
-            Restoring checkpoint...
+            {t('checkpoint.restoring', language)}
           </div>
         </div>
       )}

@@ -374,4 +374,16 @@ export const zh = {
   'git.openFile': '打开文件',
   'git.openFileFailed': '打开文件失败',
   'git.refreshStatus': '刷新 Git 状态',
+
+  // Checkpoints
+  'checkpoint.title': '历史记录',
+  'checkpoint.noCheckpoints': '暂无检查点',
+  'checkpoint.noCheckpointsDesc': '发送消息时会自动创建检查点。',
+  'checkpoint.filesCount': '{count} 个文件',
+  'checkpoint.current': '当前',
+  'checkpoint.rollback': '回滚',
+  'checkpoint.restoring': '正在恢复检查点...',
+  'checkpoint.rollbackSuccess': '✅ 已回滚到检查点："{description}"\n已恢复 {count} 个文件。',
+  'checkpoint.rollbackError': '⚠️ 回滚完成，但有错误：\n{errors}',
+  'checkpoint.rollbackFailed': '❌ 回滚失败：{message}',
 } as const

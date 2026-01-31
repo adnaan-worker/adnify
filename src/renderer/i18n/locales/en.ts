@@ -374,4 +374,16 @@ export const en = {
   'git.openFile': 'Open file',
   'git.openFileFailed': 'Failed to open file',
   'git.refreshStatus': 'Refresh Git Status',
+
+  // Checkpoints
+  'checkpoint.title': 'History',
+  'checkpoint.noCheckpoints': 'No checkpoints yet',
+  'checkpoint.noCheckpointsDesc': 'Checkpoints are created automatically when you send messages.',
+  'checkpoint.filesCount': '{count} files',
+  'checkpoint.current': 'Current',
+  'checkpoint.rollback': 'Rollback',
+  'checkpoint.restoring': 'Restoring checkpoint...',
+  'checkpoint.rollbackSuccess': '✅ Rolled back to checkpoint: "{description}"\nRestored {count} file(s).',
+  'checkpoint.rollbackError': '⚠️ Rollback completed with errors:\n{errors}',
+  'checkpoint.rollbackFailed': '❌ Rollback failed: {message}',
 } as const

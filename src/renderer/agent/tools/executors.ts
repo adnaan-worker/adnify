@@ -408,42 +408,54 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             ? (args.timeout as number) * 1000
             : config.toolTimeoutMs
 
-        // 使用后台执行（不依赖 PTY，更可靠）
-        const result = await api.shell.executeBackground({
-            command,
-            cwd: cwd || ctx.workspacePath || undefined,
-            timeout,
-        })
-
-        // 构建结果信息
-        const output = result.output || ''
-        const hasOutput = output.trim().length > 0
-
-        let resultText = output
-        if (result.error) {
-            resultText = hasOutput
-                ? `${output}\n\n[Note: ${result.error}]`
-                : result.error
-        } else if (!hasOutput) {
-            resultText = result.exitCode === 0 ? 'Command executed successfully (no output)' : `Command exited with code ${result.exitCode} (no output)`
-        }
-
-        // 判断成功：
-        // 1. 退出码为 0 一定是成功
-        // 2. 有正常输出且没有明确错误也视为成功（让 AI 判断内容）
-        // 3. 超时或执行错误才是失败
-        const isSuccess = result.exitCode === 0 || (hasOutput && !result.error)
-
-        return {
-            success: isSuccess,
-            result: resultText,
-            meta: {
+        try {
+            // 使用后台执行（不依赖 PTY，更可靠）
+            const result = await api.shell.executeBackground({
                 command,
-                cwd,
-                exitCode: result.exitCode ?? (result.success ? 0 : 1),
-                timedOut: result.error?.includes('timed out')
-            },
-            error: undefined // 不设置 error，让 AI 从 result 中判断
+                cwd: cwd || ctx.workspacePath || undefined,
+                timeout,
+            })
+
+            // 构建结果信息
+            const output = result.output || ''
+            const hasOutput = output.trim().length > 0
+
+            let resultText = output
+            if (result.error) {
+                resultText = hasOutput
+                    ? `${output}\n\n[Error: ${result.error}]`
+                    : `Error: ${result.error}`
+            } else if (!hasOutput) {
+                resultText = result.exitCode === 0 ? 'Command executed successfully (no output)' : `Command exited with code ${result.exitCode} (no output)`
+            }
+
+            // 判断成功：
+            // 1. 退出码为 0 一定是成功
+            // 2. 有正常输出且没有明确错误也视为成功（让 AI 判断内容）
+            // 3. 超时或执行错误才是失败
+            const isSuccess = result.exitCode === 0 || (hasOutput && !result.error)
+
+            return {
+                success: isSuccess,
+                result: resultText,
+                meta: {
+                    command,
+                    cwd,
+                    exitCode: result.exitCode ?? (result.success ? 0 : 1),
+                    timedOut: result.error?.includes('timed out')
+                },
+                error: isSuccess ? undefined : resultText // 设置 error 让 LLM 知道失败了
+            }
+        } catch (error) {
+            // 捕获执行异常（如 IPC 通信失败）
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            logger.agent.error('[run_command] Execution failed:', errorMsg)
+            
+            return {
+                success: false,
+                result: `Error: Failed to execute command: ${errorMsg}`,
+                error: errorMsg
+            }
         }
     },
 

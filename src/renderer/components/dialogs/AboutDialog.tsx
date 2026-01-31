@@ -18,6 +18,7 @@ interface AboutDialogProps {
 const CONTRIBUTORS = [
     { name: 'adnaan', avatar: 'https://github.com/adnaan-worker.png', url: 'https://github.com/adnaan-worker' },
     { name: 'kerwin', avatar: 'https://github.com/kerwin2046.png', url: 'https://github.com/kerwin2046' },
+    { name: 'cniu6', avatar: 'https://github.com/cniu6.png', url: 'https://github.com/cniu6' },
 ]
 
 export default function AboutDialog({ onClose }: AboutDialogProps) {
